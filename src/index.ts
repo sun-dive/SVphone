@@ -25,3 +25,31 @@ export {
     MerkleProofEntry,
     MerklePathNode,
 } from './lib/proofChain'
+
+// Wallet integration layer
+export {
+    WalletProvider,
+    Utxo,
+    BlockHeader,
+    RawTransaction,
+    SignedTransaction,
+    TokenManager,
+    OwnedToken,
+    TokenBundle,
+    MptTxBuilder,
+    GenesisResult,
+    TransferResult,
+    ProofStore,
+    StorageBackend,
+    MemoryStorage,
+    createBlockHeaderVerifier,
+    verifyProofChainWithWallet,
+    decodeTokenRules,
+    verifyOwnership,
+    verifyTokenId,
+    buildTokenBundle,
+    serialiseBundle,
+    parseBundle,
+    tokenSummary,
+    DecodedTokenRules,
+} from './wallet'
