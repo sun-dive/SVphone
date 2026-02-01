@@ -120,8 +120,11 @@
       <div style="width:120px;"><input id="token-rules-version" type="number" placeholder="Rules ver." value="1" min="0" max="65535" style="width:100%;" /><span class="arch-note">Rules ver.</span></div>
     </div>
     <p class="arch-note">All immutable after mint. Divisibility 0 = NFT. Restrictions = bitfield.</p>
-    <input id="fee-rate" type="number" placeholder="Fee rate (sats/KB)" value="150" min="1" style="width:200px;" />
-    <button id="btn-mint">Mint Token</button>
+    <div class="row" style="justify-content:flex-end;">
+      <span class="arch-note" style="align-self:center;">sats/KB</span>
+      <input id="fee-rate" type="number" placeholder="100" value="100" min="1" style="width:80px; margin-bottom:0;" />
+      <button id="btn-mint">Mint Token</button>
+    </div>
     <pre id="mint-result"></pre>
   </section>
 

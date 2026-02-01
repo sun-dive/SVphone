@@ -170,8 +170,8 @@ export class TokenBuilder {
     const isTransfer = opData.genesisTxId != null
     const genesisTxId = opData.genesisTxId ?? u.txId
     // Genesis TX: P2PKH starts at output 1 (OP_RETURN is output 0)
-    // Transfer TX: genesisOutputIndex refers to the original mint (output 1 for single mint)
-    const genesisOutputIndex = isTransfer ? 1 : p2pkhOutputIndex
+    // Transfer TX: genesisOutputIndex decoded from on-chain bundle (defaults to 1)
+    const genesisOutputIndex = isTransfer ? (opData.genesisOutputIndex ?? 1) : p2pkhOutputIndex
 
     const immutableBytes = buildImmutableChunkBytes(
       opData.tokenName,
@@ -323,6 +323,7 @@ export class TokenBuilder {
             stateData: token.stateData,
             genesisTxId: token.genesisTxId,
             proofChainEntries: (proofChain ?? { genesisTxId: token.genesisTxId, entries: [] }).entries,
+            genesisOutputIndex: token.genesisOutputIndex,
           }),
           satoshis: 0,
         })
@@ -467,7 +468,12 @@ export class TokenBuilder {
 
     const imported: OwnedToken[] = []
     const existingTokens = await this.store.listTokens()
-    const existingTxIds = new Set(existingTokens.map(t => t.currentTxId))
+    // Include both currentTxId and genesisTxId to avoid re-scanning known TXs
+    const existingTxIds = new Set<string>()
+    for (const t of existingTokens) {
+      existingTxIds.add(t.currentTxId)
+      existingTxIds.add(t.genesisTxId)
+    }
 
     onStatus?.(`Scanning ${allTxIds.length} transactions...`)
     console.debug(`checkIncoming: my address = ${this.myAddress}`)
@@ -482,9 +488,9 @@ export class TokenBuilder {
       try {
         const tx = await this.provider.getSourceTransaction(txId)
 
-        // Find MPT OP_RETURN and P2PKH outputs paying to us
+        // Find MPT OP_RETURN and ALL P2PKH outputs paying to us
         let opData: TokenOpReturnData | null = null
-        let p2pkhOutputIndex = -1
+        const p2pkhOutputIndices: number[] = []
 
         console.debug(`checkIncoming: ${txId.slice(0, 12)}... has ${tx.outputs.length} outputs`)
         for (let i = 0; i < tx.outputs.length; i++) {
@@ -516,18 +522,18 @@ export class TokenBuilder {
             }
           }
 
-          // Check for 1-sat P2PKH paying to our address
-          if (sats === TOKEN_SATS && p2pkhOutputIndex === -1) {
+          // Check for 1-sat P2PKH paying to our address (collect ALL matches)
+          if (sats === TOKEN_SATS) {
             const match = isP2pkhToAddress(scriptHex, this.myAddress)
             console.debug(`checkIncoming: ${txId.slice(0, 12)}... output[${i}] 1-sat P2PKH match=${match}`)
             if (match) {
-              p2pkhOutputIndex = i
+              p2pkhOutputIndices.push(i)
             }
           }
         }
 
-        if (!opData || p2pkhOutputIndex === -1) {
-          console.debug(`checkIncoming: SKIP ${txId.slice(0, 12)}... (opData=${!!opData}, p2pkhMatch=${p2pkhOutputIndex})`)
+        if (!opData || p2pkhOutputIndices.length === 0) {
+          console.debug(`checkIncoming: SKIP ${txId.slice(0, 12)}... (opData=${!!opData}, p2pkhMatches=${p2pkhOutputIndices.length})`)
           continue
         }
 
@@ -539,37 +545,67 @@ export class TokenBuilder {
 
         const isTransfer = opData.genesisTxId != null
         const genesisTxId = isTransfer ? opData.genesisTxId! : txId
-        // Genesis TX: P2PKH starts at output 1 (OP_RETURN is output 0)
-        // Transfer TX: P2PKH is at output 0, but genesisOutputIndex refers to the original mint
-        const genesisOutputIndex = isTransfer ? 1 : p2pkhOutputIndex
 
-        const tokenId = computeTokenId(genesisTxId, genesisOutputIndex, immutableBytes)
-        const existing = await this.store.getToken(tokenId)
-        if (existing) continue
+        if (isTransfer) {
+          // Transfer TX: single token, P2PKH at first matched output
+          const p2pkhOutputIndex = p2pkhOutputIndices[0]
+          const genesisOutputIndex = opData.genesisOutputIndex ?? 1
 
-        const token: OwnedToken = {
-          tokenId,
-          genesisTxId,
-          genesisOutputIndex,
-          currentTxId: txId,
-          currentOutputIndex: p2pkhOutputIndex,
-          tokenName: opData.tokenName,
-          tokenRules: opData.tokenRules,
-          tokenAttributes: opData.tokenAttributes,
-          stateData: opData.stateData,
-          satoshis: TOKEN_SATS,
-          status: 'active',
-          createdAt: new Date().toISOString(),
+          const tokenId = computeTokenId(genesisTxId, genesisOutputIndex, immutableBytes)
+          const existing = await this.store.getToken(tokenId)
+          if (!existing) {
+            const token: OwnedToken = {
+              tokenId,
+              genesisTxId,
+              genesisOutputIndex,
+              currentTxId: txId,
+              currentOutputIndex: p2pkhOutputIndex,
+              tokenName: opData.tokenName,
+              tokenRules: opData.tokenRules,
+              tokenAttributes: opData.tokenAttributes,
+              stateData: opData.stateData,
+              satoshis: TOKEN_SATS,
+              status: 'active',
+              createdAt: new Date().toISOString(),
+            }
+
+            const proofChain: ProofChain = {
+              genesisTxId,
+              entries: opData.proofChainEntries ?? [],
+            }
+
+            await this.store.addToken(token, proofChain)
+            imported.push(token)
+            onStatus?.(`Found token: ${token.tokenName} (${tokenId.slice(0, 12)}...)`)
+          }
+        } else {
+          // Genesis TX: one token per P2PKH output
+          const emptyChain: ProofChain = { genesisTxId, entries: [] }
+          for (const p2pkhOutputIndex of p2pkhOutputIndices) {
+            const tokenId = computeTokenId(genesisTxId, p2pkhOutputIndex, immutableBytes)
+            const existing = await this.store.getToken(tokenId)
+            if (existing) continue
+
+            const token: OwnedToken = {
+              tokenId,
+              genesisTxId,
+              genesisOutputIndex: p2pkhOutputIndex,
+              currentTxId: txId,
+              currentOutputIndex: p2pkhOutputIndex,
+              tokenName: opData.tokenName,
+              tokenRules: opData.tokenRules,
+              tokenAttributes: opData.tokenAttributes,
+              stateData: opData.stateData,
+              satoshis: TOKEN_SATS,
+              status: 'active',
+              createdAt: new Date().toISOString(),
+            }
+
+            await this.store.addToken(token, emptyChain)
+            imported.push(token)
+            onStatus?.(`Found token: ${token.tokenName} #${p2pkhOutputIndex} (${tokenId.slice(0, 12)}...)`)
+          }
         }
-
-        const proofChain: ProofChain = {
-          genesisTxId,
-          entries: opData.proofChainEntries ?? [],
-        }
-
-        await this.store.addToken(token, proofChain)
-        imported.push(token)
-        onStatus?.(`Found token: ${token.tokenName} (${tokenId.slice(0, 12)}...)`)
       } catch (e) {
         console.debug(`checkIncoming: skipping TX ${txId}:`, e)
         continue

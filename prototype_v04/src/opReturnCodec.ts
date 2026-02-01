@@ -4,8 +4,8 @@
  * Format: OP_0 OP_RETURN <"MPT"> <version:1> <tokenName> <tokenRules:8>
  *         <tokenAttributes> <stateData>
  *
- * Transfer TXs add two extra fields:
- *   <genesisTxId:32> <proofChainBinary>
+ * Transfer TXs add three extra fields:
+ *   <genesisTxId:32> <proofChainBinary> <genesisOutputIndex:4>
  *
  * Proof chain binary layout:
  *   Per entry (repeat until data exhausted):
@@ -39,6 +39,7 @@ export interface TokenOpReturnData {
   stateData: string       // hex, variable (min 1 byte)
   genesisTxId?: string    // hex, 32 bytes -- present on transfer TXs
   proofChainEntries?: MerkleProofEntry[]
+  genesisOutputIndex?: number // uint32 LE -- present on transfer TXs
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -164,6 +165,7 @@ export function encodeOpReturn(data: TokenOpReturnData): LockingScript {
   if (data.genesisTxId) {
     chunks.push(pushData(hexToBytes(data.genesisTxId)))
     chunks.push(pushData(encodeProofChainBinary(data.proofChainEntries ?? [])))
+    chunks.push(pushData(uint32LE(data.genesisOutputIndex ?? 1)))
   }
 
   return new LockingScript(chunks)
@@ -251,10 +253,13 @@ export function decodeOpReturn(script: LockingScript): TokenOpReturnData | null 
     stateData,
   }
 
-  // Optional on-chain bundle fields (chunks 6 and 7 -- transfer TXs)
+  // Optional on-chain bundle fields (chunks 6, 7, 8 -- transfer TXs)
   if (chunks.length >= 8) {
     result.genesisTxId = bytesToHex(chunks[6])
     result.proofChainEntries = decodeProofChainBinary(chunks[7])
+    if (chunks.length >= 9 && chunks[8].length === 4) {
+      result.genesisOutputIndex = readUint32LE(chunks[8], 0)
+    }
   }
 
   return result
