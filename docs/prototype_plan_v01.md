@@ -17,7 +17,7 @@ BSV testnet, simple web page, P2PKH + OP_RETURN (no sCrypt).
 - Output 1: OP_RETURN (same immutables, updated ownerPubKey)
 - Output 2: P2PKH change
 
-Token ID = SHA-256(genesisTxId || outputIndex) -- same as spec.
+Token ID = SHA-256(genesisTxId || outputIndex LE || [Token Name] || [Token Rules] || [Token Attributes]) -- same as spec.
 
 ## Files to Create
 

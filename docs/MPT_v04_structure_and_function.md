@@ -1,10 +1,10 @@
-# MPT Prototype v03 -- Structure and Function
+# MPT Prototype v04 -- Structure and Function
 
 ## Overview
 
 The Merkle Proof Token (MPT) is a token protocol on BSV mainnet that uses P2PKH outputs for ownership and OP_RETURN outputs for metadata. Token validity is proven exclusively through Merkle proofs and block headers (SPV), with no dependency on UTXO lookups, indexers, or trusted third parties for verification.
 
-Prototype v03 enforces a clean architectural separation between the pure SPV token protocol and the wallet layer that interacts with the blockchain.
+Prototype v04 enforces a clean architectural separation between the pure SPV token protocol and the wallet layer that interacts with the blockchain.
 
 **Network:** BSV Mainnet (real BSV)
 
@@ -13,6 +13,43 @@ Prototype v03 enforces a clean architectural separation between the pure SPV tok
 ## Token Design
 
 An MPT token is a BSV transaction with a specific output structure. There is no custom locking script -- ownership uses standard P2PKH, and all token metadata lives in a separate OP_RETURN output.
+
+## Token Data Fields
+
+### Immutable Fields
+All immutable fields are cryptographically bound to the Token ID
+Tampering with any of them causes a Token ID mismatch -- instant verification failure
+No additional checking logic needed for these fields; the existing computeTokenId check catches it
+
+** [Token ID]** 
+ - Token ID = SHA-256(genesisTxId || outputIndex LE || opReturnChunks[4..6] raw bytes)
+
+
+**[Token Name]**
+- UTF-8 text string.
+- Shared across all outputs in the genesis transaction. Identifies the collection.
+
+**[Token Rules]**
+- Structured data defining token behaviour:
+  - **Supply:** Total number of NFTs in this genesis transaction.
+  - **Divisibility:** 0 for NFTs (indivisible).
+  - **Transfer Restrictions:** Unrestricted, whitelist, time-lock, or custom script conditions.
+  - **Version:** Integer. Allows future rule extensions.
+
+**[Token Attributes]** (optional)
+- Per-NFT set of immutable data set at genesis.
+- Examples: sequence number, rarity tier, unique name, trait set, content hash.
+
+### Mutable Fields
+Checked by wallet application against Token Rules.
+Can be updated by wallet apps well as on each transfer. 
+
+**[Owner ID]**
+- Public key of the current token holder.
+
+**[State Data]** (optional)
+- Arbitrary bytes. Usage defined by Token Rules.
+- Examples: metadata hash, counter, status flag, IPFS CID.
 
 ### Transaction Structure
 
