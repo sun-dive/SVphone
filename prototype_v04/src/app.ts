@@ -145,8 +145,8 @@ async function refreshTokenList() {
     const first = group[0]
     const selectId = `sel-${genesisTxId.slice(0, 12)}`
     const detailId = `detail-${genesisTxId.slice(0, 12)}`
-    const options = group.map((t, idx) =>
-      `<option value="${t.tokenId}">#${idx + 1} (output ${t.genesisOutputIndex}) ${t.status !== 'active' ? '- ' + t.status : ''}</option>`
+    const options = group.map((t) =>
+      `<option value="${t.tokenId}">NFT #${t.genesisOutputIndex} ${t.status !== 'active' ? '- ' + t.status : ''}</option>`
     ).join('')
     const activeCount = group.filter(t => t.status === 'active').length
     return `
@@ -171,9 +171,11 @@ function renderTokenCard(t: OwnedToken): string {
   const rules = renderRules(t.tokenRules)
   const attrsDisplay = renderHexField(t.tokenAttributes)
   const stateDisplay = renderStateData(t.stateData)
+  const supply = decodeTokenRules(t.tokenRules).supply
+  const nftLabel = supply > 1 ? ` NFT #${t.genesisOutputIndex}` : ''
   return `
     <div class="token-card ${t.status === 'transferred' ? 'token-transferred' : ''} ${t.status === 'pending_transfer' ? 'token-pending' : ''}">
-      <div class="token-header">${escHtml(t.tokenName)} ${statusBadge}</div>
+      <div class="token-header">${escHtml(t.tokenName)}${nftLabel} ${statusBadge}</div>
       <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${t.tokenId}</code></div>
       <div class="token-field"><span class="label">Rules:</span> ${rules}</div>
       <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
@@ -193,9 +195,11 @@ function renderTokenDetail(t: OwnedToken): string {
   const actions = renderTokenActions(t)
   const attrsDisplay = renderHexField(t.tokenAttributes)
   const stateDisplay = renderStateData(t.stateData)
+  const supply = decodeTokenRules(t.tokenRules).supply
   return `
     <div class="${t.status === 'transferred' ? 'token-transferred' : ''} ${t.status === 'pending_transfer' ? 'token-pending' : ''}">
       <div class="token-field"><span class="label">Status:</span> ${statusBadge}</div>
+      ${supply > 1 ? `<div class="token-field"><span class="label">NFT #:</span> ${t.genesisOutputIndex}</div>` : ''}
       <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${t.tokenId}</code></div>
       <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
       <div class="token-field"><span class="label">State Data:</span> ${stateDisplay}</div>
