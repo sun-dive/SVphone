@@ -29,8 +29,23 @@ export interface BlockHeader {
   prevHash: string
 }
 
+// Simple rate limiter: ensures minimum delay between API requests
+const MIN_REQUEST_DELAY = 200 // ms between requests
+let lastRequestTime = 0
+
+async function throttledFetch(url: string, init?: RequestInit): Promise<Response> {
+  const now = Date.now()
+  const elapsed = now - lastRequestTime
+  if (elapsed < MIN_REQUEST_DELAY) {
+    await new Promise(r => setTimeout(r, MIN_REQUEST_DELAY - elapsed))
+  }
+  lastRequestTime = Date.now()
+  return fetch(url, init)
+}
+
 export class WocProvider {
   private key: PrivateKey
+  private txCache = new Map<string, string>() // txId -> raw hex
 
   constructor(key: PrivateKey) {
     this.key = key
@@ -52,7 +67,7 @@ export class WocProvider {
 
   async getUtxos(): Promise<Utxo[]> {
     const address = this.getAddress()
-    const resp = await fetch(`${WOC_BASE}/address/${address}/unspent`)
+    const resp = await throttledFetch(`${WOC_BASE}/address/${address}/unspent`)
     if (!resp.ok) throw new Error(`WoC UTXO fetch failed: ${resp.status}`)
     const data = await resp.json()
     if (!Array.isArray(data)) return []
@@ -74,7 +89,7 @@ export class WocProvider {
   // ── Broadcast ───────────────────────────────────────────────────
 
   async broadcast(rawHex: string): Promise<string> {
-    const resp = await fetch(`${WOC_BASE}/tx/raw`, {
+    const resp = await throttledFetch(`${WOC_BASE}/tx/raw`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ txhex: rawHex }),
@@ -91,9 +106,14 @@ export class WocProvider {
   // ── Raw Transaction ─────────────────────────────────────────────
 
   async getRawTransaction(txId: string): Promise<string> {
-    const resp = await fetch(`${WOC_BASE}/tx/${txId}/hex`)
+    const cached = this.txCache.get(txId)
+    if (cached) return cached
+
+    const resp = await throttledFetch(`${WOC_BASE}/tx/${txId}/hex`)
     if (!resp.ok) throw new Error(`WoC raw TX fetch failed: ${resp.status}`)
-    return resp.text()
+    const hex = await resp.text()
+    this.txCache.set(txId, hex)
+    return hex
   }
 
   /**
@@ -108,12 +128,12 @@ export class WocProvider {
 
   async getBlockHeader(height: number): Promise<BlockHeader> {
     // Step 1: get block hash from height
-    const hashResp = await fetch(`${WOC_BASE}/block/height/${height}`)
+    const hashResp = await throttledFetch(`${WOC_BASE}/block/height/${height}`)
     if (!hashResp.ok) throw new Error(`WoC block height fetch failed: ${hashResp.status}`)
     const blockHash = (await hashResp.text()).replace(/"/g, '')
 
     // Step 2: get header details from block hash
-    const headerResp = await fetch(`${WOC_BASE}/block/${blockHash}/header`)
+    const headerResp = await throttledFetch(`${WOC_BASE}/block/${blockHash}/header`)
     if (!headerResp.ok) throw new Error(`WoC block header fetch failed: ${headerResp.status}`)
     const hdr = await headerResp.json()
 
@@ -134,7 +154,7 @@ export class WocProvider {
    */
   async getAddressHistory(): Promise<{ txId: string; blockHeight: number }[]> {
     const address = this.getAddress()
-    const resp = await fetch(`${WOC_BASE}/address/${address}/history`)
+    const resp = await throttledFetch(`${WOC_BASE}/address/${address}/history`)
     if (!resp.ok) throw new Error(`WoC history fetch failed: ${resp.status}`)
     const data = await resp.json()
     if (!Array.isArray(data)) return []
@@ -151,7 +171,7 @@ export class WocProvider {
    * Returns null if the TX is not yet confirmed.
    */
   async getMerkleProof(txId: string): Promise<MerkleProofEntry | null> {
-    const resp = await fetch(`${WOC_BASE}/tx/${txId}/proof/tsc`)
+    const resp = await throttledFetch(`${WOC_BASE}/tx/${txId}/proof/tsc`)
     if (!resp.ok) {
       console.debug(`getMerkleProof: WoC returned ${resp.status} for ${txId.slice(0, 12)}...`)
       return null
@@ -195,7 +215,7 @@ export class WocProvider {
 
     // Get the Merkle root from the block header
     const blockHash = data.target
-    const headerResp = await fetch(`${WOC_BASE}/block/${blockHash}/header`)
+    const headerResp = await throttledFetch(`${WOC_BASE}/block/${blockHash}/header`)
     if (!headerResp.ok) return null
     const header = await headerResp.json()
 
