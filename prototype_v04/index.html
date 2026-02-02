@@ -124,7 +124,7 @@
       <div style="width:120px;"><input id="token-restrictions" type="number" placeholder="Restrictions" value="0" min="0" max="65535" style="width:100%;" /><span class="arch-note">Restrictions</span></div>
       <div style="width:120px;"><input id="token-rules-version" type="number" placeholder="Rules ver." value="1" min="0" max="65535" style="width:100%;" /><span class="arch-note">Rules ver.</span></div>
     </div>
-    <p class="arch-note">All immutable after mint. Divisibility 0 = NFT. Restrictions = bitfield.</p>
+    <p class="arch-note">All immutable after mint. Divisibility 0 = NFT/distinct tokens. Divisibility &gt; 0 = fragments per whole (e.g. supply=4 div=2 → 4 tokens × 2 halves = 8 fragment UTXOs). Restrictions = bitfield.</p>
     <div class="row" style="justify-content:flex-end;">
       <span class="arch-note" style="align-self:center;">sats/KB</span>
       <input id="fee-rate" type="number" placeholder="100" value="100" min="1" style="width:80px; margin-bottom:0;" />

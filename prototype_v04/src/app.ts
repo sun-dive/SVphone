@@ -232,8 +232,15 @@ async function refreshTokenList() {
     if (group.length === 1) {
       return renderTokenCard(group[0])
     }
-    // Multi-token mint: show card with dropdown selector
     const first = group[0]
+    const rules = decodeTokenRules(first.tokenRules)
+
+    // Divisible tokens (divisibility > 0): fragment collection view
+    if (rules.divisibility > 0) {
+      return renderFragmentCard(genesisTxId, group, rules)
+    }
+
+    // Non-divisible multi-token (divisibility === 0): NFT dropdown selector
     const selectId = `sel-${genesisTxId.slice(0, 12)}`
     const detailId = `detail-${genesisTxId.slice(0, 12)}`
     const options = group.map((t) =>
@@ -256,18 +263,117 @@ async function refreshTokenList() {
   }).join('')
 }
 
+function renderFragmentCard(genesisTxId: string, group: OwnedToken[], rules: { supply: number; divisibility: number; restrictions: number; version: number }): string {
+  const first = group[0]
+  // Divisibility = fragments per whole token. Total fragments = supply * divisibility.
+  const fragsPerWhole = rules.divisibility
+  const totalFragments = rules.supply * fragsPerWhole
+  const wholeTokens = rules.supply
+  const activeFragments = group.filter(t => t.status === 'active')
+  const pendingFragments = group.filter(t => t.status === 'pending_transfer')
+  const transferredFragments = group.filter(t => t.status === 'transferred')
+  const heldCount = activeFragments.length
+  const heldWholes = Math.floor(heldCount / fragsPerWhole)
+  const heldRemainder = heldCount % fragsPerWhole
+  const heldDisplay = heldRemainder > 0
+    ? `${heldWholes} ${heldRemainder}/${fragsPerWhole}`
+    : `${heldWholes}`
+  const pct = totalFragments > 0 ? Math.round((heldCount / totalFragments) * 100) : 0
+
+  // Build held/missing piece numbers
+  const heldIndices = activeFragments.map(t => t.genesisOutputIndex).sort((a, b) => a - b)
+  // Missing = indices from 1..totalFragments that are not in any status in this wallet
+  const ownedIndices = new Set(group.map(t => t.genesisOutputIndex))
+  const missingIndices: number[] = []
+  for (let i = 1; i <= totalFragments; i++) {
+    if (!ownedIndices.has(i)) missingIndices.push(i)
+  }
+
+  const attrsDisplay = renderHexField(first.tokenAttributes, first)
+  const genKey = genesisTxId.slice(0, 12)
+
+  // Completion bar
+  const barColor = pct === 100 ? '#238636' : pct > 0 ? '#d29922' : '#da3633'
+  const completionBar = `<div style="background:#21262d;border-radius:3px;height:8px;margin:6px 0;overflow:hidden;"><div style="background:${barColor};height:100%;width:${pct}%;transition:width 0.3s;"></div></div>`
+
+  // Fragment list helper: compress consecutive ranges like 1-5, 8, 10-12
+  const compressRanges = (indices: number[]): string => {
+    if (indices.length === 0) return '(none)'
+    if (indices.length > 40) {
+      // Too many to list individually — show count + first/last
+      return `${indices.length} pieces (#${indices[0]}-#${indices[indices.length - 1]})`
+    }
+    const ranges: string[] = []
+    let start = indices[0], end = indices[0]
+    for (let i = 1; i < indices.length; i++) {
+      if (indices[i] === end + 1) {
+        end = indices[i]
+      } else {
+        ranges.push(start === end ? `#${start}` : `#${start}-#${end}`)
+        start = end = indices[i]
+      }
+    }
+    ranges.push(start === end ? `#${start}` : `#${start}-#${end}`)
+    return ranges.join(', ')
+  }
+
+  return `
+    <div class="token-card">
+      <div class="token-header">${escHtml(first.tokenName)} <span class="badge ${pct === 100 ? 'badge-active' : 'badge-pending'}">${heldDisplay} / ${wholeTokens} whole</span></div>
+      <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${genesisTxId}</code></div>
+      <div class="token-field"><span class="label">Type:</span> Divisible token (${wholeTokens} tokens × ${fragsPerWhole} fragments = ${totalFragments} total pieces)</div>
+      <div class="token-field"><span class="label">Completion:</span> ${heldCount}/${totalFragments} fragments (${pct}%)</div>
+      ${completionBar}
+      <div class="token-field"><span class="label">Held:</span> <span style="color:#3fb950;">${compressRanges(heldIndices)}</span></div>
+      ${missingIndices.length > 0 ? `<div class="token-field"><span class="label">Missing:</span> <span class="muted">${compressRanges(missingIndices)}</span></div>` : ''}
+      ${pendingFragments.length > 0 ? `<div class="token-field"><span class="label">Pending:</span> <span style="color:#d29922;">${compressRanges(pendingFragments.map(t => t.genesisOutputIndex).sort((a, b) => a - b))}</span></div>` : ''}
+      ${transferredFragments.length > 0 ? `<div class="token-field"><span class="label">Sent:</span> <span class="muted">${compressRanges(transferredFragments.map(t => t.genesisOutputIndex).sort((a, b) => a - b))}</span></div>` : ''}
+      <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
+      <div class="token-field"><span class="label">Rules:</span> ${renderRules(first.tokenRules)}</div>
+      <div class="token-actions" style="flex-direction:column;align-items:stretch;">
+        ${heldCount > 0 ? `
+        <div class="row" style="gap:6px;">
+          <input id="frag-amt-${genKey}" type="number" min="1" max="${heldCount}" value="1" style="width:80px;margin:0;" />
+          <button onclick="window._transferFragments('${genesisTxId}', '${genKey}')">Transfer Fragments</button>
+          <button onclick="window._verifyToken('${activeFragments[0].tokenId}')">Verify</button>
+        </div>
+        <span class="arch-note">Send 1-${heldCount} fragments to a recipient. Fragments are sent lowest-numbered first.</span>
+        ` : ''}
+        <div class="row" style="gap:6px;">
+          <a href="https://whatsonchain.com/tx/${genesisTxId}" target="_blank" rel="noopener">View Genesis TX</a>
+        </div>
+      </div>
+      <details style="margin-top:8px;" ontoggle="if(this.open){var s=document.getElementById('fsel-${genKey}');if(s){var i=document.getElementById('transfer-token-id');if(i){var o=s.querySelector('option:not([data-pending])');if(o)i.value=o.value;}}}"><summary class="muted" style="cursor:pointer;font-size:0.85em;">Show individual fragment details</summary>
+        <div style="margin-top:6px;">
+          <select id="fsel-${genKey}" onchange="window._selectGroupToken('fdet-${genKey}', this.value)" style="background:#0d1117;color:#c9d1d9;border:1px solid #30363d;padding:4px 8px;border-radius:4px;width:100%;margin-bottom:6px;">
+            ${group.map(t => `<option value="${t.tokenId}"${t.status !== 'active' ? ' data-pending' : ''}>Fragment #${t.genesisOutputIndex} ${t.status !== 'active' ? '- ' + t.status : ''}</option>`).join('')}
+          </select>
+          <div id="fdet-${genKey}">${renderTokenDetail(first)}</div>
+        </div>
+      </details>
+    </div>`
+}
+
 function renderTokenCard(t: OwnedToken): string {
   const statusBadge = renderStatusBadge(t.status)
   const actions = renderTokenActions(t)
   const rules = renderRules(t.tokenRules)
   const attrsDisplay = renderHexField(t.tokenAttributes, t)
   const stateDisplay = renderStateData(t.stateData)
-  const supply = decodeTokenRules(t.tokenRules).supply
-  const nftLabel = supply > 1 ? ` NFT #${t.genesisOutputIndex}` : ''
+  const r = decodeTokenRules(t.tokenRules)
+  const isFragment = r.divisibility > 0 && r.supply > 0
+  const totalFragments = isFragment ? r.supply * r.divisibility : r.supply
+  const nftLabel = isFragment
+    ? ` Fragment #${t.genesisOutputIndex}`
+    : (r.supply > 1 ? ` NFT #${t.genesisOutputIndex}` : '')
+  const fragmentInfo = isFragment
+    ? `<div class="token-field"><span class="label">Fragment:</span> #${t.genesisOutputIndex} of ${totalFragments} (${r.divisibility} fragments = 1 whole, ${r.supply} whole tokens)</div>`
+    : ''
   return `
     <div class="token-card ${t.status === 'transferred' ? 'token-transferred' : ''} ${t.status === 'pending_transfer' ? 'token-pending' : ''}">
       <div class="token-header">${escHtml(t.tokenName)}${nftLabel} ${statusBadge}</div>
       <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${t.tokenId}</code></div>
+      ${fragmentInfo}
       <div class="token-field"><span class="label">Rules:</span> ${rules}</div>
       <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
       <div class="token-field"><span class="label">State Data:</span> ${stateDisplay}</div>
@@ -313,9 +419,14 @@ function renderStatusBadge(status: string): string {
 
 function renderTokenActions(t: OwnedToken): string {
   const parts: string[] = []
+  const r = decodeTokenRules(t.tokenRules)
+  const isFragment = r.divisibility > 0
 
   if (t.status === 'active') {
     parts.push(`<button onclick="window._selectForTransfer('${t.tokenId}')">Select for Transfer</button>`)
+    if (isFragment) {
+      parts.push(`<button onclick="window._sendSingleFragment('${t.tokenId}', ${t.genesisOutputIndex})">Send Fragment #${t.genesisOutputIndex}</button>`)
+    }
     parts.push(`<button onclick="window._verifyToken('${t.tokenId}')">Verify</button>`)
   }
 
@@ -336,7 +447,10 @@ function renderTokenActions(t: OwnedToken): string {
 function renderRules(rulesHex: string): string {
   if (!rulesHex || rulesHex.length !== 16) return `<code>${escHtml(rulesHex || '(none)')}</code>`
   const r = decodeTokenRules(rulesHex)
-  return `Supply=${r.supply}, Divisibility=${r.divisibility}, Restrictions=0x${r.restrictions.toString(16).padStart(4, '0')}, Version=${r.version}`
+  const divLabel = r.divisibility > 0
+    ? `Divisibility=${r.divisibility} (${r.supply}×${r.divisibility}=${r.supply * r.divisibility} fragments)`
+    : `Divisibility=0`
+  return `Supply=${r.supply}, ${divLabel}, Restrictions=0x${r.restrictions.toString(16).padStart(4, '0')}, Version=${r.version}`
 }
 
 function renderHexField(hex: string, token?: OwnedToken): string {
@@ -620,13 +734,98 @@ function handleRestoreWallet() {
 ;(window as any)._selectGroupToken = async (genKey: string, tokenId: string) => {
   const token = await store.getToken(tokenId)
   if (!token) return
-  const detailEl = el(`detail-${genKey}`)
+  // Works for both NFT dropdown (detail-*) and fragment dropdown (fdet-*)
+  const detailEl = el(genKey.startsWith('fdet-') ? genKey : `detail-${genKey}`)
   if (detailEl) detailEl.innerHTML = renderTokenDetail(token)
+  // Only populate the transfer input if the token is active (avoid pending/transferred)
+  if (token.status === 'active') {
+    const transferInput = el('transfer-token-id') as HTMLInputElement
+    if (transferInput) transferInput.value = tokenId
+  }
 }
 
 ;(window as any)._selectForTransfer = (tokenId: string) => {
   const input = el('transfer-token-id') as HTMLInputElement
   if (input) input.value = tokenId
+}
+
+;(window as any)._transferFragments = async (genesisTxId: string, genKey: string) => {
+  const amtInput = el(`frag-amt-${genKey}`) as HTMLInputElement
+  const count = parseInt(amtInput?.value ?? '1', 10)
+  if (!count || count < 1) {
+    setResult('transfer-result', 'Enter a valid fragment count (minimum 1).')
+    return
+  }
+
+  const recipient = inputVal('transfer-recipient')
+  if (!recipient) {
+    setResult('transfer-result', 'Enter a recipient BSV address in the Transfer Token section below.')
+    el('transfer-recipient')?.focus()
+    return
+  }
+
+  // Get active fragments for this genesis, sorted by output index (lowest first)
+  const tokens = await store.listTokens()
+  const activeFragments = tokens
+    .filter(t => t.genesisTxId === genesisTxId && t.status === 'active')
+    .sort((a, b) => a.genesisOutputIndex - b.genesisOutputIndex)
+
+  if (count > activeFragments.length) {
+    setResult('transfer-result', `Only ${activeFragments.length} active fragment(s) available.`)
+    return
+  }
+
+  const toSend = activeFragments.slice(0, count)
+
+  const feeRate = parseInt(inputVal('fee-rate'), 10)
+  if (feeRate > 0) builder.feePerKb = feeRate
+
+  setResult('transfer-result', `Transferring ${count} fragment(s) to ${recipient}...`)
+
+  let sent = 0
+  const errors: string[] = []
+  for (const frag of toSend) {
+    try {
+      const result = await builder.createTransfer(frag.tokenId, recipient)
+      sent++
+      setResult('transfer-result', `Sent fragment #${frag.genesisOutputIndex} (${sent}/${count})...\nTXID: ${result.txId}`)
+      pollTransferConfirmation(result.txId, result.tokenId)
+    } catch (e: any) {
+      errors.push(`#${frag.genesisOutputIndex}: ${e.message}`)
+    }
+  }
+
+  const summary = [`Transferred ${sent}/${count} fragment(s) to ${recipient}`]
+  if (errors.length > 0) {
+    summary.push('', 'Errors:', ...errors)
+  }
+  setResult('transfer-result', summary.join('\n'))
+  await refreshTokenList()
+  await refreshBalance()
+}
+
+;(window as any)._sendSingleFragment = async (tokenId: string, fragIndex: number) => {
+  const recipient = inputVal('transfer-recipient')
+  if (!recipient) {
+    setResult('transfer-result', 'Enter a recipient BSV address in the Transfer Token section below.')
+    el('transfer-recipient')?.focus()
+    return
+  }
+
+  const feeRate = parseInt(inputVal('fee-rate'), 10)
+  if (feeRate > 0) builder.feePerKb = feeRate
+
+  setResult('transfer-result', `Sending fragment #${fragIndex}...`)
+
+  try {
+    const result = await builder.createTransfer(tokenId, recipient)
+    setResult('transfer-result', `Sent fragment #${fragIndex}\nTXID: ${result.txId}\nView: https://whatsonchain.com/tx/${result.txId}`)
+    pollTransferConfirmation(result.txId, result.tokenId)
+    await refreshTokenList()
+    await refreshBalance()
+  } catch (e: any) {
+    setResult('transfer-result', `Error sending fragment #${fragIndex}: ${e.message}`)
+  }
 }
 
 ;(window as any)._verifyToken = (tokenId: string) => {

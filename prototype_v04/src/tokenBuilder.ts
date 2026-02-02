@@ -252,6 +252,10 @@ export class TokenBuilder {
     }
 
     const supply = params.supply ?? 1
+    const divisibility = params.divisibility ?? 0
+    // Divisible tokens: mint supply * divisibility fragment outputs
+    // Non-divisible: mint supply outputs (one per token)
+    const totalOutputs = divisibility > 0 ? supply * divisibility : supply
 
     const { rawHex, txId, fee } = await this.buildFundedTx(
       utxos, address, (t) => {
@@ -260,8 +264,8 @@ export class TokenBuilder {
           lockingScript: encodeOpReturn(opReturnData),
           satoshis: 0,
         })
-        // Outputs 1..N = P2PKH (one per token unit)
-        for (let i = 0; i < supply; i++) {
+        // Outputs 1..N = P2PKH (one per token/fragment)
+        for (let i = 0; i < totalOutputs; i++) {
           t.addOutput({
             lockingScript: new P2PKH().lock(address),
             satoshis: TOKEN_SATS,
@@ -289,7 +293,7 @@ export class TokenBuilder {
     const createdAt = new Date().toISOString()
     const emptyChain: ProofChain = { genesisTxId: txId, entries: [] }
 
-    for (let i = 1; i <= supply; i++) {
+    for (let i = 1; i <= totalOutputs; i++) {
       const tokenId = computeTokenId(txId, i, immutableBytes)
       tokenIds.push(tokenId)
 
@@ -318,8 +322,8 @@ export class TokenBuilder {
   // ── Transfer ──────────────────────────────────────────────────
 
   async createTransfer(tokenId: string, recipientAddress: string): Promise<TransferResult> {
-    const token = await this.store.findToken(tokenId)
-    if (!token) throw new Error(`Token not found: ${tokenId}`)
+    const token = await this.store.getToken(tokenId)
+    if (!token) throw new Error(`Token not found: ${tokenId}. Make sure you are using the Token ID (not a TXID).`)
     if (token.status === 'pending_transfer') {
       throw new Error(`Token already has a pending transfer (TXID: ${token.transferTxId}). Confirm or cancel it first.`)
     }
@@ -634,7 +638,23 @@ export class TokenBuilder {
 
           const tokenId = computeTokenId(genesisTxId, genesisOutputIndex, immutableBytes)
           const existing = await this.store.getToken(tokenId)
-          if (!existing) {
+          if (existing && (existing.status === 'transferred' || existing.status === 'pending_transfer')) {
+            // Return-to-sender: token was sent away but came back to us
+            existing.status = 'active'
+            existing.currentTxId = txId
+            existing.currentOutputIndex = p2pkhOutputIndex
+            existing.transferTxId = undefined
+            await this.store.updateToken(existing)
+
+            const proofChain: ProofChain = {
+              genesisTxId,
+              entries: opData.proofChainEntries ?? [],
+            }
+            await this.store.addToken(existing, proofChain)
+
+            imported.push(existing)
+            onStatus?.(`Returned token: ${existing.tokenName} (${tokenId.slice(0, 12)}...)`)
+          } else if (!existing) {
             const token: OwnedToken = {
               tokenId,
               genesisTxId,
@@ -665,7 +685,19 @@ export class TokenBuilder {
           for (const p2pkhOutputIndex of p2pkhOutputIndices) {
             const tokenId = computeTokenId(genesisTxId, p2pkhOutputIndex, immutableBytes)
             const existing = await this.store.getToken(tokenId)
-            if (existing) continue
+            if (existing && existing.status === 'active') continue
+
+            if (existing && (existing.status === 'transferred' || existing.status === 'pending_transfer')) {
+              // Return-to-sender: token was sent away but came back to us
+              existing.status = 'active'
+              existing.currentTxId = txId
+              existing.currentOutputIndex = p2pkhOutputIndex
+              existing.transferTxId = undefined
+              await this.store.updateToken(existing)
+              imported.push(existing)
+              onStatus?.(`Returned token: ${existing.tokenName} #${p2pkhOutputIndex} (${tokenId.slice(0, 12)}...)`)
+              continue
+            }
 
             const token: OwnedToken = {
               tokenId,

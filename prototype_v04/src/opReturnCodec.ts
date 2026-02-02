@@ -347,8 +347,8 @@ export function parseFileOpReturn(script: LockingScript): FileOpReturnData | nul
 /**
  * Encode token rules as an 8-byte hex string (4 x uint16 LE).
  *
- *   Bytes 0-1: supply (max 65535 per genesis TX)
- *   Bytes 2-3: divisibility (decimal places, 0 = NFT)
+ *   Bytes 0-1: supply (whole tokens, max 65535 per genesis TX)
+ *   Bytes 2-3: divisibility (fragments per whole, 0 = NFT/indivisible)
  *   Bytes 4-5: restrictions (bitfield, 0 = none)
  *   Bytes 6-7: version (rules schema version)
  */
