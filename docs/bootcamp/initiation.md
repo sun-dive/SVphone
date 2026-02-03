@@ -11,19 +11,19 @@ Read these to understand the protocol design and architecture:
 
 ## 2. Protocol Layer (pure SPV, no network dependencies)
 
-3. `prototype_v05/src/tokenProtocol.ts` — Token ID computation, Merkle proof verification, proof chain validation. This is the cryptographic core.
-4. `prototype_v05/src/opReturnCodec.ts` — OP_RETURN encoding/decoding, chunk structure, immutable byte extraction
+3. `prototypes/MPT_v05/src/tokenProtocol.ts` — Token ID computation, Merkle proof verification, proof chain validation. This is the cryptographic core.
+4. `prototypes/MPT_v05/src/opReturnCodec.ts` — OP_RETURN encoding/decoding, chunk structure, immutable byte extraction
 
 ## 3. Wallet Layer (network-dependent)
 
-5. `prototype_v05/src/tokenStore.ts` — Token persistence, OwnedToken interface, proof chain storage
-6. `prototype_v05/src/walletProvider.ts` — Blockchain API abstraction (WhatsOnChain), UTXO fetching, Merkle proofs, block headers
-7. `prototype_v05/src/tokenBuilder.ts` — Token operations: mint (createGenesis), transfer, verify, incoming token detection, SPV verification gate
+5. `prototypes/MPT_v05/src/tokenStore.ts` — Token persistence, OwnedToken interface, proof chain storage
+6. `prototypes/MPT_v05/src/walletProvider.ts` — Blockchain API abstraction (WhatsOnChain), UTXO fetching, Merkle proofs, block headers
+7. `prototypes/MPT_v05/src/tokenBuilder.ts` — Token operations: mint (createGenesis), transfer, verify, incoming token detection, SPV verification gate
 
 ## 4. Application Layer
 
-8. `prototype_v05/src/app.ts` — UI wiring, event handlers
-9. `prototype_v05/index.html` — UI structure
+8. `prototypes/MPT_v05/src/app.ts` — UI wiring, event handlers
+9. `prototypes/MPT_v05/index.html` — UI structure
 
 ## 5. Supplementary (if relevant to task)
 
