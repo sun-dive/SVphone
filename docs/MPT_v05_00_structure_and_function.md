@@ -25,10 +25,10 @@ An MPT token is a BSV transaction with a specific output structure. Ownership us
 All immutable fields are cryptographically bound to the Token ID. Tampering with any of them causes a Token ID mismatch -- instant verification failure. No additional checking logic needed for these fields; the existing `computeTokenId` check catches it.
 
 **[Token ID]**
-- `SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)` where `immutableChunkBytes = tokenName + tokenScript + tokenRules + tokenAttributes`
+- `SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)` where `immutableChunkBytes = tokenName + tokenScript + tokenRules`
 - Deterministic, purely local computation. No network access required.
 - `outputIndex` is the actual Bitcoin output index of the token's P2PKH in the genesis TX. Since Output 0 is the OP_RETURN, token indices start at 1. Single mint = 1, batch mint = 1..N.
-- `immutableChunkBytes` binds the shared collection identity (name, script, rules, attributes). Tampering with any of these fields causes a Token ID mismatch.
+- `immutableChunkBytes` binds the immutable collection identity (name, script, rules). tokenAttributes is mutable and not bound to the Token ID.
 
 **[Token Name]**
 - UTF-8 text string.
@@ -48,12 +48,13 @@ All immutable fields are cryptographically bound to the Token ID. Tampering with
   - **Transfer Restrictions:** Unrestricted, whitelist, time-lock, or custom wallet-enforced conditions.
   - **Version:** Integer. Allows future rule extensions.
 
-**[Token Attributes]** (optional)
-- Immutable data shared by all tokens in the NFT set. Set at genesis. If unused, the chunk is a zero-length pushdata (the chunk must still be present for positional parsing).
-- All tokens within a single genesis TX have identical attributes.
-- For tokens with different attributes (e.g. different rarity tiers), use separate genesis TXs (separate NFT sets).
+**[Token Attributes]** (optional, mutable)
+- Data shared by all tokens in the NFT set. Set at genesis but can be updated on each transfer. If unused, the chunk is a zero-length pushdata (the chunk must still be present for positional parsing).
+- All tokens within a single genesis TX have identical attributes initially.
+- For tokens with different attributes (e.g. different rarity tiers), use separate genesis TXs (separate NFT sets), or update tokenAttributes in transfers.
 - When a file is embedded, tokenAttributes contains the SHA-256 hash of the file (32 bytes). The full file data lives in a separate OP_RETURN output in the genesis TX only (see Embedded File Data section).
-- Examples: rarity tier, trait set, content hash, collection metadata, SHA-256 file hash.
+- Examples: rarity tier, trait set, content hash, collection metadata, SHA-256 file hash, IPFS CID, mutable state reference.
+- **Important:** tokenAttributes is NOT bound to Token ID, so changes do not affect token identity.
 
 ### Mutable Fields
 
@@ -151,7 +152,7 @@ Chunk ordering follows enforcement level (highest authority first):
 | 2 | tokenName | variable | Identity | UTF-8 human-readable name (encoder [4]) |
 | 3 | tokenScript | variable | Consensus (miners) | Raw Bitcoin Script for miner-enforced rules. Empty = P2PKH. (encoder [5]) |
 | 4 | tokenRules | 8B | Application (wallet) | Packed rules: supply, divisibility, restrictions bitfield, version (encoder [6]) |
-| 5 | tokenAttributes | variable | User-level | Immutable attributes shared by all tokens in the set (hex) (encoder [7]) |
+| 5 | tokenAttributes | variable | User-level | Mutable attributes shared by all tokens in the set (hex). Not bound to Token ID. (encoder [7]) |
 | 6 | stateData | variable | Mutable | Application state (min 1 byte) (encoder [8]) |
 | 7 | genesisTxId | 32B | -- | *Transfer only:* raw genesis TX hash (encoder [9]) |
 | 8 | proofChainBinary | variable | -- | *Transfer only:* compact binary proof chain (encoder [10]) |
@@ -172,7 +173,7 @@ Chunk ordering follows enforcement level (highest authority first):
 | tokenName | Immutable | Set at genesis, bound to Token ID |
 | tokenScript | Immutable | Set at genesis, bound to Token ID. Empty = P2PKH (no consensus rules). |
 | tokenRules | Immutable | Set at genesis, bound to Token ID |
-| tokenAttributes | Immutable | Set at genesis, bound to Token ID. Shared by all tokens in the set. |
+| tokenAttributes | **Mutable** | Set at genesis, shared by all tokens in the set. Not bound to Token ID. Can be updated on each transfer. |
 | stateData | **Mutable** | Can be updated according to Token Rules |
 | genesisTxId | Fixed | Always references the original mint TX |
 | proofChainBinary | **Grows** | New Merkle proof entry prepended on each transfer |
@@ -198,15 +199,15 @@ The zero-dependency parsing aligns with MPT's SPV-only philosophy. The protocol 
 Token ID = SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)
 ```
 
-where `immutableChunkBytes = tokenName + tokenScript + tokenRules + tokenAttributes` (concatenated raw bytes of all immutable fields)
+where `immutableChunkBytes = tokenName + tokenScript + tokenRules` (concatenated raw bytes of the immutable fields)
 
-The Token ID is a deterministic, purely local computation. It binds the token's identity to its genesis transaction and all immutable metadata. No network access is required to compute or verify it. Tampering with any immutable field -- including the consensus script -- causes a Token ID mismatch, instant verification failure.
+The Token ID is a deterministic, purely local computation. It binds the token's identity to its genesis transaction and the immutable consensus rules. No network access is required to compute or verify it. Tampering with any immutable field causes a Token ID mismatch, instant verification failure. tokenAttributes is mutable and not bound to the Token ID.
 
 ### Verification Model
 
 Token validity is proven exclusively through Merkle proofs and block headers:
 
-1. Token ID matches `SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)` where `immutableChunkBytes = tokenName + tokenScript + tokenRules + tokenAttributes`
+1. Token ID matches `SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)` where `immutableChunkBytes = tokenName + tokenScript + tokenRules`
 2. Every entry in the proof chain has a valid Merkle proof (double SHA-256)
 3. Every Merkle root matches its block header at that height
 4. The oldest entry's txId matches the genesis txId
@@ -337,10 +338,11 @@ For example, with `divisibility = 3`:
 Each fragment has its own unique Token ID:
 
 ```
-Token ID = SHA-256(genesisTxId || outputIndex LE || opReturnChunks[2..5] raw bytes)
+Token ID = SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)
+where immutableChunkBytes = tokenName + tokenScript + tokenRules
 ```
 
-Since `outputIndex` differs for each fragment, every fragment in the set has a distinct Token ID, even though they share the same genesisTxId and the same immutable metadata (name, script, rules, attributes). This means:
+Since `outputIndex` differs for each fragment, every fragment in the set has a distinct Token ID, even though they share the same genesisTxId and the same immutable metadata (name, script, rules). tokenAttributes is mutable and shared across all fragments. This means:
 
 - Fragments are **not fungible** -- each is uniquely identifiable.
 - Fragments can be individually transferred, verified, and tracked.
@@ -505,10 +507,11 @@ This is the core of the MPT system. It runs in any environment with zero network
 ### Token ID
 
 ```
-Token ID = SHA-256(genesisTxId || outputIndex LE || opReturnChunks[2..5] raw bytes)
+Token ID = SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)
+where immutableChunkBytes = tokenName + tokenScript + tokenRules
 ```
 
-The token ID is deterministic and immutable. It is derived from the genesis transaction hash, the output index (the actual Bitcoin output index of the token's P2PKH in the genesis TX, starting at 1 since Output 0 is the OP_RETURN), and the raw immutable metadata chunks (tokenName, tokenScript, tokenRules, tokenAttributes). It never changes across transfers.
+The token ID is deterministic and immutable. It is derived from the genesis transaction hash, the output index (the actual Bitcoin output index of the token's P2PKH in the genesis TX, starting at 1 since Output 0 is the OP_RETURN), and the raw immutable metadata chunks (tokenName, tokenScript, tokenRules). It never changes across transfers. tokenAttributes is mutable and not included in Token ID computation.
 
 ### Proof Chain
 
@@ -531,7 +534,7 @@ Each entry contains:
 
 A token is valid if and only if all four conditions hold:
 
-1. **Token ID matches genesis:** `SHA-256(genesisTxId || outputIndex LE || opReturnChunks[2..5] raw bytes) == tokenId`
+1. **Token ID matches genesis:** `SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes) == tokenId` where `immutableChunkBytes = tokenName + tokenScript + tokenRules`
 2. **Every Merkle proof is valid:** For each entry, hash the txId through the path using Bitcoin's double SHA-256 and confirm the computed root matches the claimed `merkleRoot`.
 3. **Every Merkle root matches its block header:** The `merkleRoot` in each entry must match the `merkleRoot` field of the block header at that `blockHeight`.
 4. **The oldest entry is the genesis TX:** `entries[last].txId == genesisTxId`

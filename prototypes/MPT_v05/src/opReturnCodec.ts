@@ -319,19 +319,18 @@ export function extractImmutableChunkBytes(script: LockingScript): number[] {
  * Build immutable chunk bytes from individual field values.
  * Used when the OP_RETURN script is not available (e.g. from stored token data).
  *
- * Order: name + script + rules + attrs (matches OP_RETURN chunk order).
+ * Order: name + script + rules (immutable fields bound to Token ID).
+ * Note: tokenAttributes is mutable and NOT included in Token ID computation.
  */
 export function buildImmutableChunkBytes(
   tokenName: string,
   tokenScript: string,
   tokenRules: string,
-  tokenAttributes: string,
 ): number[] {
   const nameBytes = stringToBytes(tokenName)
   const scriptBytes = hexToBytes(tokenScript)
   const rulesBytes = hexToBytes(tokenRules)
-  const attrsBytes = hexToBytes(tokenAttributes)
-  return [...nameBytes, ...scriptBytes, ...rulesBytes, ...attrsBytes]
+  return [...nameBytes, ...scriptBytes, ...rulesBytes]
 }
 
 // ─── File OP_RETURN (second output for file data in genesis TX) ─────

@@ -257,7 +257,6 @@ export class TokenBuilder {
       opData.tokenName,
       opData.tokenScript,
       opData.tokenRules,
-      opData.tokenAttributes,
     )
     const tid = computeTokenId(genesisTxId, genesisOutputIndex, immutableBytes)
     const existing = await this.store.getToken(tid)
@@ -370,7 +369,6 @@ export class TokenBuilder {
       params.tokenName,
       tokenScriptHex,
       tokenRulesHex,
-      attrsHex,
     )
 
     const tokenIds: string[] = []
@@ -716,7 +714,6 @@ export class TokenBuilder {
           opData.tokenName,
           opData.tokenScript,
           opData.tokenRules,
-          opData.tokenAttributes,
         )
 
         const isTransfer = opData.genesisTxId != null
@@ -874,7 +871,6 @@ export class TokenBuilder {
       token.tokenName,
       token.tokenScript,
       token.tokenRules,
-      token.tokenAttributes,
     )
     const expectedId = computeTokenId(token.genesisTxId, token.genesisOutputIndex, immutableBytes)
     if (expectedId !== token.tokenId) {

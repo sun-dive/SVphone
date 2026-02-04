@@ -47,8 +47,9 @@ export interface VerificationResult {
 
 // ─── Hex / Byte Helpers ─────────────────────────────────────────────
 
-// Note on Token ID computation: immutableChunkBytes = tokenName + tokenScript + tokenRules + tokenAttributes
+// Note on Token ID computation: immutableChunkBytes = tokenName + tokenScript + tokenRules
 // These are the concatenated raw bytes from the immutable fields in the OP_RETURN script.
+// tokenAttributes is mutable and NOT included in the Token ID.
 
 export function hexToBytes(hex: string): number[] {
   const bytes: number[] = []
@@ -83,10 +84,10 @@ export function sha256(data: number[]): number[] {
 /**
  * Compute Token ID = SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes).
  *
- * The immutableChunkBytes parameter is the concatenated raw bytes of all
- * immutable fields: tokenName + tokenScript + tokenRules + tokenAttributes.
- * This binds the token's identity to all immutable metadata including the
- * consensus script, making it deterministic and tamper-proof.
+ * The immutableChunkBytes parameter is the concatenated raw bytes of the immutable fields:
+ * tokenName + tokenScript + tokenRules (NO tokenAttributes).
+ * This binds the token's identity to the consensus rules and metadata that cannot change,
+ * making it deterministic and tamper-proof. tokenAttributes is mutable and not bound to the Token ID.
  *
  * Deterministic, purely local computation. No network access required.
  */
@@ -238,7 +239,7 @@ export function extendProofChain(
  * @param tokenId              The claimed token ID
  * @param genesisTxId          Genesis transaction hash
  * @param genesisOutputIndex   Output index in genesis TX (starts at 1)
- * @param immutableChunkBytes  Concatenated raw bytes of OP_RETURN chunks 2-5 (name+script+rules+attrs)
+ * @param immutableChunkBytes  Concatenated raw bytes of immutable fields (tokenName + tokenScript + tokenRules)
  * @param chain                The proof chain
  * @param headers              Pre-fetched block headers
  */
