@@ -1050,7 +1050,32 @@ export class TokenBuilder {
    * actual cryptographic verification with no network calls.
    */
   async verifyToken(tokenId: string): Promise<VerificationResult> {
-    const token = await this.store.getToken(tokenId)
+    // Try NFT storage first, then fungible storage
+    let token = await this.store.getToken(tokenId)
+
+    if (!token) {
+      // Check fungible token storage
+      const fungibleToken = await this.store.getFungibleToken(tokenId)
+      if (fungibleToken) {
+        // Adapt fungible token to the shape we need for verification
+        // Fungible tokens always use outputIndex = 1
+        token = {
+          tokenId: fungibleToken.tokenId,
+          genesisTxId: fungibleToken.genesisTxId,
+          genesisOutputIndex: 1,
+          currentTxId: fungibleToken.utxos[0]?.txId || fungibleToken.genesisTxId,
+          currentOutputIndex: fungibleToken.utxos[0]?.outputIndex || 1,
+          tokenName: fungibleToken.tokenName,
+          tokenScript: fungibleToken.tokenScript,
+          tokenRules: fungibleToken.tokenRules,
+          tokenAttributes: fungibleToken.tokenAttributes,
+          stateData: fungibleToken.stateData,
+          satoshis: fungibleToken.utxos.reduce((sum, u) => sum + u.satoshis, 0),
+          status: 'active' as const,
+        }
+      }
+    }
+
     if (!token) return { valid: false, reason: 'Token not found' }
 
     let chain = await this.store.getProofChain(tokenId)
