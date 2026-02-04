@@ -30,6 +30,7 @@ import {
   decodeOpReturn,
   TokenOpReturnData,
   encodeTokenRules,
+  decodeTokenRules,
   buildImmutableChunkBytes,
   buildFileOpReturn,
   parseFileOpReturn,
@@ -856,11 +857,19 @@ export class TokenBuilder {
 
     const imported: OwnedToken[] = []
     const existingTokens = await this.store.listTokens()
+    const existingFungibleTokens = await this.store.listFungibleTokens()
     // Include both currentTxId and genesisTxId to avoid re-scanning known TXs
     const existingTxIds = new Set<string>()
     for (const t of existingTokens) {
       existingTxIds.add(t.currentTxId)
       existingTxIds.add(t.genesisTxId)
+    }
+    // Also track fungible token TXs (genesis and all UTXOs)
+    for (const ft of existingFungibleTokens) {
+      existingTxIds.add(ft.genesisTxId)
+      for (const u of ft.utxos) {
+        existingTxIds.add(u.txId)
+      }
     }
 
     onStatus?.(`Scanning ${allTxIds.length} transactions...`)
@@ -879,6 +888,7 @@ export class TokenBuilder {
         // Find MPT OP_RETURN and ALL P2PKH outputs paying to us
         let opData: TokenOpReturnData | null = null
         const p2pkhOutputIndices: number[] = []
+        const p2pkhOutputsWithSats: { index: number; sats: number }[] = []
 
         console.debug(`checkIncoming: ${txId.slice(0, 12)}... has ${tx.outputs.length} outputs`)
         for (let i = 0; i < tx.outputs.length; i++) {
@@ -910,18 +920,28 @@ export class TokenBuilder {
             }
           }
 
-          // Check for 1-sat P2PKH paying to our address (collect ALL matches)
-          if (sats === TOKEN_SATS) {
-            const match = isP2pkhToAddress(scriptHex, this.myAddress)
-            console.debug(`checkIncoming: ${txId.slice(0, 12)}... output[${i}] 1-sat P2PKH match=${match}`)
-            if (match) {
+          // Check for P2PKH paying to our address (collect ALL matches)
+          const match = isP2pkhToAddress(scriptHex, this.myAddress)
+          if (match) {
+            console.debug(`checkIncoming: ${txId.slice(0, 12)}... output[${i}] P2PKH match, sats=${sats}`)
+            p2pkhOutputsWithSats.push({ index: i, sats })
+            if (sats === TOKEN_SATS) {
               p2pkhOutputIndices.push(i)
             }
           }
         }
 
-        if (!opData || p2pkhOutputIndices.length === 0) {
-          console.debug(`checkIncoming: SKIP ${txId.slice(0, 12)}... (opData=${!!opData}, p2pkhMatches=${p2pkhOutputIndices.length})`)
+        // Check if this is a fungible token
+        const isFungible = opData ? decodeTokenRules(opData.tokenRules).isFungible : false
+
+        // For fungible tokens: ALL P2PKH outputs (including 1-sat) are valid token UTXOs
+        // For NFTs: only 1-sat outputs count (handled via p2pkhOutputIndices)
+        const fungibleOutputs = isFungible
+          ? p2pkhOutputsWithSats.filter(o => o.sats > 0)
+          : p2pkhOutputsWithSats.filter(o => o.sats > 0 && o.sats !== TOKEN_SATS)
+
+        if (!opData || (p2pkhOutputIndices.length === 0 && fungibleOutputs.length === 0)) {
+          console.debug(`checkIncoming: SKIP ${txId.slice(0, 12)}... (opData=${!!opData}, nftMatches=${p2pkhOutputIndices.length}, fungibleMatches=${fungibleOutputs.length})`)
           continue
         }
 
@@ -933,6 +953,73 @@ export class TokenBuilder {
 
         const isTransfer = opData.genesisTxId != null
         const genesisTxId = isTransfer ? opData.genesisTxId! : txId
+
+        // Handle fungible tokens separately
+        if (isFungible && fungibleOutputs.length > 0) {
+          // Fungible tokens always use genesisOutputIndex = 1
+          const genesisOutputIndex = 1
+          const tokenId = computeTokenId(genesisTxId, genesisOutputIndex, immutableBytes)
+
+          // SPV verification
+          const verification = await this.verifyBeforeImport(
+            tokenId, genesisTxId, genesisOutputIndex, immutableBytes,
+            opData.proofChainEntries ?? [], txId,
+          )
+          if (!verification.valid) {
+            onStatus?.(`Rejected fungible token: ${opData.tokenName} — ${verification.reason}`)
+            continue
+          }
+
+          // Check if we already have this fungible token
+          let fungibleToken = await this.store.getFungibleToken(tokenId)
+
+          if (fungibleToken) {
+            // Add new UTXOs to existing basket
+            for (const output of fungibleOutputs) {
+              const existingUtxo = fungibleToken.utxos.find(
+                u => u.txId === txId && u.outputIndex === output.index
+              )
+              if (!existingUtxo) {
+                fungibleToken.utxos.push({
+                  txId,
+                  outputIndex: output.index,
+                  satoshis: output.sats,
+                  status: 'active',
+                })
+                onStatus?.(`Found fungible UTXO: ${opData.tokenName} +${output.sats} sats`)
+              }
+            }
+            // Update state data from transfer
+            fungibleToken.stateData = opData.stateData
+            await this.store.updateFungibleToken(fungibleToken)
+          } else {
+            // Create new fungible token with UTXOs
+            fungibleToken = {
+              tokenId,
+              genesisTxId,
+              tokenName: opData.tokenName,
+              tokenScript: opData.tokenScript,
+              tokenRules: opData.tokenRules,
+              tokenAttributes: opData.tokenAttributes,
+              stateData: opData.stateData,
+              utxos: fungibleOutputs.map(o => ({
+                txId,
+                outputIndex: o.index,
+                satoshis: o.sats,
+                status: 'active' as const,
+              })),
+              createdAt: new Date().toISOString(),
+            }
+            await this.store.addFungibleToken(fungibleToken, verification.chain)
+            onStatus?.(`Found fungible token: ${opData.tokenName} (${fungibleOutputs.reduce((s, o) => s + o.sats, 0)} sats)`)
+          }
+          continue
+        }
+
+        // NFT handling (original logic)
+        if (p2pkhOutputIndices.length === 0) {
+          continue  // No 1-sat outputs for NFT
+        }
 
         if (isTransfer) {
           // Transfer TX: single token, P2PKH at first matched output

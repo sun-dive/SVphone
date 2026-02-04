@@ -416,7 +416,7 @@ function renderFungibleCard(ft: FungibleToken): string {
           <button onclick="window._verifyFungible('${ft.tokenId}')">Verify</button>
         </div>
         <div class="row" style="gap:6px; margin-top:4px;">
-          <input id="fungible-state-${genKey}" type="text" placeholder="State data (mutable, optional)" value="${escHtml(tryDecodeHex(ft.stateData))}" style="flex:1;margin:0;" />
+          <textarea id="fungible-state-${genKey}" placeholder="State data (mutable, optional)" rows="3" style="flex:1;margin:0;resize:vertical;">${escHtml(tryDecodeHex(ft.stateData))}</textarea>
         </div>
         <span class="arch-note">Send sats to a recipient. State data is mutable and updates on transfer.</span>
         <div class="row" style="gap:6px; margin-top:6px;">
