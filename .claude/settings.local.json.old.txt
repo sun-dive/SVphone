@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node build.mjs:*)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:developers.whatsonchain.com)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd on-chain bundle, CORS proxy, send BSV, auto-import, and proof chain fixes\n\n- Encode proof chain as binary in OP_RETURN for on-chain token transfers\n- Fix pushData encoding for data >75 bytes \\(OP_PUSHDATA1/2/4\\)\n- Add local dev server with WoC reverse proxy to bypass CORS\n- Add Send BSV feature and Check Incoming Tokens auto-detection\n- Fetch missing Merkle proofs on page load and on-demand during verify\n- Fix WoC proof/tsc array response unwrapping\n- Remove manual JSON bundle import in favor of on-chain bundles\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)"
+    ]
+  }
+}

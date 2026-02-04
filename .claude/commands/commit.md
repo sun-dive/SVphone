@@ -1,0 +1,1 @@
+Execute all steps in workflows\commit.md

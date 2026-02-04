@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"c:\\Users\\Chainsaw\\Documents\\GitHub\\AI-Automation-Masterclass-week-2\")",
+      "Bash(findstr:*)",
+      "Bash(dir /b \"c:\\Users\\Chainsaw\\Documents\\GitHub\\AI-Automation-Masterclass-week-2\\pages\")",
+      "Bash(dir:*)",
+      "Bash(git add:*)",
+      "Bash(python tools/ai_image_tools.py create:*)",
+      "Bash(python tools/ai_image_tools.py edit:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/block_forbidden_files.py"
+          }
+        ]
+      }
+    ]
+  }
+}

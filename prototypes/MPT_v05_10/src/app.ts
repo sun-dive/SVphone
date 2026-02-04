@@ -49,6 +49,44 @@ function inferMimeType(fileName: string, browserType: string): string {
 
 // ─── Initialization ─────────────────────────────────────────────────
 
+/**
+ * Migration: Copy token-level stateData to UTXOs that don't have per-UTXO stateData.
+ * This ensures old tokens imported before the per-UTXO state feature show messages correctly.
+ */
+async function migrateFungibleStateData() {
+  try {
+    const tokens = await store.listFungibleTokens()
+    for (const token of tokens) {
+      if (!token.stateData || token.stateData === '00') continue
+
+      // Check if any UTXO already has stateData
+      const hasUtxoStateData = token.utxos.some(u => u.stateData && u.stateData !== '00')
+      if (hasUtxoStateData) continue
+
+      // Find the most recently received active UTXO (or first active if no receivedAt)
+      const activeUtxos = token.utxos.filter(u => u.status === 'active')
+      if (activeUtxos.length === 0) continue
+
+      // Sort by receivedAt descending, then assign stateData to the most recent
+      activeUtxos.sort((a, b) => {
+        if (!a.receivedAt && !b.receivedAt) return 0
+        if (!a.receivedAt) return 1
+        if (!b.receivedAt) return -1
+        return new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      })
+
+      // Assign token-level stateData to the most recent UTXO
+      activeUtxos[0].stateData = token.stateData
+      activeUtxos[0].receivedAt = activeUtxos[0].receivedAt || token.createdAt
+
+      await store.updateFungibleToken(token)
+      console.debug(`Migrated stateData for token ${token.tokenName} to UTXO ${activeUtxos[0].txId.slice(0, 12)}...`)
+    }
+  } catch (e) {
+    console.warn('Migration error:', e)
+  }
+}
+
 function init() {
   let wif = localStorage.getItem(WIF_KEY)
   let key: PrivateKey
@@ -72,6 +110,9 @@ function init() {
   store = new TokenStore(storage)
   builder = new TokenBuilder(provider, store, key)
   fileCache = new FileCache()
+
+  // Migrate: copy token-level stateData to UTXOs that don't have it
+  migrateFungibleStateData()
 
   setText('address', address)
   setText('pubkey', key.toPublicKey().toString())
@@ -133,7 +174,8 @@ function init() {
 async function refreshBalance() {
   try {
     setText('balance', 'loading...')
-    const bal = await provider.getBalance()
+    // Use spendable balance (excludes sats locked in token UTXOs)
+    const bal = await builder.getSpendableBalance()
     setText('balance', `${bal} sats`)
   } catch (e: any) {
     setText('balance', `error: ${e.message}`)
@@ -395,43 +437,91 @@ function renderFragmentCard(genesisTxId: string, group: OwnedToken[], rules: { s
 function renderFungibleCard(ft: FungibleToken): string {
   const activeUtxos = ft.utxos.filter(u => u.status === 'active')
   const pendingUtxos = ft.utxos.filter(u => u.status === 'pending_transfer')
-  const totalBalance = activeUtxos.reduce((sum, u) => sum + u.satoshis, 0)
-  const pendingBalance = pendingUtxos.reduce((sum, u) => sum + u.satoshis, 0)
   const genKey = ft.genesisTxId.slice(0, 12)
+
+  // Split active UTXOs into regular (no state data) and messages (with state data)
+  const regularUtxos = activeUtxos.filter(u => {
+    const decoded = u.stateData ? tryDecodeHex(u.stateData) : ''
+    return !decoded || decoded === '00'
+  })
+  const messageUtxos = activeUtxos.filter(u => {
+    const decoded = u.stateData ? tryDecodeHex(u.stateData) : ''
+    return decoded && decoded !== '00'
+  })
+
+  const regularBalance = regularUtxos.reduce((sum, u) => sum + u.satoshis, 0)
+  const messageBalance = messageUtxos.reduce((sum, u) => sum + u.satoshis, 0)
+  const totalBalance = regularBalance + messageBalance
+  const pendingBalance = pendingUtxos.reduce((sum, u) => sum + u.satoshis, 0)
+
+  // Render messages section
+  const messagesHtml = messageUtxos.length > 0 ? `
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;">
+        <div style="font-weight:bold;margin-bottom:8px;color:#58a6ff;">📨 Messages (${messageUtxos.length})</div>
+        ${messageUtxos.map(u => {
+          const stateDecoded = tryDecodeHex(u.stateData!)
+          return `
+          <div style="padding:10px;margin-bottom:8px;background:#161b22;border:1px solid #30363d;border-radius:6px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <strong style="color:#3fb950;">${u.satoshis.toLocaleString()} tokens</strong>
+              ${u.receivedAt ? `<span class="muted" style="font-size:0.8em;">${formatDate(u.receivedAt)}</span>` : ''}
+            </div>
+            <pre style="margin:0 0 8px 0;padding:8px;background:#0d1117;border-radius:4px;white-space:pre-wrap;word-break:break-word;font-size:0.9em;color:#c9d1d9;">${escHtml(stateDecoded)}</pre>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              <button onclick="window._forwardMessage('${ft.tokenId}', '${u.txId}', ${u.outputIndex})" style="font-size:0.85em;">Forward</button>
+              <a href="https://whatsonchain.com/tx/${u.txId}" target="_blank" rel="noopener" style="font-size:0.8em;">View TX</a>
+              <code class="muted" style="font-size:0.7em;">${u.txId.slice(0, 12)}...:${u.outputIndex}</code>
+            </div>
+          </div>`
+        }).join('')}
+      </div>` : ''
 
   return `
     <div class="token-card" style="border-color:#238636;">
       <div class="token-header">${escHtml(ft.tokenName)} <span class="badge badge-active">Fungible</span></div>
       <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${ft.tokenId}</code></div>
       <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${ft.genesisTxId}</code></div>
-      <div class="token-field"><span class="label">Balance:</span> <strong style="color:#3fb950;font-size:1.1em;">${totalBalance.toLocaleString()} sats</strong></div>
-      ${pendingBalance > 0 ? `<div class="token-field"><span class="label">Pending:</span> <span style="color:#d29922;">${pendingBalance.toLocaleString()} sats</span></div>` : ''}
-      <div class="token-field"><span class="label">UTXOs:</span> ${activeUtxos.length} active${pendingUtxos.length > 0 ? `, ${pendingUtxos.length} pending` : ''}</div>
+      <div class="token-field"><span class="label">Total tokens:</span> <strong style="color:#3fb950;font-size:1.1em;">${totalBalance.toLocaleString()}</strong></div>
+      <div class="token-field"><span class="label">├ Available:</span> ${regularBalance.toLocaleString()}</div>
+      <div class="token-field"><span class="label">└ In messages:</span> ${messageBalance.toLocaleString()}${messageUtxos.length > 0 ? ` (${messageUtxos.length})` : ''}</div>
+      ${pendingBalance > 0 ? `<div class="token-field"><span class="label">Pending:</span> <span style="color:#d29922;">${pendingBalance.toLocaleString()} tokens</span></div>` : ''}
       ${ft.createdAt ? `<div class="token-field"><span class="label">Created:</span> ${formatDate(ft.createdAt)}</div>` : ''}
-      ${ft.stateData ? `<div class="token-field"><span class="label">State Data:</span> <code class="selectable">${escHtml(tryDecodeHex(ft.stateData))}</code></div>` : ''}
       <div class="token-actions" style="flex-direction:column;align-items:stretch;">
         <div class="row" style="gap:6px;">
-          <input id="fungible-send-${genKey}" type="number" min="1" max="${totalBalance}" value="${Math.min(100, totalBalance)}" placeholder="Amount" style="width:120px;margin:0;" />
-          <button onclick="window._transferFungible('${ft.tokenId}', '${genKey}')">Send</button>
+          <input id="fungible-send-${genKey}" type="number" min="1" max="${regularBalance}" value="${Math.min(100, regularBalance)}" placeholder="Amount" style="width:120px;margin:0;" />
+          <button onclick="window._transferFungible('${ft.tokenId}', '${genKey}')"${regularBalance === 0 ? ' disabled title="No regular balance available"' : ''}>Send</button>
           <button onclick="window._verifyFungible('${ft.tokenId}')">Verify</button>
         </div>
         <div class="row" style="gap:6px; margin-top:4px;">
-          <textarea id="fungible-state-${genKey}" placeholder="State data (mutable, optional)" rows="3" style="flex:1;margin:0;resize:vertical;">${escHtml(tryDecodeHex(ft.stateData))}</textarea>
+          <textarea id="fungible-state-${genKey}" placeholder="State data (mutable, optional)" rows="3" style="flex:1;margin:0;resize:vertical;"></textarea>
         </div>
-        <span class="arch-note">Send sats to a recipient. State data is mutable and updates on transfer.</span>
+        <span class="arch-note">Send from available balance. To send a message UTXO, use "Forward" below.</span>
         <div class="row" style="gap:6px; margin-top:6px;">
           <a href="https://whatsonchain.com/tx/${ft.genesisTxId}" target="_blank" rel="noopener">View Genesis TX</a>
         </div>
       </div>
-      <details style="margin-top:8px;"><summary class="muted" style="cursor:pointer;font-size:0.85em;">Show UTXO details (${ft.utxos.length})</summary>
+      ${messagesHtml}
+      <details style="margin-top:8px;"><summary class="muted" style="cursor:pointer;font-size:0.85em;">Show all UTXO details (${ft.utxos.length})</summary>
         <div style="margin-top:6px;font-size:0.85em;">
-          ${ft.utxos.map(u => `
-            <div style="padding:4px 0;border-bottom:1px solid #21262d;">
-              <span class="badge ${u.status === 'active' ? 'badge-active' : u.status === 'pending_transfer' ? 'badge-pending' : 'badge-transferred'}">${u.status}</span>
-              <strong>${u.satoshis.toLocaleString()} sats</strong>
-              <br><code class="muted" style="font-size:0.8em;">${u.txId}:${u.outputIndex}</code>
-            </div>
-          `).join('')}
+          ${ft.utxos.map(u => {
+            const stateDecoded = u.stateData ? tryDecodeHex(u.stateData) : ''
+            const hasStateData = stateDecoded && stateDecoded !== '00'
+            return `
+            <div style="padding:8px 0;border-bottom:1px solid #21262d;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="badge ${u.status === 'active' ? 'badge-active' : u.status === 'pending_transfer' ? 'badge-pending' : 'badge-transferred'}">${u.status}</span>
+                <strong>${u.satoshis.toLocaleString()} tokens</strong>
+                ${u.receivedAt ? `<span class="muted" style="font-size:0.8em;">${formatDate(u.receivedAt)}</span>` : ''}
+                <button onclick="window._removeUtxo('${ft.tokenId}', '${u.txId}', ${u.outputIndex})" style="margin-left:auto;font-size:0.7em;padding:2px 6px;background:#da3633;" title="Remove this UTXO from basket">×</button>
+              </div>
+              <code class="muted" style="font-size:0.8em;display:block;margin-top:4px;">${u.txId}:${u.outputIndex}</code>
+              ${hasStateData ? `
+              <div style="margin-top:6px;padding:6px;background:#161b22;border:1px solid #30363d;border-radius:4px;">
+                <span class="muted" style="font-size:0.75em;">State Data:</span>
+                <pre style="margin:4px 0 0 0;white-space:pre-wrap;word-break:break-word;font-size:0.85em;color:#c9d1d9;">${escHtml(stateDecoded)}</pre>
+              </div>` : ''}
+            </div>`
+          }).join('')}
         </div>
       </details>
     </div>`
@@ -676,7 +766,7 @@ async function handleMint() {
       return
     }
 
-    setResult('mint-result', `Minting fungible token with ${initialSupply} sats...`)
+    setResult('mint-result', `Minting fungible token with ${initialSupply} tokens...`)
 
     try {
       const result = await builder.createFungibleGenesis({
@@ -688,7 +778,7 @@ async function handleMint() {
         'Fungible token minted!',
         `TXID: ${result.txId}`,
         `Token ID: ${result.tokenId}`,
-        `Initial supply: ${result.initialSupply} sats`,
+        `Initial supply: ${result.initialSupply} tokens`,
         `View: https://whatsonchain.com/tx/${result.txId}`,
         '',
         'Polling for Merkle proof (may take ~10 min)...',
@@ -817,6 +907,18 @@ async function handleTransfer() {
   setResult('transfer-result', 'Building transfer transaction...')
 
   try {
+    // Check if this is a fungible token - if so, redirect user to use the fungible Send button
+    const fungible = await store.getFungibleToken(tokenId)
+    if (fungible) {
+      setResult('transfer-result', [
+        'This is a fungible token. Use the "Send" button in the token card above.',
+        '',
+        `Token: ${fungible.tokenName}`,
+        `Balance: ${fungible.utxos.filter(u => u.status === 'active').reduce((s, u) => s + u.satoshis, 0).toLocaleString()} tokens`,
+      ].join('\n'))
+      return
+    }
+
     const result = await builder.createTransfer(tokenId, recipient)
 
     setResult('transfer-result', [
@@ -1037,15 +1139,15 @@ function handleRestoreWallet() {
   const feeRate = parseInt(inputVal('fee-rate'), 10)
   if (feeRate > 0) builder.feePerKb = feeRate
 
-  setResult('transfer-result', `Transferring ${amount.toLocaleString()} sats of fungible token...`)
+  setResult('transfer-result', `Transferring ${amount.toLocaleString()} tokens...`)
 
   try {
     const result = await builder.transferFungible(tokenId, recipient, amount, newStateData)
     setResult('transfer-result', [
       'Fungible transfer broadcast!',
       `TXID: ${result.txId}`,
-      `Sent: ${result.amountSent.toLocaleString()} sats`,
-      result.change > 0 ? `Change: ${result.change.toLocaleString()} sats` : '',
+      `Sent: ${result.amountSent.toLocaleString()} tokens`,
+      result.change > 0 ? `Change: ${result.change.toLocaleString()} tokens` : '',
       `View: https://whatsonchain.com/tx/${result.txId}`,
     ].filter(Boolean).join('\n'))
 
@@ -1061,6 +1163,62 @@ function handleRestoreWallet() {
   if (input) input.value = tokenId
   await handleVerify()
   el('verify-result')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+;(window as any)._forwardMessage = async (tokenId: string, utxoTxId: string, utxoOutputIndex: number) => {
+  const recipient = inputVal('transfer-recipient')
+  if (!recipient) {
+    setResult('transfer-result', 'Enter a recipient BSV address in the Transfer Token section below to forward this message.')
+    el('transfer-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el('transfer-recipient')?.focus()
+    return
+  }
+
+  const feeRate = parseInt(inputVal('fee-rate'), 10)
+  if (feeRate > 0) builder.feePerKb = feeRate
+
+  setResult('transfer-result', 'Forwarding message UTXO...')
+
+  try {
+    const result = await builder.forwardFungibleUtxo(tokenId, utxoTxId, utxoOutputIndex, recipient)
+    setResult('transfer-result', [
+      'Message forwarded!',
+      `TXID: ${result.txId}`,
+      `Sent: ${result.amountSent.toLocaleString()} tokens`,
+      `View: https://whatsonchain.com/tx/${result.txId}`,
+    ].join('\n'))
+
+    await refreshTokenList()
+    await refreshBalance()
+  } catch (e: any) {
+    setResult('transfer-result', `Error: ${e.message}`)
+  }
+}
+
+;(window as any)._removeUtxo = async (tokenId: string, utxoTxId: string, utxoOutputIndex: number) => {
+  if (!confirm(`Remove UTXO ${utxoTxId.slice(0, 12)}...:${utxoOutputIndex} from this token's basket?\n\nThis only removes it from local storage, not from the blockchain.`)) {
+    return
+  }
+
+  try {
+    const token = await store.getFungibleToken(tokenId)
+    if (!token) {
+      alert('Token not found')
+      return
+    }
+
+    const idx = token.utxos.findIndex(u => u.txId === utxoTxId && u.outputIndex === utxoOutputIndex)
+    if (idx === -1) {
+      alert('UTXO not found in basket')
+      return
+    }
+
+    token.utxos.splice(idx, 1)
+    await store.updateFungibleToken(token)
+    await refreshTokenList()
+  } catch (e: any) {
+    alert(`Error: ${e.message}`)
+  }
 }
 
 ;(window as any)._confirmTransfer = async (tokenId: string) => {

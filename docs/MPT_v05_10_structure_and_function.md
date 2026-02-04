@@ -1,14 +1,18 @@
-# Merkle Proof Token (MPT) Prototype v04.01 -- Structure and Function
+# Merkle Proof Token (MPT) Prototype v05.10 -- Structure and Function
 
 Imagined and designed by Metro Gnome
 Built by Metro and a team of Claudes
-February 2nd, 2026
+February 4th, 2026
 
 ## Overview
 
 The Merkle Proof Token (MPT) is a token protocol on BSV mainnet that uses P2PKH outputs for ownership and OP_RETURN outputs for metadata. Token validity is proven exclusively through Merkle proofs and block headers (SPV), with no dependency on UTXO lookups, indexers, or trusted third parties for verification.
 
-Prototype v05 enforces a clean architectural separation between the pure SPV token protocol and the wallet layer that interacts with the blockchain.
+MPT supports two token modes:
+- **NFT Mode**: Each 1-sat output has a unique Token ID based on its genesis output index. Suitable for non-fungible tokens, collectibles, and divisible token fragments.
+- **Fungible Mode**: All UTXOs share a single Token ID (genesisOutputIndex fixed at 1). Each satoshi equals one token unit. Multiple UTXOs form a "basket" that can be split and merged through transfers.
+
+Prototype v05 enforces a clean architectural separation between the pure SPV token protocol and the wallet layer that interacts with the blockchain. v05 adds a `tokenScript` field for optional consensus-level validation enforced by miners. v05.10 introduces fungible token support with per-UTXO state data.
 
 **Network:** BSV Mainnet (real BSV)
 
@@ -16,7 +20,35 @@ Prototype v05 enforces a clean architectural separation between the pure SPV tok
 
 ## Token Design
 
-An MPT token is a BSV transaction with a specific output structure. There is no custom locking script -- ownership uses standard P2PKH, and all token metadata lives in a separate OP_RETURN output.
+An MPT token is a BSV transaction with a specific output structure. Ownership uses standard P2PKH locking scripts for token UTXOs. All token metadata lives in a separate OP_RETURN output. When a `tokenScript` is defined (v05), the consensus script bytes are stored in the OP_RETURN and can be enforced by miners via techniques like OP_PUSH_TX; the P2PKH outputs themselves remain standard.
+
+### Token Modes
+
+MPT v05.10 supports two distinct token modes:
+
+**NFT Mode (Original)**
+- Each 1-sat P2PKH output is a unique token with its own Token ID
+- Token ID = `SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)`
+- Each output index (1, 2, ... N) produces a different Token ID
+- Suitable for non-fungible tokens, collectibles, and divisible token fragments
+
+**Fungible Mode (New in v05.10)**
+- All UTXOs share a **single Token ID** (genesisOutputIndex fixed at 1)
+- Each satoshi equals one token unit (satoshis ARE the token balance)
+- Multiple UTXOs form a "basket" that can be split and merged
+- Genesis mints a single UTXO with the total supply in satoshis
+- Transfers can split/merge: spend multiple inputs, create multiple outputs
+- Per-UTXO state data enables messages or metadata attached to individual UTXOs
+
+**Token ID Computation:**
+- NFT Mode: `SHA-256(genesisTxId || actualOutputIndex LE || immutableChunkBytes)`
+- Fungible Mode: `SHA-256(genesisTxId || 1 LE || immutableChunkBytes)` — always uses index 1
+
+**Satoshi Semantics:**
+| Mode | Satoshi Value | Token Units |
+|------|---------------|-------------|
+| NFT Mode | Always 1 sat | 1 token per UTXO |
+| Fungible Mode | Variable (≥546 dust limit) | Satoshis = token units |
 
 ## Token Data Fields
 
@@ -25,28 +57,36 @@ An MPT token is a BSV transaction with a specific output structure. There is no 
 All immutable fields are cryptographically bound to the Token ID. Tampering with any of them causes a Token ID mismatch -- instant verification failure. No additional checking logic needed for these fields; the existing `computeTokenId` check catches it.
 
 **[Token ID]**
-- `SHA-256(genesisTxId || outputIndex LE || opReturnChunks[4..6] raw bytes)`
+- `SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)` where `immutableChunkBytes = tokenName + tokenScript + tokenRules`
 - Deterministic, purely local computation. No network access required.
 - `outputIndex` is the actual Bitcoin output index of the token's P2PKH in the genesis TX. Since Output 0 is the OP_RETURN, token indices start at 1. Single mint = 1, batch mint = 1..N.
-- `opReturnChunks[4..6]` binds the shared collection identity (name, rules, attributes).
+- `immutableChunkBytes` binds the immutable collection identity (name, script, rules). tokenAttributes is mutable and not bound to the Token ID.
 
 **[Token Name]**
 - UTF-8 text string.
 - Shared across all tokens in the genesis transaction. Identifies the NFT set.
 
+**[Token Script]** (new in v05)
+- Raw Bitcoin Script bytes for consensus-level validation, enforced by miners.
+- Empty (zero-length pushdata) = standard P2PKH ownership (functionally equivalent to v04).
+- When non-empty, this script defines miner-enforced rules for the token (e.g. issuer co-sign, Merkle whitelist, time locks, state mutation constraints).
+- Immutable after genesis. Included in Token ID computation.
+- See `docs/consensus_level_scripts_research.md` for background on consensus-level enforcement patterns.
+
 **[Token Rules]**
-- Structured data defining token behaviour:
+- Structured data defining token behaviour (application-level, wallet-enforced):
   - **Supply:** Total number of whole tokens minted in this genesis transaction (uint16, max 65535).
   - **Divisibility:** Number of fragments per whole token (uint16). 0 = NFT/indivisible. When > 0, the genesis TX mints `supply * divisibility` fragment UTXOs.
   - **Transfer Restrictions:** Unrestricted, whitelist, time-lock, or custom wallet-enforced conditions.
   - **Version:** Integer. Allows future rule extensions.
 
-**[Token Attributes]** (optional)
-- Immutable data shared by all tokens in the NFT set. Set at genesis. If unused, the chunk is a zero-length pushdata (the chunk must still be present for positional parsing).
-- All tokens within a single genesis TX have identical attributes.
-- For tokens with different attributes (e.g. different rarity tiers), use separate genesis TXs (separate NFT sets).
+**[Token Attributes]** (optional, mutable)
+- Data shared by all tokens in the NFT set. Set at genesis but can be updated on each transfer. If unused, the chunk is a zero-length pushdata (the chunk must still be present for positional parsing).
+- All tokens within a single genesis TX have identical attributes initially.
+- For tokens with different attributes (e.g. different rarity tiers), use separate genesis TXs (separate NFT sets), or update tokenAttributes in transfers.
 - When a file is embedded, tokenAttributes contains the SHA-256 hash of the file (32 bytes). The full file data lives in a separate OP_RETURN output in the genesis TX only (see Embedded File Data section).
-- Examples: rarity tier, trait set, content hash, collection metadata, SHA-256 file hash.
+- Examples: rarity tier, trait set, content hash, collection metadata, SHA-256 file hash, IPFS CID, mutable state reference.
+- **Important:** tokenAttributes is NOT bound to Token ID, so changes do not affect token identity.
 
 ### Mutable Fields
 
@@ -123,9 +163,39 @@ Output 2:  Change back to sender (if needed)
 
 Transfer TXs always transfer a single token (or a single fragment). The OP_RETURN includes the genesisTxId and proof chain so the recipient can verify the token's full history. Transfer TX output order (P2PKH at 0, OP_RETURN at 1) differs from genesis TX output order (OP_RETURN at 0, P2PKH outputs at 1+).
 
+**Fungible Genesis TX (mint):**
+
+```
+Input 0:   Funding UTXO (signed by minter)
+Output 0:  OP_RETURN with token metadata (0 sat) -- shared token data
+Output 1:  P2PKH to minter's address (N sats) -- the token UTXO (N = initial supply)
+Output 2:  Change back to minter (if needed) -- NOT a token UTXO
+```
+
+Fungible genesis creates a single token UTXO at Output 1 where the satoshi value equals the token supply. Output 2+ are fee change outputs and must NOT be imported as token UTXOs. The genesisOutputIndex is always 1 for fungible tokens.
+
+**Fungible Transfer TX:**
+
+```
+Input 0:   Token UTXO(s) from sender (signed by owner)
+Input 1+:  Additional token UTXOs and/or funding UTXOs
+Output 0:  P2PKH to recipient's address (transfer amount sats) -- recipient token UTXO
+Output 1:  OP_RETURN with token metadata + proof chain (0 sat)
+Output 2:  P2PKH to sender's address (remaining sats) -- token change UTXO (if any)
+Output 3:  Change back to sender (if needed) -- fee change, NOT a token UTXO
+```
+
+**Valid Fungible Output Indices:**
+| TX Type | Token UTXO Indices | Non-Token Indices |
+|---------|-------------------|-------------------|
+| Genesis | 1 only | 2+ (fee change) |
+| Transfer | 0 (recipient), 2 (token change) | 3+ (fee change) |
+
+Critical: Only specific output indices carry token value. Fee change outputs must NOT be imported into the token basket.
+
 ### NFT Sets and Collections
 
-- An **NFT set** is all tokens from a single genesis TX. They share tokenName, tokenRules, and tokenAttributes. The only differentiator is `outputIndex`.
+- An **NFT set** is all tokens from a single genesis TX. They share tokenName, tokenScript, tokenRules, and tokenAttributes. The only differentiator is `outputIndex`.
 - A **collection** is multiple NFT sets that share the same tokenName but may have different tokenAttributes (e.g. different rarity tiers). Each variation requires a separate genesis TX.
 - Example: A collection of 100 NFTs with 5 rarity tiers = 5 genesis TXs, each with supply = 20, each with different tokenAttributes describing that tier.
 
@@ -133,33 +203,39 @@ Transfer TXs always transfer a single token (or a single fragment). The OP_RETUR
 
 The OP_RETURN contains these fields as separate pushdata chunks:
 
-| Chunk | Field | Size | Description |
-|-------|-------|------|-------------|
-| 0 | `OP_0` | 1B | Standard OP_RETURN prefix |
-| 1 | `OP_RETURN` | 1B | Marks output as unspendable |
-| 2 | `"MPT"` | 3B | Protocol identifier |
-| 3 | version | 1B | OP_RETURN format version (currently `0x01`). Determines how to parse chunks. Independent of the rules version in tokenRules bytes 6-7. |
-| 4 | tokenName | variable | UTF-8 human-readable name |
-| 5 | tokenRules | 8B | Packed rules: supply, divisibility, restrictions bitfield, version |
-| 6 | tokenAttributes | variable | Immutable attributes shared by all tokens in the set (hex) |
-| 7 | stateData | variable | Mutable application state (min 1 byte) |
-| 8 | genesisTxId | 32B | *Transfer only:* raw genesis TX hash |
-| 9 | proofChainBinary | variable | *Transfer only:* compact binary proof chain |
-| 10 | genesisOutputIndex | 4B | *Transfer only:* uint32 LE, the token's P2PKH output index in the genesis TX |
+Chunk ordering follows enforcement level (highest authority first):
 
-**Genesis TX OP_RETURN:** Chunks 0-7 (8 chunks). No genesisTxId (chunk 8), proofChainBinary (chunk 9), or genesisOutputIndex (chunk 10) -- not needed at mint time. When a file is embedded, a separate OP_RETURN output with the `MPT-FILE` marker is added to the genesis TX (see Embedded File Data).
+**Note on chunk indices:** The table below shows **data chunk indices as returned by the parser** (after OP_0 and OP_RETURN are skipped). In the encoder's raw LockingScript array, OP_0 and OP_RETURN occupy indices [0] and [1], so all data chunks are offset by 2. For example, `"MPT"` is at index [2] in the encoder but [0] in the parser.
 
-**Transfer TX OP_RETURN:** Chunks 0-10 (11 chunks). genesisTxId, proofChainBinary, and genesisOutputIndex carry the token's verifiable history and identity. Ownership is determined by the P2PKH output, not by any OP_RETURN field. No file data is included -- only the 32-byte hash in tokenAttributes.
+| Data Chunk | Field | Size | Enforcement | Description |
+|-------|-------|------|-------------|-------------|
+| 0 | `"MPT"` | 3B | -- | Protocol identifier (encoder [2]) |
+| 1 | version | 1B | -- | OP_RETURN format version (`0x02` for v05). Determines how to parse chunks. (encoder [3]) |
+| 2 | tokenName | variable | Identity | UTF-8 human-readable name (encoder [4]) |
+| 3 | tokenScript | variable | Consensus (miners) | Raw Bitcoin Script for miner-enforced rules. Empty = P2PKH. (encoder [5]) |
+| 4 | tokenRules | 8B | Application (wallet) | Packed rules: supply, divisibility, restrictions bitfield, version (encoder [6]) |
+| 5 | tokenAttributes | variable | User-level | Mutable attributes shared by all tokens in the set (hex). Not bound to Token ID. (encoder [7]) |
+| 6 | stateData | variable | Mutable | Application state (min 1 byte) (encoder [8]) |
+| 7 | genesisTxId | 32B | -- | *Transfer only:* raw genesis TX hash (encoder [9]) |
+| 8 | proofChainBinary | variable | -- | *Transfer only:* compact binary proof chain (encoder [10]) |
+| 9 | genesisOutputIndex | 4B | -- | *Transfer only:* uint32 LE, the token's P2PKH output index in the genesis TX (encoder [11]) |
 
-**Parsing rule:** The chunk count distinguishes genesis from transfer: 8 chunks = genesis, 11 chunks = transfer. stateData (chunk 7) is always present with a minimum of 1 byte to ensure consistent chunk counts.
+**Genesis TX OP_RETURN:** Data chunks [0-6] (7 data chunks). No genesisTxId, proofChainBinary, or genesisOutputIndex -- not needed at mint time. When a file is embedded, a separate OP_RETURN output with the `MPT-FILE` marker is added to the genesis TX (see Embedded File Data).
+
+**Transfer TX OP_RETURN:** Data chunks [0-9] (10 data chunks). genesisTxId, proofChainBinary, and genesisOutputIndex carry the token's verifiable history and identity. Ownership is determined by the P2PKH output, not by any OP_RETURN field. No file data is included -- only the 32-byte hash in tokenAttributes.
+
+**Parsing rule:** The chunk count distinguishes genesis from transfer: 7 data chunks = genesis, 10 data chunks = transfer. stateData (data chunk [6]) is always present with a minimum of 1 byte to ensure consistent chunk counts. The version byte (`0x02`) signals v05 format with the tokenScript chunk.
+
+**Empty tokenScript cost:** When tokenScript is empty (standard P2PKH behaviour), the chunk is a single `OP_0` byte -- adding only 1 byte to the transaction compared to v04.
 
 ### What Changes Between Transfers
 
 | Field | Mutable? | Notes |
 |-------|----------|-------|
 | tokenName | Immutable | Set at genesis, bound to Token ID |
+| tokenScript | Immutable | Set at genesis, bound to Token ID. Empty = P2PKH (no consensus rules). |
 | tokenRules | Immutable | Set at genesis, bound to Token ID |
-| tokenAttributes | Immutable | Set at genesis, bound to Token ID. Shared by all tokens in the set. |
+| tokenAttributes | **Mutable** | Set at genesis, shared by all tokens in the set. Not bound to Token ID. Can be updated on each transfer. |
 | stateData | **Mutable** | Can be updated according to Token Rules |
 | genesisTxId | Fixed | Always references the original mint TX |
 | proofChainBinary | **Grows** | New Merkle proof entry prepended on each transfer |
@@ -182,16 +258,18 @@ The zero-dependency parsing aligns with MPT's SPV-only philosophy. The protocol 
 ### Token ID
 
 ```
-Token ID = SHA-256(genesisTxId || outputIndex LE || opReturnChunks[4..6] raw bytes)
+Token ID = SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)
 ```
 
-The Token ID is a deterministic, purely local computation. It binds the token's identity to its genesis transaction and all immutable metadata (tokenName, tokenRules, tokenAttributes). No network access is required to compute or verify it. Tampering with any immutable field causes a Token ID mismatch -- instant verification failure.
+where `immutableChunkBytes = tokenName + tokenScript + tokenRules` (concatenated raw bytes of the immutable fields)
+
+The Token ID is a deterministic, purely local computation. It binds the token's identity to its genesis transaction and the immutable consensus rules. No network access is required to compute or verify it. Tampering with any immutable field causes a Token ID mismatch, instant verification failure. tokenAttributes is mutable and not bound to the Token ID.
 
 ### Verification Model
 
 Token validity is proven exclusively through Merkle proofs and block headers:
 
-1. Token ID matches `SHA-256(genesisTxId || outputIndex LE || opReturnChunks[4..6] raw bytes)`
+1. Token ID matches `SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)` where `immutableChunkBytes = tokenName + tokenScript + tokenRules`
 2. Every entry in the proof chain has a valid Merkle proof (double SHA-256)
 3. Every Merkle root matches its block header at that height
 4. The oldest entry's txId matches the genesis txId
@@ -202,7 +280,7 @@ The proof chain travels with the token. Any node with block headers can verify i
 
 `tokenRules` is an 8-byte packed field (4 x uint16 LE): supply, divisibility, restrictions (bitfield), and version. It is set at genesis and copied unchanged on every transfer.
 
-**Application-level, not consensus-level:** MPT's OP_RETURN is unspendable -- miners don't execute logic on it. Rules cannot be enforced at the consensus layer. Instead, MPT **detects** rule violations during verification rather than **preventing** them.
+**Application-level, not consensus-level:** `tokenRules` lives in the OP_RETURN (unspendable) -- miners don't execute logic on it. Token rules cannot be enforced at the consensus layer. Instead, MPT **detects** rule violations during verification rather than **preventing** them. For consensus-level enforcement, use the `tokenScript` field (see Token Script above).
 
 **Enforcement as recipient validation:** When a recipient wallet receives a transfer, it walks the proof chain comparing each consecutive pair of OP_RETURN states. If a transfer violates a rule (e.g. changed `stateData` when rules say immutable), the recipient rejects that **transaction** -- not the token. The sender still holds the token and can try again with a rule-compliant transfer.
 
@@ -322,10 +400,11 @@ For example, with `divisibility = 3`:
 Each fragment has its own unique Token ID:
 
 ```
-Token ID = SHA-256(genesisTxId || outputIndex LE || opReturnChunks[4..6] raw bytes)
+Token ID = SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)
+where immutableChunkBytes = tokenName + tokenScript + tokenRules
 ```
 
-Since `outputIndex` differs for each fragment, every fragment in the set has a distinct Token ID, even though they share the same genesisTxId and the same immutable metadata (name, rules, attributes). This means:
+Since `outputIndex` differs for each fragment, every fragment in the set has a distinct Token ID, even though they share the same genesisTxId and the same immutable metadata (name, script, rules). tokenAttributes is mutable and shared across all fragments. This means:
 
 - Fragments are **not fungible** -- each is uniquely identifiable.
 - Fragments can be individually transferred, verified, and tracked.
@@ -343,18 +422,19 @@ Output 1:  OP_RETURN with metadata + proof chain
 Output 2:  Change
 ```
 
-The OP_RETURN carries the same genesisTxId as all other fragments from the same genesis TX, but the `genesisOutputIndex` (chunk 10) identifies this specific fragment.
+The OP_RETURN carries the same genesisTxId as all other fragments from the same genesis TX, but the `genesisOutputIndex` (chunk 11) identifies this specific fragment.
 
 ### Return-to-Sender
 
 When a token or fragment is sent to a recipient and then returned to the original wallet:
 
 1. The original wallet's `checkIncomingTokens` detects the incoming transfer TX.
-2. If the token already exists in the store with status `transferred` or `pending_transfer`, it is reactivated:
+2. SPV verification is performed (`verifyBeforeImport()`): Token ID derivation check, genesis TX Merkle proof, block header confirmation. If verification fails, the return is rejected.
+3. If the token already exists in the store with status `transferred` or `pending_transfer`, it is reactivated:
    - Status set back to `active`
    - `currentTxId` and `currentOutputIndex` updated to the new UTXO
    - `transferTxId` cleared
-3. The token appears active again in the wallet UI.
+4. The token appears active again in the wallet UI.
 
 This works for both regular tokens and fragments.
 
@@ -437,10 +517,10 @@ Output S*D+2:   P2PKH (change)
 | `tokenProtocol.ts` | Protocol | Token ID, Merkle proof verification, proof chain validation. Only import: `@bsv/sdk` (Hash). |
 | `opReturnCodec.ts` | Protocol | OP_RETURN script encoding/decoding. Binary proof chain codec. File OP_RETURN codec. |
 | `walletProvider.ts` | Wallet | WhatsOnChain API client. UTXOs, broadcast, raw TX, block headers, Merkle proofs, address history. |
-| `tokenStore.ts` | Wallet | localStorage persistence for tokens and proof chains. |
-| `tokenBuilder.ts` | Wallet | Token lifecycle: mint, transfer, verify, detect incoming. UTXO quarantine. File fetch from genesis. Return-to-sender detection. |
+| `tokenStore.ts` | Wallet | localStorage persistence for tokens and proof chains. FungibleToken/FungibleUtxo basket storage (v05.10). |
+| `tokenBuilder.ts` | Wallet | Token lifecycle: mint, transfer, verify, detect incoming. UTXO quarantine. SPV verification on import (genesis Merkle proof + block header). File fetch from genesis. Return-to-sender detection. Fungible operations: createFungibleGenesis, transferFungible, forwardFungibleUtxo, getSpendableBalance (v05.10). |
 | `fileCache.ts` | Wallet | IndexedDB-backed file cache for embedded NFT file data. Pruning recovery store. |
-| `app.ts` | UI | Browser entry point. DOM manipulation, event handlers, rendering. File upload, viewer, recovery. Fragment grouping and labeling. |
+| `app.ts` | UI | Browser entry point. DOM manipulation, event handlers, rendering. File upload, viewer, recovery. Fragment grouping/labeling via `formatFragmentIndices()`. Fungible token card display and mint mode toggle (v05.10). |
 | `index.html` | UI | Single-page wallet interface. |
 | `build.mjs` | Tooling | esbuild bundler: `src/app.ts` -> `bundle.js` (IIFE, browser). |
 | `serve.mjs` | Tooling | Dev server with WoC reverse proxy to bypass CORS. |
@@ -460,13 +540,14 @@ walletProvider.ts -->  @bsv/sdk (Transaction)
 
 tokenStore.ts     -->  tokenProtocol.ts (types: ProofChain)
 
-tokenBuilder.ts   -->  @bsv/sdk (Transaction, P2PKH, LockingScript, Hash)
+tokenBuilder.ts   -->  @bsv/sdk (PrivateKey, Transaction, P2PKH, LockingScript, Hash)
                   -->  walletProvider.ts (WalletProvider, Utxo)
                   -->  tokenStore.ts (TokenStore, OwnedToken)
                   -->  tokenProtocol.ts (computeTokenId, createProofChain, extendProofChain,
-                                         verifyProofChainAsync, ProofChain, BlockHeader,
-                                         VerificationResult)
-                  -->  opReturnCodec.ts (encodeOpReturn, decodeOpReturn, encodeTokenRules,
+                                         verifyMerkleProof, verifyProofChainAsync,
+                                         MerkleProofEntry, ProofChain, VerificationResult)
+                  -->  opReturnCodec.ts (encodeOpReturn, decodeOpReturn, TokenOpReturnData,
+                                         encodeTokenRules, buildImmutableChunkBytes,
                                          buildFileOpReturn, parseFileOpReturn, FileOpReturnData)
 
 fileCache.ts      -->  (no imports -- uses browser IndexedDB API only)
@@ -475,6 +556,7 @@ app.ts            -->  @bsv/sdk (PrivateKey, Hash)
                   -->  walletProvider.ts (WalletProvider)
                   -->  tokenBuilder.ts (TokenBuilder)
                   -->  tokenStore.ts (TokenStore, LocalStorageBackend, OwnedToken)
+                  -->  opReturnCodec.ts (decodeTokenRules)
                   -->  fileCache.ts (FileCache)
 ```
 
@@ -487,10 +569,11 @@ This is the core of the MPT system. It runs in any environment with zero network
 ### Token ID
 
 ```
-Token ID = SHA-256(genesisTxId || outputIndex LE || opReturnChunks[4..6] raw bytes)
+Token ID = SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)
+where immutableChunkBytes = tokenName + tokenScript + tokenRules
 ```
 
-The token ID is deterministic and immutable. It is derived from the genesis transaction hash, the output index (the actual Bitcoin output index of the token's P2PKH in the genesis TX, starting at 1 since Output 0 is the OP_RETURN), and the raw immutable metadata chunks (tokenName, tokenRules, tokenAttributes). It never changes across transfers.
+The token ID is deterministic and immutable. It is derived from the genesis transaction hash, the output index (the actual Bitcoin output index of the token's P2PKH in the genesis TX, starting at 1 since Output 0 is the OP_RETURN), and the raw immutable metadata chunks (tokenName, tokenScript, tokenRules). It never changes across transfers. tokenAttributes is mutable and not included in Token ID computation.
 
 ### Proof Chain
 
@@ -513,7 +596,7 @@ Each entry contains:
 
 A token is valid if and only if all four conditions hold:
 
-1. **Token ID matches genesis:** `SHA-256(genesisTxId || outputIndex LE || opReturnChunks[4..6] raw bytes) == tokenId`
+1. **Token ID matches genesis:** `SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes) == tokenId` where `immutableChunkBytes = tokenName + tokenScript + tokenRules`
 2. **Every Merkle proof is valid:** For each entry, hash the txId through the path using Bitcoin's double SHA-256 and confirm the computed root matches the claimed `merkleRoot`.
 3. **Every Merkle root matches its block header:** The `merkleRoot` in each entry must match the `merkleRoot` field of the block header at that `blockHeight`.
 4. **The oldest entry is the genesis TX:** `entries[last].txId == genesisTxId`
@@ -538,28 +621,30 @@ The final computed hash must equal the block's Merkle root.
 
 ### Script Structure
 
-Each field is a separate pushdata chunk:
+Each field is a separate pushdata chunk, ordered by enforcement level (highest authority first):
+
+**Note:** Indices shown are **parser indices** (data chunks only). The raw script also contains OP_0 [0] and OP_RETURN [1] which are stripped during parsing, so encoder indices are offset by 2.
 
 ```
-Chunk 0:  OP_0
-Chunk 1:  OP_RETURN
-Chunk 2:  "MPT"           (3 bytes, protocol prefix)
-Chunk 3:  0x01             (1 byte, version)
-Chunk 4:  tokenName        (UTF-8, variable length)
-Chunk 5:  tokenRules       (8 bytes, 4x uint16 LE)
-Chunk 6:  tokenAttributes  (variable hex)
-Chunk 7:  stateData        (variable hex, minimum 1 byte)
+Parser [0]:  "MPT"             (3 bytes, protocol prefix -- encoder [2])
+Parser [1]:  0x02              (1 byte, version -- v05 -- encoder [3])
+Parser [2]:  tokenName         (UTF-8, variable length -- encoder [4])
+Parser [3]:  tokenScript       (variable hex, consensus script -- empty = P2PKH -- encoder [5])
+Parser [4]:  tokenRules        (8 bytes, 4x uint16 LE -- encoder [6])
+Parser [5]:  tokenAttributes   (variable hex -- encoder [7])
+Parser [6]:  stateData         (variable hex, minimum 1 byte -- encoder [8])
 ```
 
 Transfer TXs append three additional chunks:
 
 ```
-Chunk 8:  genesisTxId        (32 bytes, raw hash)
-Chunk 9:  proofChainBinary   (compact binary encoding)
-Chunk 10: genesisOutputIndex (4 bytes, uint32 LE -- the token's P2PKH output index in the genesis TX)
+Parser [7]:  genesisTxId          (32 bytes, raw hash -- encoder [9])
+Parser [8]:  proofChainBinary     (compact binary encoding -- encoder [10])
+Parser [9]:  genesisOutputIndex   (4 bytes, uint32 LE -- the token's P2PKH output index in the genesis TX -- encoder [11])
 ```
 
-Genesis OP_RETURN = 8 chunks (0-7). Transfer OP_RETURN = 11 chunks (0-10). The parser uses chunk count to distinguish them. `stateData` (chunk 7) must always be at least 1 byte to keep the count unambiguous.
+**Genesis OP_RETURN:** 7 data chunks (parser [0-6]). No genesisTxId, proofChainBinary, or genesisOutputIndex.
+**Transfer OP_RETURN:** 10 data chunks (parser [0-9]). The parser uses chunk count to distinguish them. `stateData` (parser [6]) must always be at least 1 byte to keep the count unambiguous. The version byte (`0x02`) signals the v05 format with the tokenScript chunk.
 
 ### Token Rules (8 bytes)
 
@@ -608,7 +693,7 @@ Output 1:  P2PKH(owner)  -- 1 sat, the token UTXO (token #0)
 Output 2:  P2PKH(owner)  -- change (or token #1 if batch minting)
 ```
 
-The genesis TX creates a new token. Token ID is derived from this TX's hash and the outputIndex. The OP_RETURN does not include genesisTxId or proof chain fields (chunks 8-9 are absent).
+The genesis TX creates a new token. Token ID is derived from this TX's hash and the outputIndex. The OP_RETURN does not include genesisTxId, proof chain, or genesisOutputIndex fields (chunks 9-11 are absent).
 
 For divisible tokens (`divisibility > 0`), outputs 1 through `supply * divisibility` are all fragment P2PKH UTXOs (1 sat each).
 
@@ -653,7 +738,25 @@ The quarantine is unconditional. There is no "cleared" list or override mechanis
 
 ### Auto-Import on Quarantine
 
-When `getSafeUtxos()` encounters a quarantined 1-sat UTXO, it fires off `tryAutoImport()` in the background. This fetches the source TX, checks for a 1-sat P2PKH output paying to this wallet's address paired with an MPT OP_RETURN, and imports the token into the local store if found. The UTXO remains quarantined regardless of the auto-import result.
+When `getSafeUtxos()` encounters a quarantined 1-sat UTXO, it fires off `tryAutoImport()` in the background. This fetches the source TX, checks for a 1-sat P2PKH output paying to this wallet's address paired with an MPT OP_RETURN, and -- if found -- performs SPV verification before importing. The verification gate (`verifyBeforeImport()`) checks Token ID derivation, then verifies the genesis TX's Merkle proof against its block header. Only tokens that pass verification are imported into the local store. Unconfirmed TXs (no Merkle proof available) and tokens with invalid proofs remain in quarantine. The UTXO remains quarantined regardless of the auto-import result.
+
+### Fungible Token Protection (New in v05.10)
+
+The 1-sat quarantine protects NFT tokens, but fungible token UTXOs have values > 1 sat and would pass the quarantine filter. Additional protection is required:
+
+**`getSpendableBalance()` excludes fungible token UTXOs:**
+1. Fetch all wallet UTXOs from the provider
+2. Apply 1-sat quarantine (removes potential NFTs)
+3. Query the token store for all known fungible token UTXOs
+4. Exclude any UTXO that matches a fungible token basket entry
+5. Return the remaining balance as "spendable"
+
+**UI enforcement:**
+- The displayed "Balance" uses `getSpendableBalance()`, not raw UTXO total
+- Regular "Send BSV" operations cannot access fungible token UTXOs
+- Fungible token transfers must use the dedicated "Send" button in the token card
+
+**Edge case:** If a fungible token UTXO is not yet imported (e.g., just received, not yet scanned), it could theoretically be spent as regular BSV. The `checkIncomingTokens()` scan runs automatically on page load and balance refresh to minimize this window.
 
 ### Funding UTXO Selection
 
@@ -729,10 +832,11 @@ All keys are prefixed with `mpt:data:` (configured at initialization):
 |-------|------|-------------|
 | `tokenId` | string | SHA-256 hash, permanent identifier |
 | `genesisTxId` | string | Hash of the genesis transaction |
-| `genesisOutputIndex` | number | Output index of the token's P2PKH in the genesis TX. Starts at 1 (Output 0 is OP_RETURN). Single mint = 1, batch mint = 1..N, divisible = 1..S*D. |
+| `genesisOutputIndex` | number | Output index of the token's P2PKH in the genesis TX. Starts at 1 (Output 0 is OP_RETURN). Single mint = 1, batch mint = 1..N, divisible = 1..S*D. Never changes across transfers. |
 | `currentTxId` | string | Hash of the TX holding the current token UTXO |
-| `currentOutputIndex` | number | Output index of the current token UTXO. Always 0 after a transfer (P2PKH is Output 0 in transfer TXs). Equals `genesisOutputIndex` at mint time. |
+| `currentOutputIndex` | number | Output index of the current token UTXO. For genesis TXs: equals `genesisOutputIndex`. After first transfer: always 0 (P2PKH is Output 0 in transfer TXs). |
 | `tokenName` | string | Human-readable name |
+| `tokenScript` | string | Variable hex, consensus script (empty = P2PKH) |
 | `tokenRules` | string | 8-byte hex (supply, divisibility, restrictions, version) |
 | `tokenAttributes` | string | Variable hex (e.g. serial number, file hash) |
 | `stateData` | string | Variable hex, application-specific |
@@ -741,6 +845,38 @@ All keys are prefixed with `mpt:data:` (configured at initialization):
 | `createdAt` | string? | ISO timestamp |
 | `feePaid` | number? | Fee in satoshis for the creating TX |
 | `transferTxId` | string? | Set when status is `pending_transfer` |
+
+### FungibleToken Fields (New in v05.10)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tokenId` | string | SHA-256 hash, shared by all UTXOs in the basket |
+| `genesisTxId` | string | Hash of the genesis transaction |
+| `tokenName` | string | Human-readable name |
+| `tokenScript` | string | Variable hex, consensus script (empty = P2PKH) |
+| `tokenRules` | string | 8-byte hex (supply, divisibility, restrictions, version) |
+| `tokenAttributes` | string | Variable hex (mutable attributes) |
+| `stateData` | string? | Token-level state data (deprecated, use per-UTXO stateData) |
+| `utxos` | FungibleUtxo[] | The basket of UTXOs belonging to this token |
+| `createdAt` | string? | ISO timestamp |
+
+### FungibleUtxo Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `txId` | string | Hash of the TX holding this UTXO |
+| `outputIndex` | number | Output index of this UTXO in its TX |
+| `satoshis` | number | Token amount (1 sat = 1 token unit) |
+| `status` | TokenStatus | `'active'`, `'pending_transfer'`, or `'transferred'` |
+| `stateData` | string? | Per-UTXO state data (e.g., message text as hex) |
+| `receivedAt` | string? | ISO timestamp when this UTXO was received |
+
+### Storage Keys (Fungible)
+
+| Key Pattern | Value |
+|-------------|-------|
+| `mpt:data:fungible:{tokenId}` | FungibleToken JSON |
+| `mpt:data:proof:{tokenId}` | ProofChain JSON (shared with NFT tokens) |
 
 ### Token Status Lifecycle
 
@@ -758,7 +894,7 @@ Minted (createGenesis)
                                        active
 ```
 
-The recipient receives the token as `active` via auto-import or manual "Check Incoming". If a transferred or pending token is detected coming back to the original wallet, it is reactivated as `active` with updated UTXO details.
+The recipient receives the token as `active` via auto-import or manual "Check Incoming", but only after SPV verification passes (genesis TX Merkle proof + block header check). If a transferred or pending token is detected coming back to the original wallet, it is reactivated as `active` with updated UTXO details (same verification gate applies).
 
 ### Token Lookup
 
@@ -799,6 +935,52 @@ Orchestrates all token operations. Coordinates between the wallet provider, toke
 8. Mark token as `pending_transfer` with `transferTxId`
 9. Return `{ txId, tokenId }`
 
+#### createFungibleGenesis(params) (New in v05.10)
+
+1. Fetch safe UTXOs (quarantine applied)
+2. Build OP_RETURN with token metadata (supply/divisibility/restrictions = 0, tokenScript empty)
+3. Compute Token ID using genesisOutputIndex = 1 (fixed for fungible)
+4. Construct TX: funding input → OP_RETURN + token UTXO (initialSupply sats, Output 1) + change
+5. Sign and broadcast
+6. Store as FungibleToken with single UTXO in basket
+7. Return `{ txId, tokenId, initialSupply }`
+
+#### transferFungible(tokenId, recipientAddress, amount, stateData?) (New in v05.10)
+
+1. Load FungibleToken from store
+2. Select active UTXOs to cover the requested amount (greedy selection)
+3. Load proof chain for the token
+4. Fetch safe UTXOs for fee funding (quarantine applied)
+5. Construct TX:
+   - Inputs: selected token UTXOs + funding UTXOs
+   - Output 0: recipient P2PKH (amount sats)
+   - Output 1: OP_RETURN (metadata + proof chain)
+   - Output 2: token change P2PKH (remaining sats, if any)
+   - Output 3+: fee change
+6. Sign and broadcast
+7. Update basket: mark spent UTXOs as `pending_transfer`, add recipient UTXO (for sender's records)
+8. Return `{ txId, amountSent, change }`
+
+#### forwardFungibleUtxo(tokenId, utxoTxId, utxoOutputIndex, recipientAddress) (New in v05.10)
+
+Forwards a specific UTXO (typically a "message" UTXO with state data) to another address, preserving its state data.
+
+1. Load FungibleToken and locate the specific UTXO
+2. Load proof chain
+3. Fetch safe UTXOs for fee funding
+4. Construct TX: UTXO as Input 0 → recipient P2PKH (full satoshi amount) + OP_RETURN (same stateData)
+5. Sign and broadcast
+6. Update basket: mark UTXO as `pending_transfer`
+7. Return `{ txId, amountSent }`
+
+#### getSpendableBalance() (New in v05.10)
+
+Returns the wallet's spendable BSV balance, excluding:
+- All 1-sat UTXOs (quarantined as potential NFTs)
+- All known fungible token UTXOs (tracked in token store)
+
+This prevents accidental spending of token UTXOs as regular BSV.
+
 #### confirmTransfer(tokenId)
 
 Marks a `pending_transfer` token as `transferred`. Called automatically by the transfer confirmation polling system (see `pollForConfirmation`).
@@ -809,12 +991,27 @@ Standard BSV payment using safe UTXOs only.
 
 #### verifyToken(tokenId)
 
+Full proof chain verification (manual "Verify" button). Checks **all** entries in the proof chain.
+
 1. Load token and proof chain from store
 2. If no proof chain, attempt to fetch Merkle proof from WoC on demand
 3. Verify token ID matches genesis (pure computation)
 4. Fetch block headers for each proof chain entry height
 5. Delegate to `tokenProtocol.verifyProofChainAsync()` for cryptographic verification
 6. Return `{ valid, reason }`
+
+#### verifyBeforeImport(tokenId, genesisTxId, genesisOutputIndex, immutableBytes, proofChainEntries, currentTxId) *(private)*
+
+SPV verification gate for token import. Called by both `tryAutoImport()` and `checkIncomingTokens()` before storing any incoming token. Only checks the **genesis entry** (not the full chain).
+
+1. Verify Token ID = `computeTokenId(genesisTxId, genesisOutputIndex, immutableBytes)` matches `tokenId`
+2. Build proof chain from entries; if empty, fetch Merkle proof for `currentTxId` on demand
+3. Find the genesis entry (last in chain, `entry.txId === genesisTxId`)
+4. Verify genesis entry's Merkle proof using `verifyMerkleProof()` (pure crypto, double SHA-256)
+5. Fetch block header at genesis entry's height, confirm `header.merkleRoot === genesisEntry.merkleRoot`
+6. Return `{ valid, chain, reason? }` — callers use the returned chain for storage
+
+Only the genesis TX's block header is required. This proves the token was legitimately created and mined. Transfer TXs are already validated by miners when spent, so their block inclusion is an implicit guarantee.
 
 #### pollForProof(tokenId, txId)
 
@@ -838,8 +1035,9 @@ Scans all stored tokens for missing proof chains and attempts to fetch them. Han
 2. For each unknown TX, fetch raw hex and parse outputs
 3. Scan all TX outputs for an OP_RETURN containing the MPT prefix (output index varies: genesis has OP_RETURN at Output 0, transfer has it at Output 1) paired with a 1-sat P2PKH output paying to this wallet's address
 4. Extract genesisTxId and proof chain from on-chain binary data
-5. Import new tokens into the store
-6. **Return-to-sender:** If a token already exists with status `transferred` or `pending_transfer`, reactivate it with the new UTXO details
+5. **SPV verification gate:** Call `verifyBeforeImport()` to check Token ID derivation and verify the genesis TX's Merkle proof against its block header. Tokens that fail verification are rejected with a status message. For genesis TXs with multiple outputs, verification is performed once (all fragments share the same genesis TX).
+6. Import verified tokens into the store
+7. **Return-to-sender:** If a token already exists with status `transferred` or `pending_transfer`, reactivate it with the new UTXO details (verification still applies)
 
 ### Fee Estimation
 
@@ -874,7 +1072,7 @@ Default fee rate: 150 sats/KB.
 |---------|---------|
 | Wallet | Address, public key, WIF, balance. Refresh, new wallet, restore from WIF. |
 | Send BSV | Plain satoshi transfer to an address. |
-| Mint Token | Create a new NFT with name, optional attributes, and optional file embed. Per-field text/hex toggle. Supply, divisibility, restrictions, rules version. |
+| Mint Token | Create a new NFT with name, optional consensus script, optional attributes, and optional file embed. Per-field text/hex toggle. Supply, divisibility, restrictions, rules version. |
 | My Tokens | List of all tokens with status badges. Check Incoming button. View File for tokens with embedded files. Grouped display for divisible tokens. |
 | Transfer Token | Send a token to a recipient wallet address. Auto-confirmation polling. |
 | Verify Token | SPV verification of a token's proof chain against block headers. |
@@ -902,6 +1100,34 @@ All fragments from the same genesis TX are grouped into a single card showing:
 - Fragment dropdown selector showing "Fragment #5 (NFT 2, piece 2/3)" for each fragment
 - Expandable detail view for the selected fragment
 - Individual "Send" buttons labeled with fragment identity (e.g. "Send NFT 2, piece 2/3")
+
+When supply is 1 (a single whole token split into pieces), the NFT number is omitted from labels since there's only one: "Piece 2/3" instead of "NFT 1, piece 2/3".
+
+**Fungible tokens (New in v05.10):**
+
+Fungible tokens display as a dedicated card with:
+
+- Token name with "Fungible" badge (green border)
+- Token ID and Genesis TXID
+- Total token balance (sum of all active UTXOs)
+- Balance breakdown: Available (no state data) + In messages (with state data)
+- Pending balance (UTXOs in pending_transfer status)
+- Send form: amount input + state data textarea + Send button
+- Verify button for SPV proof chain verification
+- Messages section: displays UTXOs with non-empty state data, each showing:
+  - Token amount and received timestamp
+  - Message content (decoded from hex to UTF-8 if valid text)
+  - Forward button (sends entire UTXO to another address preserving state data)
+  - View TX link
+- Expandable UTXO details: shows all UTXOs in the basket with status, amount, and state data
+
+**Mint form (v05.10):**
+
+The mint form includes a mode toggle button:
+- **Fungible mode** (default, green): Shows initial supply field only. Creates a single token UTXO where satoshis = token units.
+- **NFT mode** (purple): Shows full NFT fields (consensus script, attributes, file upload, supply, divisibility, restrictions, rules version).
+
+The mode toggle switches between `fungible-fields` and `nft-fields` divs in the HTML.
 
 ### File Embed (Mint Form)
 
@@ -966,7 +1192,7 @@ Usage: `node serve.mjs` then open `http://localhost:3000`
 | `TX_OVERHEAD` | 10 | Version + locktime + varint |
 | `MIN_REQUEST_DELAY` | 350 | Milliseconds between WoC API calls |
 | `MPT_PREFIX` | `[0x4d, 0x50, 0x54]` | "MPT" in ASCII |
-| `MPT_VERSION` | `0x01` | Protocol version byte |
+| `MPT_VERSION` | `0x02` | Protocol version byte (v05) |
 | `MPT_FILE_MARKER` | `[0x4d, 0x50, 0x54, 0x2d, 0x46, 0x49, 0x4c, 0x45]` | "MPT-FILE" in ASCII, marks file OP_RETURN outputs |
 
 ---

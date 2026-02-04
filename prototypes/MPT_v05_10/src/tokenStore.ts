@@ -36,6 +36,8 @@ export interface FungibleUtxo {
   outputIndex: number
   satoshis: number
   status: TokenStatus
+  stateData?: string  // State data received with this UTXO (e.g. text message)
+  receivedAt?: string // ISO timestamp when this UTXO was received
 }
 
 /** Fungible token with shared metadata and a basket of UTXOs */
