@@ -12,7 +12,7 @@
 import { PrivateKey, Hash } from '@bsv/sdk'
 import { WalletProvider } from './walletProvider'
 import { TokenBuilder } from './tokenBuilder'
-import { TokenStore, LocalStorageBackend, OwnedToken } from './tokenStore'
+import { TokenStore, LocalStorageBackend, OwnedToken, FungibleToken } from './tokenStore'
 import { decodeTokenRules } from './opReturnCodec'
 import { FileCache } from './fileCache'
 
@@ -27,6 +27,7 @@ let fieldModes: Record<string, 'text' | 'hex'> = {
   attrs: 'text',
   state: 'text',
 }
+let mintMode: 'fungible' | 'nft' = 'fungible'
 
 const WIF_KEY = 'mpt:wallet:wif'
 
@@ -87,6 +88,7 @@ function init() {
   on('btn-name-mode', () => toggleFieldMode('name'))
   on('btn-attrs-mode', () => toggleFieldMode('attrs'))
   on('btn-state-mode', () => toggleFieldMode('state'))
+  on('btn-mint-mode', toggleMintMode)
 
   // File upload handlers
   const fileInput = el('token-file') as HTMLInputElement
@@ -209,13 +211,21 @@ async function refreshTokenList() {
     const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
     return db - da
   })
+  const fungibleTokens = (await store.listFungibleTokens()).sort((a, b) => {
+    const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
+    const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
+    return db - da
+  })
   const container = el('token-list')
   if (!container) return
 
-  if (tokens.length === 0) {
+  if (tokens.length === 0 && fungibleTokens.length === 0) {
     container.innerHTML = '<p class="muted">No tokens yet. Mint one above.</p>'
     return
   }
+
+  // Render fungible tokens first
+  const fungibleHtml = fungibleTokens.map(ft => renderFungibleCard(ft)).join('')
 
   // Group tokens by genesis TXID
   const groups = new Map<string, OwnedToken[]>()
@@ -229,7 +239,7 @@ async function refreshTokenList() {
     group.sort((a, b) => a.genesisOutputIndex - b.genesisOutputIndex)
   }
 
-  container.innerHTML = Array.from(groups.entries()).map(([genesisTxId, group]) => {
+  const nftHtml = Array.from(groups.entries()).map(([genesisTxId, group]) => {
     if (group.length === 1) {
       return renderTokenCard(group[0])
     }
@@ -262,6 +272,8 @@ async function refreshTokenList() {
       <div id="${detailId}">${renderTokenDetail(first)}</div>
     </div>`
   }).join('')
+
+  container.innerHTML = fungibleHtml + nftHtml
 }
 
 /**
@@ -375,6 +387,47 @@ function renderFragmentCard(genesisTxId: string, group: OwnedToken[], rules: { s
             ${group.map(t => `<option value="${t.tokenId}"${t.status !== 'active' ? ' data-pending' : ''}>Fragment #${t.genesisOutputIndex} (${fragmentLabel(t.genesisOutputIndex, fragsPerWhole, wholeTokens)}) ${t.status !== 'active' ? '- ' + t.status : ''}</option>`).join('')}
           </select>
           <div id="fdet-${genKey}">${renderTokenDetail(first)}</div>
+        </div>
+      </details>
+    </div>`
+}
+
+function renderFungibleCard(ft: FungibleToken): string {
+  const activeUtxos = ft.utxos.filter(u => u.status === 'active')
+  const pendingUtxos = ft.utxos.filter(u => u.status === 'pending_transfer')
+  const totalBalance = activeUtxos.reduce((sum, u) => sum + u.satoshis, 0)
+  const pendingBalance = pendingUtxos.reduce((sum, u) => sum + u.satoshis, 0)
+  const genKey = ft.genesisTxId.slice(0, 12)
+
+  return `
+    <div class="token-card" style="border-color:#238636;">
+      <div class="token-header">${escHtml(ft.tokenName)} <span class="badge badge-active">Fungible</span></div>
+      <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${ft.tokenId}</code></div>
+      <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${ft.genesisTxId}</code></div>
+      <div class="token-field"><span class="label">Balance:</span> <strong style="color:#3fb950;font-size:1.1em;">${totalBalance.toLocaleString()} sats</strong></div>
+      ${pendingBalance > 0 ? `<div class="token-field"><span class="label">Pending:</span> <span style="color:#d29922;">${pendingBalance.toLocaleString()} sats</span></div>` : ''}
+      <div class="token-field"><span class="label">UTXOs:</span> ${activeUtxos.length} active${pendingUtxos.length > 0 ? `, ${pendingUtxos.length} pending` : ''}</div>
+      ${ft.createdAt ? `<div class="token-field"><span class="label">Created:</span> ${formatDate(ft.createdAt)}</div>` : ''}
+      <div class="token-actions" style="flex-direction:column;align-items:stretch;">
+        <div class="row" style="gap:6px;">
+          <input id="fungible-send-${genKey}" type="number" min="1" max="${totalBalance}" value="${Math.min(100, totalBalance)}" placeholder="Amount" style="width:120px;margin:0;" />
+          <button onclick="window._transferFungible('${ft.tokenId}', '${genKey}')">Send</button>
+          <button onclick="window._verifyFungible('${ft.tokenId}')">Verify</button>
+        </div>
+        <span class="arch-note">Send sats to a recipient. UTXOs are automatically combined as needed.</span>
+        <div class="row" style="gap:6px; margin-top:6px;">
+          <a href="https://whatsonchain.com/tx/${ft.genesisTxId}" target="_blank" rel="noopener">View Genesis TX</a>
+        </div>
+      </div>
+      <details style="margin-top:8px;"><summary class="muted" style="cursor:pointer;font-size:0.85em;">Show UTXO details (${ft.utxos.length})</summary>
+        <div style="margin-top:6px;font-size:0.85em;">
+          ${ft.utxos.map(u => `
+            <div style="padding:4px 0;border-bottom:1px solid #21262d;">
+              <span class="badge ${u.status === 'active' ? 'badge-active' : u.status === 'pending_transfer' ? 'badge-pending' : 'badge-transferred'}">${u.status}</span>
+              <strong>${u.satoshis.toLocaleString()} sats</strong>
+              <br><code class="muted" style="font-size:0.8em;">${u.txId}:${u.outputIndex}</code>
+            </div>
+          `).join('')}
         </div>
       </details>
     </div>`
@@ -560,6 +613,26 @@ function toggleFieldMode(field: string) {
     : 'Some fields in hex mode: raw hex bytes expected. Toggle to switch back to text.'
 }
 
+function toggleMintMode() {
+  mintMode = mintMode === 'fungible' ? 'nft' : 'fungible'
+  const btn = el('btn-mint-mode')
+  const hint = el('mint-mode-hint')
+  const fungibleFields = el('fungible-fields')
+  const nftFields = el('nft-fields')
+
+  if (mintMode === 'fungible') {
+    if (btn) { btn.textContent = 'Fungible'; btn.style.background = '#238636' }
+    if (hint) hint.textContent = 'Fungible: amount = satoshis, all UTXOs share same Token ID'
+    if (fungibleFields) fungibleFields.style.display = ''
+    if (nftFields) nftFields.style.display = 'none'
+  } else {
+    if (btn) { btn.textContent = 'NFT'; btn.style.background = '#6e40c9' }
+    if (hint) hint.textContent = 'NFT: unique Token IDs, supports supply/divisibility/file attachments'
+    if (fungibleFields) fungibleFields.style.display = 'none'
+    if (nftFields) nftFields.style.display = ''
+  }
+}
+
 function textToHex(text: string): string {
   return Array.from(new TextEncoder().encode(text))
     .map(b => b.toString(16).padStart(2, '0')).join('')
@@ -567,6 +640,64 @@ function textToHex(text: string): string {
 
 async function handleMint() {
   const nameRaw = inputVal('token-name')
+
+  if (!nameRaw) {
+    setResult('mint-result', 'Enter a token name.')
+    return
+  }
+
+  // Convert name based on text/hex mode
+  const name = fieldModes.name === 'text' ? nameRaw : new TextDecoder().decode(new Uint8Array(nameRaw.match(/.{1,2}/g)?.map(b => parseInt(b, 16)) ?? []))
+
+  const feeRate = parseInt(inputVal('fee-rate'), 10)
+  if (feeRate > 0) builder.feePerKb = feeRate
+
+  // ─── Fungible Mode ───────────────────────────────────────────────
+  if (mintMode === 'fungible') {
+    const initialSupply = parseInt(inputVal('fungible-supply'), 10) || 1000
+    if (initialSupply < 1) {
+      setResult('mint-result', 'Initial supply must be at least 1 satoshi.')
+      return
+    }
+
+    setResult('mint-result', `Minting fungible token with ${initialSupply} sats...`)
+
+    try {
+      const result = await builder.createFungibleGenesis({
+        tokenName: name,
+        initialSupply,
+      })
+
+      setResult('mint-result', [
+        'Fungible token minted!',
+        `TXID: ${result.txId}`,
+        `Token ID: ${result.tokenId}`,
+        `Initial supply: ${result.initialSupply} sats`,
+        `View: https://whatsonchain.com/tx/${result.txId}`,
+        '',
+        'Polling for Merkle proof (may take ~10 min)...',
+      ].join('\n'))
+
+      await refreshTokenList()
+      await refreshBalance()
+
+      builder.pollForProof(result.tokenId, result.txId, (msg) => {
+        setResult('mint-result', [
+          `TXID: ${result.txId}`,
+          `Token ID: ${result.tokenId}`,
+          msg,
+        ].join('\n'))
+      }).then(found => {
+        if (found) refreshTokenList()
+      })
+
+    } catch (e: any) {
+      setResult('mint-result', `Error: ${e.message}`)
+    }
+    return
+  }
+
+  // ─── NFT Mode ────────────────────────────────────────────────────
   const scriptRaw = inputVal('token-script')
   const attrsRaw = inputVal('token-attrs')
   const stateRaw = inputVal('token-state')
@@ -575,13 +706,6 @@ async function handleMint() {
   const restrictions = parseInt(inputVal('token-restrictions'), 10) || 0
   const rulesVersion = parseInt(inputVal('token-rules-version'), 10) || 1
 
-  if (!nameRaw) {
-    setResult('mint-result', 'Enter a token name.')
-    return
-  }
-
-  // Convert fields based on their individual text/hex mode
-  const name = fieldModes.name === 'text' ? nameRaw : new TextDecoder().decode(new Uint8Array(nameRaw.match(/.{1,2}/g)?.map(b => parseInt(b, 16)) ?? []))
   const attrs = attrsRaw ? (fieldModes.attrs === 'text' ? textToHex(attrsRaw) : attrsRaw) : '00'
   let stateData = ''
   if (stateRaw) {
@@ -605,9 +729,6 @@ async function handleMint() {
       fileName: selectedFile.name,
     }
   }
-
-  const feeRate = parseInt(inputVal('fee-rate'), 10)
-  if (feeRate > 0) builder.feePerKb = feeRate
 
   setResult('mint-result', fileData
     ? `Building genesis transaction with file (${(fileData.bytes.length / 1024).toFixed(1)} KB)...`
@@ -869,6 +990,50 @@ function handleRestoreWallet() {
   handleVerify().then(() => {
     el('verify-result')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   })
+}
+
+;(window as any)._transferFungible = async (tokenId: string, genKey: string) => {
+  const amtInput = el(`fungible-send-${genKey}`) as HTMLInputElement
+  const amount = parseInt(amtInput?.value ?? '0', 10)
+  if (!amount || amount < 1) {
+    setResult('transfer-result', 'Enter a valid amount (minimum 1 sat).')
+    return
+  }
+
+  const recipient = inputVal('transfer-recipient')
+  if (!recipient) {
+    setResult('transfer-result', 'Enter a recipient BSV address in the Transfer Token section below.')
+    el('transfer-recipient')?.focus()
+    return
+  }
+
+  const feeRate = parseInt(inputVal('fee-rate'), 10)
+  if (feeRate > 0) builder.feePerKb = feeRate
+
+  setResult('transfer-result', `Transferring ${amount.toLocaleString()} sats of fungible token...`)
+
+  try {
+    const result = await builder.transferFungible(tokenId, recipient, amount)
+    setResult('transfer-result', [
+      'Fungible transfer broadcast!',
+      `TXID: ${result.txId}`,
+      `Sent: ${result.amountSent.toLocaleString()} sats`,
+      result.change > 0 ? `Change: ${result.change.toLocaleString()} sats` : '',
+      `View: https://whatsonchain.com/tx/${result.txId}`,
+    ].filter(Boolean).join('\n'))
+
+    await refreshTokenList()
+    await refreshBalance()
+  } catch (e: any) {
+    setResult('transfer-result', `Error: ${e.message}`)
+  }
+}
+
+;(window as any)._verifyFungible = async (tokenId: string) => {
+  const input = el('verify-token-id') as HTMLInputElement
+  if (input) input.value = tokenId
+  await handleVerify()
+  el('verify-result')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
 ;(window as any)._confirmTransfer = async (tokenId: string) => {

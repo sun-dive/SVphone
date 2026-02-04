@@ -100,35 +100,54 @@
   <!-- Mint Token -->
   <section>
     <h2>Mint Token</h2>
+    <div class="row" style="margin-bottom:12px;">
+      <button id="btn-mint-mode" style="min-width:140px; background:#238636;">Fungible</button>
+      <span class="muted" id="mint-mode-hint">Fungible: amount = satoshis, all UTXOs share same Token ID</span>
+    </div>
+
+    <!-- Common fields (both modes) -->
     <div class="row">
       <input id="token-name" placeholder="Token name (e.g. My First MPT)" style="flex:1;" />
       <button id="btn-name-mode" style="white-space:nowrap; min-width:70px; background:#30363d;">Text</button>
     </div>
-    <div class="row">
-      <input id="token-script" placeholder="Consensus script (optional, raw hex -- miner-enforced)" style="flex:1;" />
+
+    <!-- Fungible-only field -->
+    <div id="fungible-fields">
+      <div class="row">
+        <input id="fungible-supply" type="number" placeholder="Initial supply (satoshis)" value="1000" min="1" style="flex:1;" />
+      </div>
+      <p class="arch-note">Initial supply in satoshis. Each satoshi = 1 token unit. Can receive more UTXOs later.</p>
     </div>
-    <div class="row">
-      <input id="token-attrs" placeholder="Attributes (optional, e.g. 01 for #1)" style="flex:1;" />
-      <button id="btn-attrs-mode" style="white-space:nowrap; min-width:70px; background:#30363d;">Text</button>
+
+    <!-- NFT-only fields (hidden by default) -->
+    <div id="nft-fields" style="display:none;">
+      <div class="row">
+        <input id="token-script" placeholder="Consensus script (optional, raw hex -- miner-enforced)" style="flex:1;" />
+      </div>
+      <div class="row">
+        <input id="token-attrs" placeholder="Attributes (optional, e.g. 01 for #1)" style="flex:1;" />
+        <button id="btn-attrs-mode" style="white-space:nowrap; min-width:70px; background:#30363d;">Text</button>
+      </div>
+      <div class="row">
+        <input type="file" id="token-file" style="flex:1; font-size:0.85em;" />
+        <button id="btn-clear-file" style="white-space:nowrap; min-width:70px; background:#30363d; display:none;">Clear</button>
+      </div>
+      <p class="arch-note" id="file-info" style="display:none;"></p>
+      <div class="row">
+        <input id="token-state" placeholder="State data (mutable field)" style="flex:1;" />
+        <button id="btn-state-mode" style="white-space:nowrap; min-width:70px; background:#30363d;">Text</button>
+      </div>
+      <p class="arch-note" id="field-mode-hint">Text mode: input is UTF-8 encoded to hex. Toggle individual fields for raw hex input.</p>
+      <div class="row">
+        <div style="width:120px;"><input id="token-supply" type="number" placeholder="Supply" value="1" min="1" max="65535" style="width:100%;" /><span class="arch-note">Supply</span></div>
+        <div style="width:120px;"><input id="token-divisibility" type="number" placeholder="Divisibility" value="0" min="0" max="65535" style="width:100%;" /><span class="arch-note">Divisibility</span></div>
+        <div style="width:120px;"><input id="token-restrictions" type="number" placeholder="Restrictions" value="0" min="0" max="65535" style="width:100%;" /><span class="arch-note">Restrictions</span></div>
+        <div style="width:120px;"><input id="token-rules-version" type="number" placeholder="Rules ver." value="1" min="0" max="65535" style="width:100%;" /><span class="arch-note">Rules ver.</span></div>
+      </div>
+      <p class="arch-note">All immutable after mint. Consensus script = raw Bitcoin Script bytes enforced by miners (empty = standard P2PKH). Divisibility 0 = NFT/distinct tokens. Divisibility &gt; 0 = fragments per whole (e.g. supply=4 div=2 → 4 tokens × 2 halves = 8 fragment UTXOs). Restrictions = bitfield.</p>
     </div>
-    <div class="row">
-      <input type="file" id="token-file" style="flex:1; font-size:0.85em;" />
-      <button id="btn-clear-file" style="white-space:nowrap; min-width:70px; background:#30363d; display:none;">Clear</button>
-    </div>
-    <p class="arch-note" id="file-info" style="display:none;"></p>
-    <div class="row">
-      <input id="token-state" placeholder="State data (mutable field)" style="flex:1;" />
-      <button id="btn-state-mode" style="white-space:nowrap; min-width:70px; background:#30363d;">Text</button>
-    </div>
-    <p class="arch-note" id="field-mode-hint">Text mode: input is UTF-8 encoded to hex. Toggle individual fields for raw hex input.</p>
-    <div class="row">
-      <div style="width:120px;"><input id="token-supply" type="number" placeholder="Supply" value="1" min="1" max="65535" style="width:100%;" /><span class="arch-note">Supply</span></div>
-      <div style="width:120px;"><input id="token-divisibility" type="number" placeholder="Divisibility" value="0" min="0" max="65535" style="width:100%;" /><span class="arch-note">Divisibility</span></div>
-      <div style="width:120px;"><input id="token-restrictions" type="number" placeholder="Restrictions" value="0" min="0" max="65535" style="width:100%;" /><span class="arch-note">Restrictions</span></div>
-      <div style="width:120px;"><input id="token-rules-version" type="number" placeholder="Rules ver." value="1" min="0" max="65535" style="width:100%;" /><span class="arch-note">Rules ver.</span></div>
-    </div>
-    <p class="arch-note">All immutable after mint. Consensus script = raw Bitcoin Script bytes enforced by miners (empty = standard P2PKH). Divisibility 0 = NFT/distinct tokens. Divisibility &gt; 0 = fragments per whole (e.g. supply=4 div=2 → 4 tokens × 2 halves = 8 fragment UTXOs). Restrictions = bitfield.</p>
-    <div class="row" style="justify-content:flex-end;">
+
+    <div class="row" style="justify-content:flex-end; margin-top:8px;">
       <span class="arch-note" style="align-self:center;">sats/KB</span>
       <input id="fee-rate" type="number" placeholder="100" value="100" min="1" style="width:80px; margin-bottom:0;" />
       <button id="btn-mint">Mint Token</button>
