@@ -1,4 +1,7 @@
-node_modules/
-dist/
-artifacts/
-*.js.map
+# Ignore everything
+*
+
+# But not these files
+!.gitignore
+!docs/
+!docs/MPT_v05_11_fundamental_design_principles.md
