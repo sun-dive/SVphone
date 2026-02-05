@@ -1,4 +1,4 @@
-# Merkle Proof Token (MPT) Prototype v05.10 -- Structure and Function
+# Merkle Proof Token (MPT) Prototype v05.21 -- Structure and Function
 
 Imagined and designed by Metro Gnome
 Built by Metro and a team of Claudes
@@ -12,7 +12,7 @@ MPT supports two token modes:
 - **NFT Mode**: Each 1-sat output has a unique Token ID based on its genesis output index. Suitable for non-fungible tokens, collectibles, and divisible token fragments.
 - **Fungible Mode**: All UTXOs share a single Token ID (genesisOutputIndex fixed at 1). Each satoshi equals one token unit. Multiple UTXOs form a "basket" that can be split and merged through transfers.
 
-Prototype v05 enforces a clean architectural separation between the pure SPV token protocol and the wallet layer that interacts with the blockchain. v05 adds a `tokenScript` field for optional consensus-level validation enforced by miners. v05.10 introduces fungible token support with per-UTXO state data.
+Prototype v05 enforces a clean architectural separation between the pure SPV token protocol and the wallet layer that interacts with the blockchain. v05 adds a `tokenScript` field for optional consensus-level validation enforced by miners. v05.10 introduces fungible token support with per-UTXO state data. v05.21 removes redundant `genesisOutputIndex` from transfer OP_RETURN (now derived from Input 0 of the transfer TX).
 
 **Network:** BSV Mainnet (real BSV)
 
@@ -218,13 +218,14 @@ Chunk ordering follows enforcement level (highest authority first):
 | 6 | stateData | variable | Mutable | Application state (min 1 byte) (encoder [8]) |
 | 7 | genesisTxId | 32B | -- | *Transfer only:* raw genesis TX hash (encoder [9]) |
 | 8 | proofChainBinary | variable | -- | *Transfer only:* compact binary proof chain (encoder [10]) |
-| 9 | genesisOutputIndex | 4B | -- | *Transfer only:* uint32 LE, the token's P2PKH output index in the genesis TX (encoder [11]) |
 
-**Genesis TX OP_RETURN:** Data chunks [0-6] (7 data chunks). No genesisTxId, proofChainBinary, or genesisOutputIndex -- not needed at mint time. When a file is embedded, a separate OP_RETURN output with the `MPT-FILE` marker is added to the genesis TX (see Embedded File Data).
+*v05.21:* `genesisOutputIndex` removed from OP_RETURN. Derived from Input 0 of the transfer TX (see Genesis Output Index Derivation section).
 
-**Transfer TX OP_RETURN:** Data chunks [0-9] (10 data chunks). genesisTxId, proofChainBinary, and genesisOutputIndex carry the token's verifiable history and identity. Ownership is determined by the P2PKH output, not by any OP_RETURN field. No file data is included -- only the 32-byte hash in tokenAttributes.
+**Genesis TX OP_RETURN:** Data chunks [0-6] (7 data chunks). No genesisTxId or proofChainBinary -- not needed at mint time. When a file is embedded, a separate OP_RETURN output with the `MPT-FILE` marker is added to the genesis TX (see Embedded File Data).
 
-**Parsing rule:** The chunk count distinguishes genesis from transfer: 7 data chunks = genesis, 10 data chunks = transfer. stateData (data chunk [6]) is always present with a minimum of 1 byte to ensure consistent chunk counts. The version byte (`0x02`) signals v05 format with the tokenScript chunk.
+**Transfer TX OP_RETURN:** Data chunks [0-8] (9 data chunks). genesisTxId and proofChainBinary carry the token's verifiable history. Ownership is determined by the P2PKH output, not by any OP_RETURN field. No file data is included -- only the 32-byte hash in tokenAttributes. *v05.21:* genesisOutputIndex is derived from Input 0 of the transfer TX, not stored in the OP_RETURN.
+
+**Parsing rule:** The chunk count distinguishes genesis from transfer: 7 data chunks = genesis, 9 data chunks = transfer (v05.21). stateData (data chunk [6]) is always present with a minimum of 1 byte to ensure consistent chunk counts. The version byte (`0x02`) signals v05 format with the tokenScript chunk.
 
 **Empty tokenScript cost:** When tokenScript is empty (standard P2PKH behaviour), the chunk is a single `OP_0` byte -- adding only 1 byte to the transaction compared to v04.
 
@@ -264,6 +265,23 @@ Token ID = SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes)
 where `immutableChunkBytes = tokenName + tokenScript + tokenRules` (concatenated raw bytes of the immutable fields)
 
 The Token ID is a deterministic, purely local computation. It binds the token's identity to its genesis transaction and the immutable consensus rules. No network access is required to compute or verify it. Tampering with any immutable field causes a Token ID mismatch, instant verification failure. tokenAttributes is mutable and not bound to the Token ID.
+
+### Genesis Output Index Derivation (v05.21)
+
+In v05.21, `genesisOutputIndex` is no longer encoded in the transfer OP_RETURN. Instead, it is derived from Input 0 of the transfer TX:
+
+**Direct Transfer (genesis → recipient):**
+- Input 0 of the transfer TX spends the genesis TX output directly
+- `Input 0.sourceTXID` = genesisTxId
+- `Input 0.sourceOutputIndex` = genesisOutputIndex
+- No network fetch required
+
+**Multi-hop Transfer (genesis → A → B → ...):**
+- Input 0 of the transfer TX spends a previous transfer TX
+- Trace Input 0 backwards through each TX until `sourceTXID` matches genesisTxId
+- The `sourceOutputIndex` at that point is the genesisOutputIndex
+
+This approach saves 5 bytes per transfer TX (4 bytes data + 1 byte pushdata opcode) while requiring zero additional network calls for direct transfers (the common case).
 
 ### Verification Model
 
@@ -422,7 +440,7 @@ Output 1:  OP_RETURN with metadata + proof chain
 Output 2:  Change
 ```
 
-The OP_RETURN carries the same genesisTxId as all other fragments from the same genesis TX, but the `genesisOutputIndex` (chunk 11) identifies this specific fragment.
+The OP_RETURN carries the same genesisTxId as all other fragments from the same genesis TX. The `genesisOutputIndex` that identifies this specific fragment is derived from Input 0 of the transfer TX (v05.21).
 
 ### Return-to-Sender
 
@@ -635,16 +653,17 @@ Parser [5]:  tokenAttributes   (variable hex -- encoder [7])
 Parser [6]:  stateData         (variable hex, minimum 1 byte -- encoder [8])
 ```
 
-Transfer TXs append three additional chunks:
+Transfer TXs append two additional chunks (v05.21):
 
 ```
 Parser [7]:  genesisTxId          (32 bytes, raw hash -- encoder [9])
 Parser [8]:  proofChainBinary     (compact binary encoding -- encoder [10])
-Parser [9]:  genesisOutputIndex   (4 bytes, uint32 LE -- the token's P2PKH output index in the genesis TX -- encoder [11])
 ```
 
-**Genesis OP_RETURN:** 7 data chunks (parser [0-6]). No genesisTxId, proofChainBinary, or genesisOutputIndex.
-**Transfer OP_RETURN:** 10 data chunks (parser [0-9]). The parser uses chunk count to distinguish them. `stateData` (parser [6]) must always be at least 1 byte to keep the count unambiguous. The version byte (`0x02`) signals the v05 format with the tokenScript chunk.
+*v05.21:* `genesisOutputIndex` removed. Derived from Input 0 of the transfer TX.
+
+**Genesis OP_RETURN:** 7 data chunks (parser [0-6]). No genesisTxId or proofChainBinary.
+**Transfer OP_RETURN:** 9 data chunks (parser [0-8]). The parser uses chunk count to distinguish them. `stateData` (parser [6]) must always be at least 1 byte to keep the count unambiguous. The version byte (`0x02`) signals the v05 format with the tokenScript chunk.
 
 ### Token Rules (8 bytes)
 
@@ -693,7 +712,7 @@ Output 1:  P2PKH(owner)  -- 1 sat, the token UTXO (token #0)
 Output 2:  P2PKH(owner)  -- change (or token #1 if batch minting)
 ```
 
-The genesis TX creates a new token. Token ID is derived from this TX's hash and the outputIndex. The OP_RETURN does not include genesisTxId, proof chain, or genesisOutputIndex fields (chunks 9-11 are absent).
+The genesis TX creates a new token. Token ID is derived from this TX's hash and the outputIndex. The OP_RETURN does not include genesisTxId or proof chain fields (chunks 7-8 are absent).
 
 For divisible tokens (`divisibility > 0`), outputs 1 through `supply * divisibility` are all fragment P2PKH UTXOs (1 sat each).
 
@@ -930,7 +949,7 @@ Orchestrates all token operations. Coordinates between the wallet provider, toke
 3. Load proof chain for the token
 4. Fetch the source TX of the current token UTXO
 5. Fetch safe UTXOs for funding (quarantine applied)
-6. Construct TX: token UTXO as Input 0 + funding inputs -> recipient P2PKH (1 sat, locked to recipientAddress) + OP_RETURN (with genesisTxId + proof chain binary + genesisOutputIndex) + change
+6. Construct TX: token UTXO as Input 0 + funding inputs -> recipient P2PKH (1 sat, locked to recipientAddress) + OP_RETURN (with genesisTxId + proof chain binary) + change
 7. Sign and broadcast
 8. Mark token as `pending_transfer` with `transferTxId`
 9. Return `{ txId, tokenId }`
