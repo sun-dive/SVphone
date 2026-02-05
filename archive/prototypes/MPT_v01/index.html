@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MPT Prototype Wallet (BSV Testnet)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+      background: #0d1117; color: #c9d1d9;
+      max-width: 800px; margin: 0 auto; padding: 20px;
+    }
+    h1 { color: #58a6ff; margin-bottom: 4px; font-size: 1.4em; }
+    h1 small { color: #8b949e; font-size: 0.6em; font-weight: normal; }
+    h2 { color: #f0883e; margin: 20px 0 10px; font-size: 1.1em; border-bottom: 1px solid #21262d; padding-bottom: 6px; }
+    section { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+    code, pre { font-family: 'SF Mono', Consolas, monospace; font-size: 0.85em; }
+    code { background: #0d1117; padding: 2px 6px; border-radius: 3px; word-break: break-all; }
+    pre { background: #0d1117; padding: 12px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; margin-top: 8px; border: 1px solid #30363d; font-size: 0.8em; color: #8b949e; }
+    input, textarea {
+      background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
+      padding: 8px 10px; border-radius: 4px; width: 100%; font-family: inherit;
+      font-size: 0.9em; margin-bottom: 8px;
+    }
+    input:focus, textarea:focus { border-color: #58a6ff; outline: none; }
+    textarea { resize: vertical; }
+    button {
+      background: #238636; color: #fff; border: none; padding: 8px 16px;
+      border-radius: 4px; cursor: pointer; font-size: 0.9em; margin-right: 6px;
+      margin-bottom: 4px;
+    }
+    button:hover { background: #2ea043; }
+    button:active { background: #1a7f37; }
+    a { color: #58a6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .muted { color: #8b949e; font-style: italic; }
+    .label { color: #8b949e; }
+    .row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+    .field { margin-bottom: 6px; }
+
+    /* Wallet info */
+    #wallet-info .field code { user-select: all; }
+
+    /* Token cards */
+    .token-card {
+      background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+      padding: 12px; margin-bottom: 10px;
+    }
+    .token-header { color: #58a6ff; font-weight: bold; margin-bottom: 8px; }
+    .token-field { font-size: 0.85em; margin-bottom: 3px; }
+    .token-field code { font-size: 0.9em; }
+    .token-actions { margin-top: 8px; }
+    .token-actions button { background: #30363d; font-size: 0.8em; padding: 4px 10px; }
+    .token-actions button:hover { background: #484f58; }
+    .token-actions a { font-size: 0.8em; margin-left: 4px; }
+    .selectable { user-select: all; }
+
+    /* Danger button */
+    .btn-danger { background: #da3633; }
+    .btn-danger:hover { background: #f85149; }
+  </style>
+</head>
+<body>
+
+  <h1>MPT Prototype Wallet <small>BSV Testnet</small></h1>
+  <p class="muted" style="margin-bottom:16px;">Merkle Proof Token -- P2PKH + OP_RETURN prototype for testing the MPT design with real transactions.</p>
+
+  <!-- Wallet Info -->
+  <section id="wallet-info">
+    <h2>Wallet</h2>
+    <div class="field"><span class="label">Address:</span> <code id="address">...</code></div>
+    <div class="field"><span class="label">Public Key:</span> <code id="pubkey">...</code></div>
+    <div class="field"><span class="label">Private Key (WIF):</span> <code id="privkey">...</code></div>
+    <div class="field"><span class="label">Balance:</span> <span id="balance">...</span></div>
+    <div class="row" style="margin-top:10px;">
+      <button id="btn-refresh">Refresh Balance</button>
+      <a href="https://faucet.bitcoincloud.net/" target="_blank" rel="noopener">Get Testnet Coins</a>
+      <span style="flex:1"></span>
+      <button id="btn-new-wallet" class="btn-danger">New Wallet</button>
+    </div>
+  </section>
+
+  <!-- Mint Token -->
+  <section>
+    <h2>Mint Token</h2>
+    <input id="token-name" placeholder="Token name (e.g. My First MPT)" />
+    <input id="token-attrs" placeholder="Attributes hex (optional, e.g. 01 for #1)" />
+    <button id="btn-mint">Mint NFT</button>
+    <pre id="mint-result"></pre>
+  </section>
+
+  <!-- My Tokens -->
+  <section>
+    <h2>My Tokens</h2>
+    <div id="token-list"><p class="muted">No tokens yet. Mint one above.</p></div>
+  </section>
+
+  <!-- Transfer Token -->
+  <section>
+    <h2>Transfer Token</h2>
+    <input id="transfer-token-id" placeholder="Token ID (select from My Tokens)" />
+    <input id="transfer-recipient" placeholder="Recipient public key (66-char hex)" />
+    <button id="btn-transfer">Transfer</button>
+    <pre id="transfer-result"></pre>
+  </section>
+
+  <!-- Import Token Bundle -->
+  <section>
+    <h2>Import Token Bundle</h2>
+    <textarea id="import-bundle" rows="6" placeholder="Paste the token bundle JSON received from sender"></textarea>
+    <button id="btn-import">Import</button>
+    <pre id="import-result"></pre>
+  </section>
+
+  <!-- Verify Token -->
+  <section>
+    <h2>Verify Token</h2>
+    <input id="verify-token-id" placeholder="Token ID" />
+    <button id="btn-verify">Verify Proof Chain</button>
+    <pre id="verify-result"></pre>
+  </section>
+
+  <script src="bundle.js"></script>
+</body>
+</html>

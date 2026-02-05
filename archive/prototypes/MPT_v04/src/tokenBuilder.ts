@@ -1,0 +1,1031 @@
+/**
+ * Token lifecycle manager -- mint, transfer, verify, detect incoming.
+ *
+ * This module uses:
+ *   - walletProvider.ts for all network operations (UTXOs, broadcast, etc.)
+ *   - tokenProtocol.ts for all verification (pure SPV, no network)
+ *   - tokenStore.ts for persistence
+ *   - opReturnCodec.ts for OP_RETURN encoding/decoding
+ *
+ * Architecture:
+ *   Wallet layer (this file + walletProvider) depends on token protocol.
+ *   Token protocol NEVER depends on wallet layer.
+ */
+import { PrivateKey, Transaction, P2PKH, LockingScript, Hash } from '@bsv/sdk'
+import { WalletProvider, Utxo } from './walletProvider'
+import { TokenStore, OwnedToken } from './tokenStore'
+import {
+  computeTokenId,
+  createProofChain,
+  extendProofChain,
+  verifyProofChainAsync,
+  ProofChain,
+  VerificationResult,
+} from './tokenProtocol'
+import {
+  encodeOpReturn,
+  decodeOpReturn,
+  TokenOpReturnData,
+  encodeTokenRules,
+  buildImmutableChunkBytes,
+  buildFileOpReturn,
+  parseFileOpReturn,
+  FileOpReturnData,
+} from './opReturnCodec'
+
+// ─── Types ──────────────────────────────────────────────────────────
+
+export interface GenesisParams {
+  tokenName: string
+  attributes?: string      // hex (default '00')
+  supply?: number          // default 1
+  divisibility?: number    // default 0
+  restrictions?: number    // default 0
+  rulesVersion?: number    // default 1
+  stateData?: string       // hex (default '')
+  fileData?: {             // optional file to embed in genesis TX
+    bytes: Uint8Array
+    mimeType: string
+    fileName: string
+  }
+}
+
+export interface GenesisResult {
+  txId: string
+  tokenIds: string[]
+}
+
+export interface TransferResult {
+  txId: string
+  tokenId: string
+}
+
+// ─── Constants ──────────────────────────────────────────────────────
+
+const TOKEN_SATS = 1
+const DEFAULT_FEE_PER_KB = 150
+const BYTES_PER_INPUT = 148
+const BYTES_PER_P2PKH_OUTPUT = 34
+const TX_OVERHEAD = 10
+
+// ─── Token Builder ──────────────────────────────────────────────────
+
+export class TokenBuilder {
+  feePerKb = DEFAULT_FEE_PER_KB
+  private key: PrivateKey
+  private myAddress: string
+
+  constructor(
+    private provider: WalletProvider,
+    private store: TokenStore,
+    key: PrivateKey,
+  ) {
+    this.key = key
+    this.myAddress = key.toAddress()
+  }
+
+  // ── Token UTXO Protection ───────────────────────────────────────
+
+  /**
+   * Build a set of "txId:outputIndex" keys for UTXOs currently holding
+   * active or pending tokens. These must never be used as funding inputs.
+   */
+  private async getTokenUtxoKeys(): Promise<Set<string>> {
+    const tokens = await this.store.listTokens()
+    const keys = new Set<string>()
+    for (const t of tokens) {
+      if (t.status === 'active' || t.status === 'pending_transfer') {
+        keys.add(`${t.currentTxId}:${t.currentOutputIndex}`)
+      }
+    }
+    return keys
+  }
+
+  /**
+   * Return only UTXOs that are safe to spend as funding inputs.
+   *
+   * ALL 1-sat UTXOs are permanently quarantined -- never spent as
+   * funding inputs. A 1-sat UTXO is almost certainly a token of
+   * some kind (MPT, Ordinal, 1Sat Ordinals, etc.) and destroying
+   * it by using it as a funding input is irreversible.
+   *
+   * The only code path that spends a 1-sat UTXO is createTransfer(),
+   * which explicitly spends it as Input 0 when the user chooses to
+   * transfer a specific known token.
+   *
+   * For any quarantined 1-sat UTXOs that contain MPT OP_RETURN data
+   * addressed to this wallet, we auto-import them into the token store.
+   */
+  private async getSafeUtxos(): Promise<Utxo[]> {
+    const utxos = await this.provider.getUtxos()
+    const safe: Utxo[] = []
+
+    for (const u of utxos) {
+      if (u.satoshis <= TOKEN_SATS) {
+        // Quarantined: attempt MPT auto-import in background, but
+        // never allow spending regardless of result
+        this.tryAutoImport(u).catch(() => {})
+        continue
+      }
+
+      safe.push(u)
+    }
+
+    return safe
+  }
+
+  /**
+   * Check if a quarantined UTXO is an incoming MPT token and
+   * auto-import it into the store if so. Fire-and-forget.
+   */
+  private async tryAutoImport(u: Utxo): Promise<void> {
+    const utxoKey = `${u.txId}:${u.outputIndex}`
+    const tokenKeys = await this.getTokenUtxoKeys()
+    if (tokenKeys.has(utxoKey)) return // already known
+
+    const tx = await this.provider.getSourceTransaction(u.txId)
+
+    // Find the MPT OP_RETURN output and check for a P2PKH output paying to us
+    let opData: TokenOpReturnData | null = null
+    let opReturnIndex = -1
+    let hasP2pkhToUs = false
+    let p2pkhOutputIndex = -1
+
+    for (let i = 0; i < tx.outputs.length; i++) {
+      const output = tx.outputs[i]
+      if (!output.lockingScript) continue
+
+      const decoded = decodeOpReturn(output.lockingScript as LockingScript)
+      if (decoded) {
+        opData = decoded
+        opReturnIndex = i
+        continue
+      }
+
+      // Check if this is a P2PKH output paying to our address
+      if (output.satoshis === TOKEN_SATS) {
+        const scriptHex = output.lockingScript.toHex()
+        if (isP2pkhToAddress(scriptHex, this.myAddress)) {
+          hasP2pkhToUs = true
+          p2pkhOutputIndex = i
+        }
+      }
+    }
+
+    if (!opData || !hasP2pkhToUs) return
+
+    // Determine genesis info
+    const isTransfer = opData.genesisTxId != null
+    const genesisTxId = opData.genesisTxId ?? u.txId
+    // Genesis TX: P2PKH starts at output 1 (OP_RETURN is output 0)
+    // Transfer TX: genesisOutputIndex decoded from on-chain bundle (defaults to 1)
+    const genesisOutputIndex = isTransfer ? (opData.genesisOutputIndex ?? 1) : p2pkhOutputIndex
+
+    const immutableBytes = buildImmutableChunkBytes(
+      opData.tokenName,
+      opData.tokenRules,
+      opData.tokenAttributes,
+    )
+    const tid = computeTokenId(genesisTxId, genesisOutputIndex, immutableBytes)
+    const existing = await this.store.getToken(tid)
+    if (existing) return
+
+    const token: OwnedToken = {
+      tokenId: tid,
+      genesisTxId: genesisTxId,
+      genesisOutputIndex: genesisOutputIndex,
+      currentTxId: u.txId,
+      currentOutputIndex: p2pkhOutputIndex,
+      tokenName: opData.tokenName,
+      tokenRules: opData.tokenRules,
+      tokenAttributes: opData.tokenAttributes,
+      stateData: opData.stateData,
+      satoshis: TOKEN_SATS,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    }
+    const chain: ProofChain = {
+      genesisTxId: genesisTxId,
+      entries: opData.proofChainEntries ?? [],
+    }
+    await this.store.addToken(token, chain)
+    console.debug(`tryAutoImport: imported "${opData.tokenName}" from ${u.txId.slice(0, 12)}...`)
+  }
+
+  // ── Mint ────────────────────────────────────────────────────────
+
+  async createGenesis(params: GenesisParams): Promise<GenesisResult> {
+    const address = this.myAddress
+
+    const utxos = await this.getSafeUtxos()
+    if (utxos.length === 0) {
+      throw new Error('No spendable UTXOs (token UTXOs are protected). Fund your wallet address first.')
+    }
+
+    const tokenRulesHex = encodeTokenRules(
+      params.supply ?? 1,
+      params.divisibility ?? 0,
+      params.restrictions ?? 0,
+      params.rulesVersion ?? 1,
+    )
+    let attrsHex: string
+    let fileOpReturn: LockingScript | null = null
+
+    if (params.fileData) {
+      const hashBytes = Hash.sha256(Array.from(params.fileData.bytes))
+      attrsHex = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
+      fileOpReturn = buildFileOpReturn({
+        mimeType: params.fileData.mimeType,
+        fileName: params.fileData.fileName,
+        bytes: params.fileData.bytes,
+      })
+    } else {
+      attrsHex = params.attributes ?? '00'
+    }
+
+    const stateData = params.stateData ?? ''
+    const opReturnData: TokenOpReturnData = {
+      tokenName: params.tokenName,
+      tokenRules: tokenRulesHex,
+      tokenAttributes: attrsHex,
+      stateData,
+    }
+
+    const supply = params.supply ?? 1
+    const divisibility = params.divisibility ?? 0
+    // Divisible tokens: mint supply * divisibility fragment outputs
+    // Non-divisible: mint supply outputs (one per token)
+    const totalOutputs = divisibility > 0 ? supply * divisibility : supply
+
+    const { rawHex, txId, fee } = await this.buildFundedTx(
+      utxos, address, (t) => {
+        // Output 0 = OP_RETURN (shared metadata)
+        t.addOutput({
+          lockingScript: encodeOpReturn(opReturnData),
+          satoshis: 0,
+        })
+        // Outputs 1..N = P2PKH (one per token/fragment)
+        for (let i = 0; i < totalOutputs; i++) {
+          t.addOutput({
+            lockingScript: new P2PKH().lock(address),
+            satoshis: TOKEN_SATS,
+          })
+        }
+        // Optional: file data OP_RETURN (genesis only)
+        if (fileOpReturn) {
+          t.addOutput({
+            lockingScript: fileOpReturn,
+            satoshis: 0,
+          })
+        }
+      },
+    )
+
+    await this.provider.broadcast(rawHex)
+
+    const immutableBytes = buildImmutableChunkBytes(
+      params.tokenName,
+      tokenRulesHex,
+      attrsHex,
+    )
+
+    const tokenIds: string[] = []
+    const createdAt = new Date().toISOString()
+    const emptyChain: ProofChain = { genesisTxId: txId, entries: [] }
+
+    for (let i = 1; i <= totalOutputs; i++) {
+      const tokenId = computeTokenId(txId, i, immutableBytes)
+      tokenIds.push(tokenId)
+
+      const ownedToken: OwnedToken = {
+        tokenId,
+        genesisTxId: txId,
+        genesisOutputIndex: i,
+        currentTxId: txId,
+        currentOutputIndex: i,
+        tokenName: params.tokenName,
+        tokenRules: tokenRulesHex,
+        tokenAttributes: attrsHex,
+        stateData,
+        satoshis: TOKEN_SATS,
+        status: 'active',
+        createdAt,
+        feePaid: i === 1 ? fee : undefined,
+      }
+
+      await this.store.addToken(ownedToken, emptyChain)
+    }
+
+    return { txId, tokenIds }
+  }
+
+  // ── Transfer ──────────────────────────────────────────────────
+
+  async createTransfer(tokenId: string, recipientAddress: string): Promise<TransferResult> {
+    const token = await this.store.getToken(tokenId)
+    if (!token) throw new Error(`Token not found: ${tokenId}. Make sure you are using the Token ID (not a TXID).`)
+    if (token.status === 'pending_transfer') {
+      throw new Error(`Token already has a pending transfer (TXID: ${token.transferTxId}). Confirm or cancel it first.`)
+    }
+    if (token.status === 'transferred') {
+      throw new Error('Token has already been transferred.')
+    }
+
+    const actualTokenId = token.tokenId
+    const proofChain = await this.store.getProofChain(actualTokenId)
+    const tokenSourceTx = await this.provider.getSourceTransaction(token.currentTxId)
+
+    const fundingCandidates = await this.getSafeUtxos()
+    if (fundingCandidates.length === 0) {
+      throw new Error('No funding UTXOs available (token UTXOs are protected)')
+    }
+
+    const { rawHex, txId, fee } = await this.buildFundedTransferTx(
+      tokenSourceTx, token.currentOutputIndex,
+      fundingCandidates, this.myAddress, (tx) => {
+        // v04: Output 0 = P2PKH (recipient), Output 1 = OP_RETURN
+        tx.addOutput({
+          lockingScript: new P2PKH().lock(recipientAddress),
+          satoshis: TOKEN_SATS,
+        })
+        tx.addOutput({
+          lockingScript: encodeOpReturn({
+            tokenName: token.tokenName,
+            tokenRules: token.tokenRules,
+            tokenAttributes: token.tokenAttributes,
+            stateData: token.stateData,
+            genesisTxId: token.genesisTxId,
+            proofChainEntries: (proofChain ?? { genesisTxId: token.genesisTxId, entries: [] }).entries,
+            genesisOutputIndex: token.genesisOutputIndex,
+          }),
+          satoshis: 0,
+        })
+      },
+    )
+
+    await this.provider.broadcast(rawHex)
+
+    token.status = 'pending_transfer'
+    token.transferTxId = txId
+    await this.store.updateToken(token)
+
+    return { txId, tokenId: actualTokenId }
+  }
+
+  async confirmTransfer(tokenId: string): Promise<void> {
+    const token = await this.store.getToken(tokenId)
+    if (!token) throw new Error(`Token not found: ${tokenId}`)
+    if (token.status !== 'pending_transfer') {
+      throw new Error('Token is not in pending_transfer state')
+    }
+    token.status = 'transferred'
+    await this.store.updateToken(token)
+  }
+
+
+  // ── File Retrieval from Genesis TX ──────────────────────────
+
+  async fetchFileFromGenesis(genesisTxId: string, expectedHash: string): Promise<FileOpReturnData | null> {
+    const tx = await this.provider.getSourceTransaction(genesisTxId)
+
+    for (let i = 0; i < tx.outputs.length; i++) {
+      const output = tx.outputs[i]
+      if (!output.lockingScript) continue
+
+      const file = parseFileOpReturn(output.lockingScript as LockingScript)
+      if (!file) continue
+
+      // Verify hash matches
+      const hashBytes = Hash.sha256(Array.from(file.bytes))
+      const computedHash = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
+      if (computedHash !== expectedHash) continue
+
+      return file
+    }
+
+    return null
+  }
+
+  // ── Send BSV ──────────────────────────────────────────────────
+
+  async sendSats(recipientAddress: string, amount: number): Promise<{ txId: string; fee: number }> {
+    if (amount < 1) throw new Error('Amount must be at least 1 satoshi')
+
+    const utxos = await this.getSafeUtxos()
+    if (utxos.length === 0) throw new Error('No spendable UTXOs (token UTXOs are protected). Fund your wallet first.')
+
+    const { txId, rawHex, fee } = await this.buildFundedTx(
+      utxos, this.myAddress, (tx) => {
+        tx.addOutput({
+          lockingScript: new P2PKH().lock(recipientAddress),
+          satoshis: amount,
+        })
+      },
+    )
+
+    await this.provider.broadcast(rawHex)
+    return { txId, fee }
+  }
+
+  // ── Transfer Confirmation Polling ────────────────────────────
+
+  async pollForConfirmation(
+    txId: string,
+    onStatus?: (msg: string) => void,
+    maxAttempts = 60,
+    intervalMs = 60000,
+  ): Promise<boolean> {
+    for (let i = 0; i < maxAttempts; i++) {
+      onStatus?.(`Waiting for confirmation... (attempt ${i + 1}/${maxAttempts})`)
+
+      try {
+        const proof = await this.provider.getMerkleProof(txId)
+        if (proof) {
+          onStatus?.('Transaction confirmed!')
+          return true
+        }
+      } catch {
+        // Not confirmed yet
+      }
+
+      await new Promise(r => setTimeout(r, intervalMs))
+    }
+
+    onStatus?.('Timed out waiting for confirmation.')
+    return false
+  }
+
+  // ── Proof Polling ─────────────────────────────────────────────
+
+  async pollForProof(
+    tokenId: string,
+    txId: string,
+    onStatus?: (msg: string) => void,
+    maxAttempts = 60,
+    intervalMs = 15000,
+  ): Promise<boolean> {
+    for (let i = 0; i < maxAttempts; i++) {
+      onStatus?.(`Waiting for confirmation... (attempt ${i + 1}/${maxAttempts})`)
+
+      try {
+        const proof = await this.provider.getMerkleProof(txId)
+        if (!proof) throw new Error('not yet')
+
+        const existing = await this.store.getProofChain(tokenId)
+        const token = await this.store.getToken(tokenId)
+        if (!token) return false
+
+        let chain: ProofChain
+        if (!existing || existing.entries.length === 0) {
+          chain = createProofChain(txId, proof)
+        } else {
+          chain = extendProofChain(existing, proof)
+        }
+
+        await this.store.addToken(token, chain)
+        onStatus?.('Proof chain updated!')
+        return true
+      } catch {
+        await new Promise(r => setTimeout(r, intervalMs))
+      }
+    }
+
+    onStatus?.('Timed out waiting for confirmation.')
+    return false
+  }
+
+  async fetchMissingProofs(
+    onStatus?: (msg: string) => void,
+  ): Promise<number> {
+    const tokens = await this.store.listTokens()
+    let fetched = 0
+
+    for (const token of tokens) {
+      if (token.status === 'transferred') continue
+
+      const chain = await this.store.getProofChain(token.tokenId)
+      if (chain && chain.entries.length > 0) continue
+
+      const txId = token.currentTxId
+      onStatus?.(`Fetching proof for ${token.tokenName}...`)
+
+      try {
+        const proof = await this.provider.getMerkleProof(txId)
+        if (!proof) {
+          console.debug(`fetchMissingProofs: no proof yet for ${token.tokenName} (${txId.slice(0, 12)}...)`)
+          continue
+        }
+
+        const newChain = createProofChain(token.genesisTxId, proof)
+        await this.store.addToken(token, newChain)
+        fetched++
+        onStatus?.(`Got proof for ${token.tokenName}`)
+      } catch (e) {
+        console.warn(`fetchMissingProofs: error fetching proof for ${token.tokenName}:`, e)
+        continue
+      }
+    }
+
+    return fetched
+  }
+
+  // ── Incoming Token Detection ──────────────────────────────────
+
+  async checkIncomingTokens(
+    onStatus?: (msg: string) => void,
+  ): Promise<OwnedToken[]> {
+    onStatus?.('Fetching transactions...')
+
+    const [history, utxos] = await Promise.all([
+      this.provider.getAddressHistory(),
+      this.provider.getUtxos(),
+    ])
+
+    const txIdSet = new Set<string>()
+    for (const h of history) txIdSet.add(h.txId)
+    for (const u of utxos) txIdSet.add(u.txId)
+
+    const allTxIds = Array.from(txIdSet)
+    if (allTxIds.length === 0) {
+      onStatus?.('No transactions found.')
+      return []
+    }
+
+    const imported: OwnedToken[] = []
+    const existingTokens = await this.store.listTokens()
+    // Include both currentTxId and genesisTxId to avoid re-scanning known TXs
+    const existingTxIds = new Set<string>()
+    for (const t of existingTokens) {
+      existingTxIds.add(t.currentTxId)
+      existingTxIds.add(t.genesisTxId)
+    }
+
+    onStatus?.(`Scanning ${allTxIds.length} transactions...`)
+    console.debug(`checkIncoming: my address = ${this.myAddress}`)
+    console.debug(`checkIncoming: already known TXs = ${existingTxIds.size}, scanning ${allTxIds.length} total`)
+
+    for (const txId of allTxIds) {
+      if (existingTxIds.has(txId)) {
+        console.debug(`checkIncoming: SKIP ${txId.slice(0, 12)}... (already in store)`)
+        continue
+      }
+
+      try {
+        const tx = await this.provider.getSourceTransaction(txId)
+
+        // Find MPT OP_RETURN and ALL P2PKH outputs paying to us
+        let opData: TokenOpReturnData | null = null
+        const p2pkhOutputIndices: number[] = []
+
+        console.debug(`checkIncoming: ${txId.slice(0, 12)}... has ${tx.outputs.length} outputs`)
+        for (let i = 0; i < tx.outputs.length; i++) {
+          const output = tx.outputs[i]
+          if (!output.lockingScript) continue
+
+          const scriptHex = output.lockingScript.toHex()
+          const sats = output.satoshis ?? 0
+          console.debug(`checkIncoming: ${txId.slice(0, 12)}... output[${i}] sats=${sats} scriptLen=${scriptHex.length / 2} scriptHead=${scriptHex.slice(0, 30)}...`)
+
+          const decoded = decodeOpReturn(output.lockingScript as LockingScript)
+          if (decoded) {
+            opData = decoded
+            console.debug(`checkIncoming: ${txId.slice(0, 12)}... output[${i}] = MPT OP_RETURN "${decoded.tokenName}" (isTransfer=${decoded.genesisTxId != null})`)
+            continue
+          }
+
+          // Log why decodeOpReturn returned null for OP_RETURN-looking scripts
+          if (scriptHex.includes('006a') || scriptHex.startsWith('6a')) {
+            const chunks = (output.lockingScript as LockingScript).chunks
+            console.debug(`checkIncoming: ${txId.slice(0, 12)}... output[${i}] looks like OP_RETURN but decode failed. chunks=${chunks.length}, chunk ops=[${chunks.slice(0, 5).map((c: any) => c.op.toString(16)).join(',')}]`)
+            if (chunks.length >= 3) {
+              const prefixData = chunks[2]?.data ?? []
+              console.debug(`checkIncoming:   chunk[2] data=[${prefixData.slice(0, 5).join(',')}] (expecting 77,80,84 = "MPT")`)
+            }
+            if (chunks.length >= 4) {
+              const versionData = chunks[3]?.data ?? []
+              console.debug(`checkIncoming:   chunk[3] data=[${versionData.join(',')}] (expecting [1])`)
+            }
+          }
+
+          // Check for 1-sat P2PKH paying to our address (collect ALL matches)
+          if (sats === TOKEN_SATS) {
+            const match = isP2pkhToAddress(scriptHex, this.myAddress)
+            console.debug(`checkIncoming: ${txId.slice(0, 12)}... output[${i}] 1-sat P2PKH match=${match}`)
+            if (match) {
+              p2pkhOutputIndices.push(i)
+            }
+          }
+        }
+
+        if (!opData || p2pkhOutputIndices.length === 0) {
+          console.debug(`checkIncoming: SKIP ${txId.slice(0, 12)}... (opData=${!!opData}, p2pkhMatches=${p2pkhOutputIndices.length})`)
+          continue
+        }
+
+        const immutableBytes = buildImmutableChunkBytes(
+          opData.tokenName,
+          opData.tokenRules,
+          opData.tokenAttributes,
+        )
+
+        const isTransfer = opData.genesisTxId != null
+        const genesisTxId = isTransfer ? opData.genesisTxId! : txId
+
+        if (isTransfer) {
+          // Transfer TX: single token, P2PKH at first matched output
+          const p2pkhOutputIndex = p2pkhOutputIndices[0]
+          const genesisOutputIndex = opData.genesisOutputIndex ?? 1
+
+          const tokenId = computeTokenId(genesisTxId, genesisOutputIndex, immutableBytes)
+          const existing = await this.store.getToken(tokenId)
+          if (existing && (existing.status === 'transferred' || existing.status === 'pending_transfer')) {
+            // Return-to-sender: token was sent away but came back to us
+            existing.status = 'active'
+            existing.currentTxId = txId
+            existing.currentOutputIndex = p2pkhOutputIndex
+            existing.transferTxId = undefined
+            await this.store.updateToken(existing)
+
+            const proofChain: ProofChain = {
+              genesisTxId,
+              entries: opData.proofChainEntries ?? [],
+            }
+            await this.store.addToken(existing, proofChain)
+
+            imported.push(existing)
+            onStatus?.(`Returned token: ${existing.tokenName} (${tokenId.slice(0, 12)}...)`)
+          } else if (!existing) {
+            const token: OwnedToken = {
+              tokenId,
+              genesisTxId,
+              genesisOutputIndex,
+              currentTxId: txId,
+              currentOutputIndex: p2pkhOutputIndex,
+              tokenName: opData.tokenName,
+              tokenRules: opData.tokenRules,
+              tokenAttributes: opData.tokenAttributes,
+              stateData: opData.stateData,
+              satoshis: TOKEN_SATS,
+              status: 'active',
+              createdAt: new Date().toISOString(),
+            }
+
+            const proofChain: ProofChain = {
+              genesisTxId,
+              entries: opData.proofChainEntries ?? [],
+            }
+
+            await this.store.addToken(token, proofChain)
+            imported.push(token)
+            onStatus?.(`Found token: ${token.tokenName} (${tokenId.slice(0, 12)}...)`)
+          }
+        } else {
+          // Genesis TX: one token per P2PKH output
+          const emptyChain: ProofChain = { genesisTxId, entries: [] }
+          for (const p2pkhOutputIndex of p2pkhOutputIndices) {
+            const tokenId = computeTokenId(genesisTxId, p2pkhOutputIndex, immutableBytes)
+            const existing = await this.store.getToken(tokenId)
+            if (existing && existing.status === 'active') continue
+
+            if (existing && (existing.status === 'transferred' || existing.status === 'pending_transfer')) {
+              // Return-to-sender: token was sent away but came back to us
+              existing.status = 'active'
+              existing.currentTxId = txId
+              existing.currentOutputIndex = p2pkhOutputIndex
+              existing.transferTxId = undefined
+              await this.store.updateToken(existing)
+              imported.push(existing)
+              onStatus?.(`Returned token: ${existing.tokenName} #${p2pkhOutputIndex} (${tokenId.slice(0, 12)}...)`)
+              continue
+            }
+
+            const token: OwnedToken = {
+              tokenId,
+              genesisTxId,
+              genesisOutputIndex: p2pkhOutputIndex,
+              currentTxId: txId,
+              currentOutputIndex: p2pkhOutputIndex,
+              tokenName: opData.tokenName,
+              tokenRules: opData.tokenRules,
+              tokenAttributes: opData.tokenAttributes,
+              stateData: opData.stateData,
+              satoshis: TOKEN_SATS,
+              status: 'active',
+              createdAt: new Date().toISOString(),
+            }
+
+            await this.store.addToken(token, emptyChain)
+            imported.push(token)
+            onStatus?.(`Found token: ${token.tokenName} #${p2pkhOutputIndex} (${tokenId.slice(0, 12)}...)`)
+          }
+        }
+      } catch (e) {
+        console.debug(`checkIncoming: skipping TX ${txId}:`, e)
+        continue
+      }
+    }
+
+    onStatus?.(imported.length > 0
+      ? `Done! Imported ${imported.length} token(s).`
+      : 'No new incoming tokens found.')
+    return imported
+  }
+
+  // ── Verification (delegates to SPV token protocol) ────────────
+
+  /**
+   * Verify a token using the pure SPV protocol.
+   *
+   * Fetches block headers from the wallet provider, then hands
+   * everything to tokenProtocol.verifyToken() which does the
+   * actual cryptographic verification with no network calls.
+   */
+  async verifyToken(tokenId: string): Promise<VerificationResult> {
+    const token = await this.store.getToken(tokenId)
+    if (!token) return { valid: false, reason: 'Token not found' }
+
+    let chain = await this.store.getProofChain(tokenId)
+
+    // If no proof chain stored, try to fetch one on demand
+    if (!chain || chain.entries.length === 0) {
+      try {
+        const proof = await this.provider.getMerkleProof(token.currentTxId)
+        if (proof) {
+          chain = createProofChain(token.genesisTxId, proof)
+          await this.store.addToken(token, chain)
+        }
+      } catch (e) {
+        console.warn('verifyToken: failed to fetch Merkle proof on demand:', e)
+      }
+    }
+
+    if (!chain || chain.entries.length === 0) {
+      return { valid: false, reason: 'No proof chain (TX may not be confirmed yet)' }
+    }
+
+    // Verify token ID (pure computation)
+    const immutableBytes = buildImmutableChunkBytes(
+      token.tokenName,
+      token.tokenRules,
+      token.tokenAttributes,
+    )
+    const expectedId = computeTokenId(token.genesisTxId, token.genesisOutputIndex, immutableBytes)
+    if (expectedId !== token.tokenId) {
+      return { valid: false, reason: 'Token ID does not match genesis' }
+    }
+
+    // Fetch needed block headers, then verify using pure SPV protocol
+    return verifyProofChainAsync(chain, async (height) => {
+      return this.provider.getBlockHeader(height)
+    })
+  }
+
+  // ── Transaction Building (wallet internals) ───────────────────
+
+  private async buildFundedTx(
+    utxos: Utxo[],
+    changeAddress: string,
+    addOutputs: (tx: Transaction) => void,
+  ): Promise<{ tx: Transaction; rawHex: string; txId: string; fee: number }> {
+    const sorted = [...utxos].sort((a, b) => a.satoshis - b.satoshis)
+
+    const combos: Utxo[][] = []
+    for (const u of sorted) combos.push([u])
+    if (sorted.length >= 2) {
+      for (let i = 0; i < sorted.length; i++)
+        for (let j = i + 1; j < sorted.length; j++)
+          combos.push([sorted[i], sorted[j]])
+    }
+    if (sorted.length >= 3) {
+      for (let i = 0; i < sorted.length; i++)
+        for (let j = i + 1; j < sorted.length; j++)
+          for (let k = j + 1; k < sorted.length; k++)
+            combos.push([sorted[i], sorted[j], sorted[k]])
+    }
+
+    combos.sort((a, b) =>
+      a.reduce((s, u) => s + u.satoshis, 0) - b.reduce((s, u) => s + u.satoshis, 0)
+    )
+
+    let lastError = ''
+    for (const combo of combos) {
+      const tx = new Transaction()
+
+      for (const u of combo) {
+        const sourceTx = await this.provider.getSourceTransaction(u.txId)
+        tx.addInput({
+          sourceTransaction: sourceTx,
+          sourceOutputIndex: u.outputIndex,
+          unlockingScriptTemplate: new P2PKH().unlock(this.key),
+        })
+      }
+
+      addOutputs(tx)
+
+      const fee = estimateFee(combo.length, tx.outputs.length + 1, tx.outputs, this.feePerKb)
+      const totalIn = combo.reduce((s, u) => s + u.satoshis, 0)
+      const protocolOut = tx.outputs.reduce((s, o) => s + (o.satoshis ?? 0), 0)
+      const changeAmount = totalIn - protocolOut - fee
+
+      if (changeAmount < 0) {
+        lastError = `${combo.length} UTXO(s) totalling ${totalIn} sats too small for fees (need ${fee} sats)`
+        continue
+      }
+
+      tx.addOutput({
+        lockingScript: new P2PKH().lock(changeAddress),
+        satoshis: changeAmount,
+      })
+
+      await tx.sign()
+
+      return {
+        tx,
+        rawHex: tx.toHex(),
+        txId: tx.id('hex') as string,
+        fee,
+      }
+    }
+
+    const totalBalance = utxos.reduce((s, u) => s + u.satoshis, 0)
+    throw new Error(
+      `Insufficient balance (${totalBalance} sats) to cover transaction fees. ${lastError}`
+    )
+  }
+
+  private async buildFundedTransferTx(
+    tokenSourceTx: Transaction,
+    tokenOutputIndex: number,
+    fundingUtxos: Utxo[],
+    changeAddress: string,
+    addOutputs: (tx: Transaction) => void,
+  ): Promise<{ tx: Transaction; rawHex: string; txId: string; fee: number }> {
+    const sorted = [...fundingUtxos].sort((a, b) => a.satoshis - b.satoshis)
+
+    const combos: Utxo[][] = []
+    for (const u of sorted) combos.push([u])
+    if (sorted.length >= 2) {
+      for (let i = 0; i < sorted.length; i++)
+        for (let j = i + 1; j < sorted.length; j++)
+          combos.push([sorted[i], sorted[j]])
+    }
+    if (sorted.length >= 3) {
+      for (let i = 0; i < sorted.length; i++)
+        for (let j = i + 1; j < sorted.length; j++)
+          for (let k = j + 1; k < sorted.length; k++)
+            combos.push([sorted[i], sorted[j], sorted[k]])
+    }
+
+    combos.sort((a, b) =>
+      a.reduce((s, u) => s + u.satoshis, 0) - b.reduce((s, u) => s + u.satoshis, 0)
+    )
+
+    let lastError = ''
+    for (const combo of combos) {
+      const tx = new Transaction()
+
+      tx.addInput({
+        sourceTransaction: tokenSourceTx,
+        sourceOutputIndex: tokenOutputIndex,
+        unlockingScriptTemplate: new P2PKH().unlock(this.key),
+      })
+
+      for (const u of combo) {
+        const sourceTx = await this.provider.getSourceTransaction(u.txId)
+        tx.addInput({
+          sourceTransaction: sourceTx,
+          sourceOutputIndex: u.outputIndex,
+          unlockingScriptTemplate: new P2PKH().unlock(this.key),
+        })
+      }
+
+      addOutputs(tx)
+
+      const numInputs = 1 + combo.length
+      const fee = estimateFee(numInputs, tx.outputs.length + 1, tx.outputs, this.feePerKb)
+      const totalIn = TOKEN_SATS + combo.reduce((s, u) => s + u.satoshis, 0)
+      const protocolOut = tx.outputs.reduce((s, o) => s + (o.satoshis ?? 0), 0)
+      const changeAmount = totalIn - protocolOut - fee
+
+      if (changeAmount < 0) {
+        const fundingSats = combo.reduce((s, u) => s + u.satoshis, 0)
+        lastError = `${combo.length} funding UTXO(s) totalling ${fundingSats} sats too small for fees (need ${fee} sats)`
+        continue
+      }
+
+      tx.addOutput({
+        lockingScript: new P2PKH().lock(changeAddress),
+        satoshis: changeAmount,
+      })
+
+      await tx.sign()
+
+      return {
+        tx,
+        rawHex: tx.toHex(),
+        txId: tx.id('hex') as string,
+        fee,
+      }
+    }
+
+    const totalFunding = fundingUtxos.reduce((s, u) => s + u.satoshis, 0)
+    throw new Error(
+      `Insufficient funding balance (${totalFunding} sats) to cover transfer fees. ${lastError}`
+    )
+  }
+}
+
+// ─── Fee Estimation ─────────────────────────────────────────────────
+
+function estimateFee(
+  numInputs: number,
+  numOutputs: number,
+  existingOutputs: { lockingScript?: { toBinary(): number[] }; satoshis?: number }[],
+  feePerKb: number,
+): number {
+  let size = TX_OVERHEAD + numInputs * BYTES_PER_INPUT
+
+  for (const o of existingOutputs) {
+    const scriptLen = o.lockingScript?.toBinary()?.length ?? 25
+    const varintLen = scriptLen < 0xfd ? 1 : scriptLen < 0x10000 ? 3 : 5
+    size += 8 + varintLen + scriptLen
+  }
+
+  size += BYTES_PER_P2PKH_OUTPUT
+
+  return Math.ceil(size * feePerKb / 1000)
+}
+
+// ─── P2PKH Address Detection ────────────────────────────────────────
+
+/**
+ * Check if a locking script (hex) is a standard P2PKH paying to the given address.
+ *
+ * Standard P2PKH script: OP_DUP OP_HASH160 <20 bytes pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+ * Hex pattern: 76a914{40 hex chars}88ac
+ *
+ * We extract the pubKeyHash from the script and compare it against the
+ * pubKeyHash embedded in the BSV address.
+ */
+function isP2pkhToAddress(scriptHex: string, address: string): boolean {
+  // Standard P2PKH is exactly 50 hex chars: 76 a9 14 {20 bytes = 40 hex} 88 ac
+  if (scriptHex.length !== 50) return false
+  if (!scriptHex.startsWith('76a914') || !scriptHex.endsWith('88ac')) return false
+
+  const scriptPkhHex = scriptHex.slice(6, 46) // extract the 20-byte pubKeyHash
+
+  // Decode BSV address (Base58Check) to get the pubKeyHash
+  const addressPkhHex = addressToPubKeyHash(address)
+  if (!addressPkhHex) {
+    console.debug(`isP2pkhToAddress: addressToPubKeyHash("${address}") returned null`)
+    return false
+  }
+
+  const match = scriptPkhHex === addressPkhHex
+  if (!match) {
+    console.debug(`isP2pkhToAddress: script PKH=${scriptPkhHex}, address PKH=${addressPkhHex} -- NO MATCH`)
+  }
+  return match
+}
+
+/**
+ * Decode a Base58Check BSV address to extract the 20-byte pubKeyHash as hex.
+ * Returns null if the address is invalid.
+ */
+function addressToPubKeyHash(address: string): string | null {
+  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+  // Count leading '1' characters (each represents a 0x00 byte)
+  let leadingZeros = 0
+  for (const char of address) {
+    if (char === '1') leadingZeros++
+    else break
+  }
+
+  // Base58 decode
+  let num = BigInt(0)
+  for (const char of address) {
+    const idx = ALPHABET.indexOf(char)
+    if (idx === -1) return null
+    num = num * BigInt(58) + BigInt(idx)
+  }
+
+  // Convert to hex, pad to even length
+  let hex = num.toString(16)
+  if (hex.length % 2) hex = '0' + hex
+
+  // Pad the BigInt result so that leading zeros + BigInt hex = 50 chars (25 bytes)
+  const targetLen = 50 - leadingZeros * 2
+  while (hex.length < targetLen) hex = '0' + hex
+
+  // Prepend leading zero bytes
+  hex = '00'.repeat(leadingZeros) + hex
+
+  if (hex.length !== 50) {
+    console.debug(`addressToPubKeyHash: unexpected length ${hex.length} for "${address}" (leadingZeros=${leadingZeros})`)
+    return null
+  }
+
+  // The pubKeyHash is bytes 1-20 (skip version byte, ignore 4-byte checksum)
+  return hex.slice(2, 42)
+}
