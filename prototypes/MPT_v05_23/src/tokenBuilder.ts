@@ -272,6 +272,10 @@ export class TokenBuilder {
     const prevTxId = input0.sourceTXID
     const prevOutputIndex = input0.sourceOutputIndex
 
+    console.debug(`deriveGenesisOutputIndex: genesisTxId=${genesisTxId.slice(0, 12)}..., input0 keys=${Object.keys(input0).join(',')}`)
+    console.debug(`deriveGenesisOutputIndex: input0.sourceTXID=${prevTxId?.slice(0, 12)}, input0.sourceOutputIndex=${prevOutputIndex}`)
+    console.debug(`deriveGenesisOutputIndex: input0 object=${JSON.stringify(input0, (k, v) => typeof v === 'object' && v !== null ? '[Object]' : v, 2)}`)
+
     if (!prevTxId) {
       console.debug(`deriveGenesisOutputIndex: Input 0 has no sourceTXID`)
       return null
@@ -1446,6 +1450,7 @@ export class TokenBuilder {
           // Transfer TX: single token, P2PKH at first matched output
           const p2pkhOutputIndex = unspentP2pkhIndices[0]
           // v05.21: derive genesisOutputIndex from Input 0 of the TX we already have
+          console.debug(`checkIncoming TRANSFER: txId=${txId.slice(0, 12)}..., genesisTxId=${genesisTxId?.slice(0, 12)}..., p2pkhOutputIndex=${p2pkhOutputIndex}`)
           const genesisOutputIndex = await this.deriveGenesisOutputIndex(tx, genesisTxId)
           if (genesisOutputIndex === null) {
             console.debug(`checkIncoming TRANSFER: failed to derive genesisOutputIndex for ${txId.slice(0, 12)}...`)

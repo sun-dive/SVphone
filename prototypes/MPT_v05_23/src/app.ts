@@ -356,16 +356,22 @@ async function silentCheckIncoming() {
 }
 
 async function refreshTokenList() {
-  const tokens = (await store.listTokens()).sort((a, b) => {
+  let tokens = (await store.listTokens()).sort((a, b) => {
     const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
     const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
     return db - da
   })
-  const fungibleTokens = (await store.listFungibleTokens()).sort((a, b) => {
+
+  // Filter out flushed tokens without metadata (no recovery possible)
+  // Keep flushed tokens WITH metadata (flushTxId) so user can recover them
+  tokens = tokens.filter(t => t.status !== 'flushed' || t.flushTxId)
+
+  let fungibleTokens = (await store.listFungibleTokens()).sort((a, b) => {
     const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
     const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
     return db - da
   })
+
   const container = el('token-list')
   if (!container) return
 
@@ -511,17 +517,24 @@ function renderFragmentCard(genesisTxId: string, group: OwnedToken[], rules: { s
   const barColor = pct === 100 ? '#238636' : pct > 0 ? '#d29922' : '#da3633'
   const completionBar = `<div style="background:#21262d;border-radius:3px;height:8px;margin:6px 0;overflow:hidden;"><div style="background:${barColor};height:100%;width:${pct}%;transition:width 0.3s;"></div></div>`
 
+  // Special styling for flushed tokens
+  const isFlushed = first.status === 'flushed'
+  const bgColor = isFlushed ? '#1a0d0d' : '#0d1117'
+  const borderColor = isFlushed ? '#663333' : '#30363d'
+  const flushedNotice = isFlushed ? `<span style="font-size:0.7em;color:#da3633;font-weight:bold;margin-left:8px;">⚠ FLUSHED</span>` : ''
+
   return `
-    <details class="token-card" style="border:1px solid #30363d;border-radius:6px;padding:0;margin-bottom:8px;">
-      <summary style="cursor:pointer;padding:12px;background:#0d1117;border-radius:6px;display:flex;align-items:center;gap:12px;user-select:none;list-style:none;border-bottom:1px solid #30363d;">
-        <span style="font-weight:bold;flex:1;">${escHtml(first.tokenName)}</span>
+    <details class="token-card" style="border:1px solid ${borderColor};border-radius:6px;padding:0;margin-bottom:8px;${isFlushed ? 'opacity:0.75;' : ''}">
+      <summary style="cursor:pointer;padding:12px;background:${bgColor};border-radius:6px;display:flex;align-items:center;gap:12px;user-select:none;list-style:none;border-bottom:1px solid ${borderColor};">
+        <span style="font-weight:bold;flex:1;${isFlushed ? 'opacity:0.6;' : ''}">${escHtml(first.tokenName)}</span>
+        ${flushedNotice}
         <span class="badge ${pct === 100 ? 'badge-active' : 'badge-pending'}">${heldDisplay} / ${wholeTokens}</span>
         <div style="width:80px;height:6px;background:#21262d;border-radius:3px;overflow:hidden;">
           <div style="background:${barColor};height:100%;width:${pct}%;transition:width 0.3s;"></div>
         </div>
         <span style="font-size:0.8em;color:#8b949e;margin-left:auto;">▼</span>
       </summary>
-      <div style="padding:12px;border-top:1px solid #30363d;">
+      <div style="padding:12px;border-top:1px solid ${borderColor};">
         <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${genesisTxId}</code></div>
         <div class="token-field"><span class="label">Type:</span> Divisible token (${wholeTokens} tokens × ${fragsPerWhole} fragments = ${totalFragments} total pieces)</div>
         <div class="token-field"><span class="label">Completion:</span> ${heldCount}/${totalFragments} pieces (${heldWholes} complete NFT${heldWholes !== 1 ? 's' : ''}${heldRemainder > 0 ? ` + ${heldRemainder}/${fragsPerWhole} pieces` : ''}) ${pct}%</div>
@@ -532,7 +545,8 @@ function renderFragmentCard(genesisTxId: string, group: OwnedToken[], rules: { s
         ${transferredFragments.length > 0 ? `<div class="token-field"><span class="label">Sent:</span> <span class="muted">${formatFragmentIndices(transferredFragments.map(t => t.genesisOutputIndex).sort((a, b) => a - b), fragsPerWhole, wholeTokens)}</span></div>` : ''}
         <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
         <div class="token-field"><span class="label">Rules:</span> ${renderRules(first.tokenRules)}</div>
-        <div class="token-actions" style="flex-direction:column;align-items:stretch;margin-top:12px;">
+        ${isFlushed ? `<div class="token-field"><span class="label">Flushed:</span> <span style="color:#da3633;">${first.flushedAt ? formatDate(first.flushedAt) : 'Yes'}</span></div>` : ''}
+        <div class="token-actions" style="flex-direction:column;align-items:stretch;margin-top:12px;${isFlushed ? 'opacity:0.5;pointer-events:none;' : ''}">
           ${heldCount > 0 ? `
           <div class="row" style="gap:6px;">
             <input id="frag-amt-${genKey}" type="number" min="1" max="${heldCount}" value="1" style="width:80px;margin:0;" />
@@ -682,15 +696,23 @@ function renderTokenCard(t: OwnedToken): string {
     }
   }
 
+  // Special styling for flushed tokens
+  const isFlushed = t.status === 'flushed'
+  const bgColor = isFlushed ? '#1a0d0d' : '#0d1117'
+  const borderColor = isFlushed ? '#663333' : '#30363d'
+  const nameStyling = isFlushed ? 'opacity:0.6;' : ''
+  const flushedNotice = isFlushed ? `<span style="font-size:0.7em;color:#da3633;font-weight:bold;margin-left:8px;">⚠ FLUSHED</span>` : ''
+
   return `
-    <details class="token-card ${t.status === 'transferred' ? 'token-transferred' : ''} ${t.status === 'pending_transfer' ? 'token-pending' : ''}" style="border:1px solid #30363d;border-radius:6px;padding:0;margin-bottom:8px;">
-      <summary style="cursor:pointer;padding:12px;background:#0d1117;border-radius:6px;display:flex;align-items:center;gap:8px;user-select:none;list-style:none;">
-        <span style="font-weight:bold;flex:1;">${escHtml(t.tokenName)}${nftLabel}</span>
+    <details class="token-card ${t.status === 'transferred' ? 'token-transferred' : ''} ${t.status === 'pending_transfer' ? 'token-pending' : ''}" style="border:1px solid ${borderColor};border-radius:6px;padding:0;margin-bottom:8px;${isFlushed ? 'opacity:0.75;' : ''}">
+      <summary style="cursor:pointer;padding:12px;background:${bgColor};border-radius:6px;display:flex;align-items:center;gap:8px;user-select:none;list-style:none;border-bottom:1px solid ${borderColor};">
+        <span style="font-weight:bold;flex:1;${nameStyling}">${escHtml(t.tokenName)}${nftLabel}</span>
         ${statusBadge}
+        ${flushedNotice}
         ${attrsIconHtml}
         <span style="font-size:0.8em;color:#8b949e;margin-left:auto;">▼</span>
       </summary>
-      <div style="padding:12px;border-top:1px solid #30363d;">
+      <div style="padding:12px;border-top:1px solid ${borderColor};">
         <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${t.tokenId}</code></div>
         ${fragmentInfo}
         ${t.tokenScript ? `<div class="token-field"><span class="label">Script:</span> <code class="muted" style="font-size:0.8em;">${escHtml(t.tokenScript)}</code></div>` : ''}
@@ -703,7 +725,8 @@ function renderTokenCard(t: OwnedToken): string {
         ${t.createdAt ? `<div class="token-field"><span class="label">Created:</span> ${formatDate(t.createdAt)}</div>` : ''}
         ${t.feePaid !== undefined ? `<div class="token-field"><span class="label">Fee:</span> ${t.feePaid} sats</div>` : ''}
         ${t.transferTxId ? `<div class="token-field"><span class="label">Transfer TXID:</span> <code class="selectable">${t.transferTxId}</code></div>` : ''}
-        <div class="token-actions">${actions}</div>
+        ${isFlushed ? `<div class="token-field"><span class="label">Flushed:</span> <span style="color:#da3633;">${t.flushedAt ? formatDate(t.flushedAt) : 'Yes'}</span></div>` : ''}
+        <div class="token-actions" ${isFlushed ? 'style="opacity:0.5;pointer-events:none;"' : ''}>${actions}</div>
       </div>
     </details>`
 }
