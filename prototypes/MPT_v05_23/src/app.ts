@@ -15,7 +15,6 @@ import { TokenBuilder } from './tokenBuilder'
 import { TokenStore, LocalStorageBackend, OwnedToken, FungibleToken } from './tokenStore'
 import { decodeTokenRules } from './opReturnCodec'
 import { FileCache } from './fileCache'
-import { scanAndRecoverFlushedTokens, canRecoverToken } from './flushRecovery'
 
 // ─── Globals ────────────────────────────────────────────────────────
 

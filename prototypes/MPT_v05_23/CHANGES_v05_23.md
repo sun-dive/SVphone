@@ -1,15 +1,28 @@
-# MPT v05.23 Changes
+# MPT v05.23 Changes (CORRECTED)
 
 ## Overview
 
-**v05.23** introduces a comprehensive token flushing and recovery system. Users can now voluntarily convert unwanted token UTXOs back into spendable satoshis, with optional metadata preservation for recovery if the UTXO remains unspent on-chain.
+**v05.23** introduces a comprehensive token flushing and recovery system **using internal-only state management**. Users can now mark unwanted token UTXOs as flushed locally, keeping the UTXO unspent on-chain, with optional recovery to restore them to active status.
 
 ### Key Features
 
-1. **Token Flushing** - Convert a token UTXO (1 sat) to spendable sats with optional metadata preservation
-2. **Flushed Token Recovery** - Scan the blockchain for accidentally flushed tokens and re-import them if still unspent
+1. **Token Flushing** - Mark a token as flushed locally (internal state only, instant, no fees, no blockchain transaction)
+2. **Flushed Token Recovery** - Restore a flushed token back to active status (local state change only)
 3. **Status Tracking** - New token statuses: `flushed` and `recovered`
-4. **User-Friendly UI** - Dialogs and recovery scan interface for managing flushed tokens
+4. **User-Friendly UI** - Dialogs and recovery UI for managing flushed tokens
+
+---
+
+## Core Concept
+
+Flushing is a **purely local operation**:
+- The token UTXO remains unspent on-chain
+- The wallet marks it as "flushed" in localStorage only
+- The UTXO is no longer treated as a token by the wallet
+- Recovery: simply change the status back to "active"
+- **No blockchain transactions. No fees. No network calls.**
+
+This allows users to temporarily or permanently hide unwanted tokens from their wallet interface without losing the ability to restore them later (as long as the local metadata is preserved).
 
 ---
 
@@ -23,36 +36,35 @@ export type TokenStatus = 'active' | 'pending' | 'pending_transfer' | 'transferr
 ```
 
 #### OwnedToken Interface Extended
-Added v05.23 flush recovery tracking fields:
+Added v05.23 flush tracking fields:
 ```typescript
 interface OwnedToken {
   // ... existing fields ...
-  flushTxId?: string           // TX that spent this token UTXO as regular sats
-  flushedAt?: string           // ISO timestamp when flushed
-  recoveryBlockHeight?: number // Block height where flushed UTXO can be scanned
+  flushedAt?: string           // ISO timestamp when marked as flushed (local)
 }
 ```
+
+Note: `flushTxId` is NOT used (flushing creates no blockchain transaction).
 
 #### FungibleUtxo Interface Extended
 Added corresponding flush tracking for fungible UTXOs:
 ```typescript
 interface FungibleUtxo {
   // ... existing fields ...
-  flushTxId?: string           // TX that spent this UTXO as regular sats
-  flushedAt?: string           // ISO timestamp when flushed
+  flushedAt?: string           // ISO timestamp when marked as flushed (local)
 }
 ```
 
-**Rationale**: These fields enable tracking of flushed tokens and support the recovery system by recording when and how a token was converted to sats.
+**Rationale**: These fields enable tracking when a token was locally flushed for UI purposes.
 
 ---
 
 ### 2. tokenBuilder.ts (Core Flush API)
 
-#### New Public Methods
+#### Existing Methods (Unchanged)
 
 ##### `flushToken(tokenId: string, preserveMetadata: boolean): Promise<FlushResult>`
-Flushes a single NFT token UTXO.
+Marks a single NFT token as flushed locally.
 
 **Parameters**:
 - `tokenId` - ID of the token to flush
@@ -61,21 +73,20 @@ Flushes a single NFT token UTXO.
 **Returns**:
 ```typescript
 {
-  txId: string          // Transaction ID of flush TX
-  tokenId: string       // Original token ID
-  satoshis: number      // Amount flushed (1)
+  tokenId: string    // Original token ID
+  flushedAt: string  // ISO timestamp
 }
 ```
 
-**Behavior**:
+**Behavior** (Internal-only, no blockchain transaction):
 1. Retrieves the token from storage
-2. Builds a flush transaction spending the 1-sat token UTXO
-3. Records flushTxId and flushedAt in token metadata (if preserveMetadata=true)
-4. Updates token status to `flushed`
-5. Returns flush result
+2. Updates token status to `flushed` (localStorage only)
+3. Records `flushedAt` timestamp
+4. If preserveMetadata=false, deletes token from storage
+5. Returns result
 
 ##### `flushFungibleToken(tokenId: string, utxoIndexes: number[], preserveMetadata: boolean): Promise<FungibleFlushResult>`
-Flushes specific fungible UTXOs from a token basket.
+Marks specific fungible UTXOs as flushed locally.
 
 **Parameters**:
 - `tokenId` - ID of the fungible token
@@ -85,105 +96,44 @@ Flushes specific fungible UTXOs from a token basket.
 **Returns**:
 ```typescript
 {
-  txId: string         // Transaction ID of flush TX
-  tokenId: string      // Original token ID
+  tokenId: string     // Original token ID
   amountFlushed: number // Sum of flushed satoshis
-  change: number       // Remaining balance after flush
+  flushedAt: string   // ISO timestamp
 }
 ```
 
-#### New Private Methods
+#### New Methods (v05.23)
 
-##### `buildFlushTx(token: OwnedToken, fundingUtxos: Utxo[]): Promise<Transaction>`
-Constructs a flush transaction.
+##### `recoverToken(tokenId: string): Promise<{ tokenId: string; status: string }>`
+Restores a flushed token back to active status (internal-only).
 
-**Structure**:
-- **Input 0**: The 1-sat token UTXO being flushed
-- **Inputs 1+**: Optional funding UTXOs if change is needed
-- **Output 0**: P2PKH change address (no OP_RETURN, making it spendable)
-- **No metadata encoding** - The transaction contains only sats, no token protocol data
+**Behavior**:
+1. Loads token from storage
+2. Verifies status is `flushed`
+3. Changes status to `active`
+4. Clears `flushedAt` timestamp
+5. Saves to storage
+6. Returns success
 
-##### `buildFungibleFlushTx(token: FungibleToken, utxoIndexes: number[], fundingUtxos: Utxo[]): Promise<Transaction>`
-Constructs a flush transaction for fungible UTXOs.
+**No blockchain transaction. Instant.**
 
-**Structure**:
-- **Inputs 0-N**: Fungible UTXOs being flushed (in order)
-- **Inputs N+**: Funding UTXOs if needed
-- **Output 0**: P2PKH change output
-- **No token protocol data** - Pure sat transaction
+##### `recoverFungibleUtxo(tokenId: string, utxoIndex: number): Promise<{ tokenId: string; utxoIndex: number }>`
+Restores a specific flushed fungible UTXO back to active status (internal-only).
+
+**Behavior**:
+1. Loads fungible token from storage
+2. Locates the specific UTXO
+3. Verifies status is `flushed`
+4. Changes status to `active`
+5. Clears `flushedAt` timestamp
+6. Saves to storage
+7. Returns success
+
+**No blockchain transaction. Instant.**
 
 ---
 
-### 3. flushRecovery.ts (New Recovery Module)
-
-A new module that enables blockchain scanning and recovery of flushed tokens.
-
-#### Exported Interfaces
-
-```typescript
-export interface FlushedTokenInfo {
-  flushedTxId: string        // TX that spent the 1-sat token UTXO
-  blockHeight: number        // Confirmation height
-  satoshis: number           // Amount in flushed output
-  isSpent: boolean           // Whether this UTXO has been spent since
-  originalTokenId?: string   // If known from local storage
-}
-
-export interface RecoveryResult {
-  recovered: OwnedToken[]    // Successfully recovered tokens
-  failed: string[]           // Failed recovery attempts (error messages)
-  unspent: FlushedTokenInfo[] // Flushed tokens still unspent (recoverable)
-}
-```
-
-#### Exported Functions
-
-##### `scanAndRecoverFlushedTokens(provider: WalletProvider, store: TokenStore, onStatus?: (msg: string) => void): Promise<RecoveryResult>`
-
-Main recovery orchestrator that scans the blockchain for flushed tokens.
-
-**Algorithm**:
-1. Queries wallet address transaction history
-2. Fetches all UTXOs currently owned
-3. Iterates through transaction history looking for 1-sat outputs
-4. Checks if 1-sat outputs are still unspent (not in current UTXO set)
-5. Matches unspent 1-sat outputs against locally stored tokens with `flushTxId`
-6. For each recoverable token, updates status to `recovered` and removes flush metadata
-7. Reports results with recovered, failed, and unspent categories
-
-**Returns**:
-- `recovered[]` - Tokens successfully recovered (status changed to 'recovered')
-- `unspent[]` - Flushed tokens found unspent (can be recovered)
-- `failed[]` - Error messages for failed recovery attempts
-
-**Status Callback**:
-If `onStatus` callback provided, receives status messages:
-- "Scanning for flushed tokens..."
-- "Checking N transactions..."
-- "Found N recoverable flushed token(s)"
-- "Recovered: TOKEN_NAME (ID...)"
-
-##### `canRecoverToken(tokenId: string, provider: WalletProvider, store: TokenStore): Promise<boolean>`
-
-Helper function to check if a specific token's flushed UTXO still exists unspent on-chain.
-
-**Algorithm**:
-1. Retrieves token from storage and checks for `flushTxId`
-2. Fetches address history and current UTXOs
-3. Finds the flush transaction in history
-4. Checks if any output from that transaction is in current UTXO set
-5. Returns true if found unspent, false otherwise
-
-**Use Case**: Quick check before displaying "Recover" button on flushed tokens
-
----
-
-### 4. app.ts (UI Integration & Event Handlers)
-
-#### New Imports
-```typescript
-import { scanAndRecoverFlushedTokens, canRecoverToken } from './flushRecovery'
-```
+### 3. app.ts (UI Integration & Event Handlers)
 
 #### Updated Functions
 
@@ -197,7 +147,7 @@ Enhanced to show:
 - **For active tokens**: Added "Flush Token" button (red, #da3633)
 - **For flushed tokens**: Added "Recover" button (green, #238636)
 
-#### New Event Handler Functions
+#### Event Handler Functions
 
 ##### `_openFlushDialog(tokenId: string)`
 Opens the flush confirmation dialog.
@@ -209,163 +159,121 @@ Opens the flush confirmation dialog.
 4. Stores tokenId globally for confirm handler
 
 ##### `_confirmFlushToken()`
-Confirms and executes the flush operation.
+Confirms and executes the flush operation (local state change only).
 
 **Actions**:
 1. Reads preserve-metadata checkbox state
-2. Calls `builder.flushToken()` with setting
-3. Displays transaction result
-4. Updates UI with TXID and amount
-5. Refreshes token list and balance
+2. Calls `builder.flushToken()` (internal-only)
+3. Displays result message
+4. Refreshes token list and balance
 
 ##### `_cancelFlushDialog()`
 Closes the flush dialog without action.
 
 ##### `_recoverFlushedToken(tokenId: string)`
-Quick recovery for a specific flushed token.
+Recovery for a specific flushed token (local state change only).
 
 **Actions**:
-1. Checks if token can be recovered using `canRecoverToken()`
-2. Updates token status to 'recovered'
-3. Removes flush metadata
-4. Refreshes UI
+1. Loads token from storage
+2. Verifies status is `flushed`
+3. Calls `builder.recoverToken()` (internal-only)
+4. Updates token status to 'active' in display
+5. Refreshes UI
 
 ##### `_startRecoveryScan()`
-Initiates full blockchain scan for all flushed tokens.
+Scans local storage for flushed tokens.
 
 **Actions**:
-1. Calls `scanAndRecoverFlushedTokens()` with status callback
-2. Displays results in recovery-results div with:
-   - Recovered tokens (green box)
-   - Recoverable unspent tokens (yellow box)
-   - Failed recoveries (red box)
-3. Shows quick "Recover Token" buttons for unspent tokens
-4. Updates transfer-result with summary
+1. Lists all tokens from localStorage
+2. Filters for status='flushed'
+3. Displays results in recovery-results div with:
+   - Count of flushed tokens
+   - List of each flushed token with "Restore Token" button
+4. Shows summary
 
-**Result Display Format**:
-- Each recovered token shows name and ID
-- Each unspent token shows block height, TXID, and satoshis
-- Individual "Recover Token" buttons for manual recovery
-
----
-
-### 5. index.html (UI Elements)
-
-#### New Flush Dialog
-```html
-<dialog id="flush-dialog">
-  <h3>Flush Token</h3>
-  <div class="field">
-    <span class="label">Token:</span>
-    <code id="flush-token-name"></code>
-  </div>
-  <div class="field">
-    <label>
-      <input type="checkbox" id="flush-preserve" checked />
-      <span>Preserve metadata for recovery</span>
-    </label>
-  </div>
-  <div class="row">
-    <button onclick="document.getElementById('flush-dialog').close()">Cancel</button>
-    <button onclick="window._confirmFlushToken()">Confirm Flush</button>
-  </div>
-</dialog>
-```
-
-**Styling**:
-- 400px max-width centered modal
-- Dark theme (#161b22 background)
-- Red "Confirm Flush" button (#da3633)
-- Explain metadata preservation with help text
-
-#### New Recovery Section
-```html
-<section id="recovery-section">
-  <h2>Token Recovery (v05.23)</h2>
-  <button id="btn-recovery-scan" onclick="window._startRecoveryScan()">
-    Scan for Flushed Tokens
-  </button>
-  <div id="recovery-results"></div>
-</section>
-```
-
-**Features**:
-- Scan button for initiating recovery
-- Results area showing recovered/recoverable/failed tokens
-- Individual "Recover Token" buttons for each unspent token
-- Color-coded result boxes
+**No blockchain scan. Local storage only.**
 
 ---
 
 ## Workflow Examples
 
 ### Example 1: Flush a Token with Metadata Preservation
+
 1. User clicks "Flush Token" button on an active NFT card
 2. Dialog opens showing token name and recovery info
 3. "Preserve metadata for recovery" checkbox is checked (default)
 4. User clicks "Confirm Flush"
-5. Token UTXO (1 sat) is converted to P2PKH output
-6. Token status changes to `flushed` in localStorage
-7. `flushTxId` and `flushedAt` are recorded
-8. Token can be recovered if UTXO remains unspent for 24 hours
+5. Token status changes to `flushed` in localStorage (instant, no fee)
+6. UTXO remains unspent on-chain
+7. Token can be recovered anytime by changing status back to `active`
 
-### Example 2: Scan and Recover Flushed Tokens
+### Example 2: Restore a Flushed Token
+
 1. User opens "Token Recovery" section
 2. Clicks "Scan for Flushed Tokens"
-3. System queries blockchain for all 1-sat outputs matching flush TXIDs
-4. Finds 3 recoverable tokens (still unspent)
-5. Automatically recovers them and updates status to `recovered`
-6. Shows summary: "✓ Recovered: 3"
-7. Tokens are now usable again
+3. System scans localStorage and lists flushed tokens
+4. User clicks "Restore Token" on any flushed token
+5. Token status changes from `flushed` to `active` (instant)
+6. Token reappears in wallet as active
 
-### Example 3: Flush Without Recovery (Permanent Deletion)
+### Example 3: Permanently Delete a Token
+
 1. User opens flush dialog
 2. Unchecks "Preserve metadata for recovery"
 3. Clicks "Confirm Flush"
 4. Token metadata is immediately deleted from localStorage
-5. Token UTXO is converted to spendable sats
-6. Token cannot be recovered even if UTXO is still on-chain
-7. Use case: Permanently destroy tokens without recovery option
+5. Token cannot be recovered (metadata gone)
+6. UTXO becomes a regular 1-sat satoshi on-chain (unused)
 
 ---
 
 ## Technical Details
 
-### Flush Transaction Structure
-A flush transaction is a regular P2PKH transaction with no token protocol encoding:
+### No Blockchain Transactions
 
-```
-TX Structure:
-├─ Input 0: The 1-sat token UTXO
-├─ Input 1+: Funding UTXOs (if change needed)
-└─ Output 0: P2PKH output (spendable sats, no OP_RETURN)
-```
-
-**Key Point**: Flush transactions contain NO token protocol data. The 1-sat UTXO becomes indistinguishable from regular satoshis on-chain.
+Flushing creates **no blockchain transaction**:
+- No spending of the token UTXO
+- No transaction fees
+- No mining confirmation needed
+- No recovery scanning of the blockchain
 
 ### Recovery Strategy
-The recovery system works by:
-1. **Scanning** address transaction history for 1-sat outputs
-2. **Matching** them against locally stored tokens with `flushTxId`
-3. **Checking** if the UTXO is still in the current UTXO set (unspent)
-4. **Re-importing** tokens with status='recovered'
 
-**24-Hour Window**: Tokens can be recovered as long as the flushed UTXO remains unspent on the blockchain. This could be indefinite if no one spends that output.
+The recovery system works by:
+1. **Scanning** localStorage for tokens with status='flushed'
+2. **Displaying** each flushed token with restore button
+3. **Restoring** by changing status from 'flushed' to 'active'
 
 ### Status Transitions
+
 ```
 active → [flush] → flushed
                       ↓
-                  [recover] → recovered (if unspent)
-                                    or lost (if spent)
+                  [recover] → active (if metadata preserved)
+                                or permanently deleted (if not preserved)
 ```
 
-### Fungible Token Flushing
-The system also supports flushing individual UTXOs from a fungible token basket:
-- Select which UTXOs to flush
-- Flushed UTXOs are removed from the basket
-- Remaining UTXOs continue as a fungible token
-- Each flushed UTXO is tracked separately for recovery
+### UTXO Lifecycle During Flush
+
+```
+UTXO on-chain: [unspent 1-sat token UTXO]
+                        ↓ flush (local only)
+Wallet storage: [token with status='flushed']
+                        ↓ recover (local only)
+Wallet storage: [token with status='active']
+
+UTXO on-chain: [still unspent 1-sat token UTXO]
+```
+
+The UTXO never changes on-chain. Only the wallet's local interpretation changes.
+
+---
+
+## Storage Model
+
+- **Token Metadata:** localStorage with prefix `mpt:data:token:TOKENID`
+- **Flushed Timestamp:** Stored in token's `flushedAt` field
+- **No blockchain data:** No `flushTxId` or recovery scanning
 
 ---
 
@@ -375,55 +283,28 @@ The system also supports flushing individual UTXOs from a fungible token basket:
 - Existing token structures work unchanged
 - New flush/recovery fields are optional
 - Tokens without flush metadata work normally
-- Legacy tokens can be flushed without issues
 - No migration required for existing wallets
 
 ---
 
-## Testing Checklist
+## Implementation Summary
 
-- [ ] Flush a single NFT token and verify status changes to `flushed`
-- [ ] Flush with metadata preservation enabled
-- [ ] Flush with metadata preservation disabled
-- [ ] Verify flushed token UTXO appears as regular sats
-- [ ] Scan for flushed tokens immediately after flush
-- [ ] Wait for block confirmation and scan again
-- [ ] Verify recovered tokens show status `recovered`
-- [ ] Attempt to flush already-flushed tokens (should fail gracefully)
-- [ ] Flush fungible token UTXOs
-- [ ] Recover fungible token UTXO
-- [ ] Test recovery with network issues (fallback handling)
-
----
-
-## Implementation Notes
-
-### Memory & Storage
-- Flushed token metadata stored in localStorage under `mpt:data:token:TOKENID`
-- Per-token: ~500 bytes (name, rules, script, attributes, state)
-- No additional database needed
-- Recovery scan is read-only (doesn't modify blockchain)
-
-### Performance
-- `scanAndRecoverFlushedTokens()` is O(N) where N = transaction count in history
-- Typical address: 100-1000 TXs, scan completes in <5 seconds
-- `canRecoverToken()` is O(M) where M = UTXO count, typically <100ms
-
-### Error Handling
-- Network errors: Fails gracefully with error message
-- Missing tokens: Skips silently in scan
-- Corrupted metadata: Logged to console, recovery continues
-- Blockchain pruning: Recoverable tokens detected, user must have node access
+| Aspect | v05.22 | v05.23 |
+|--------|--------|--------|
+| Flushing | N/A | Internal-only status change |
+| Recovery | N/A | Status change from 'flushed' to 'active' |
+| Blockchain transaction | N/A | None |
+| Fees | N/A | None |
+| Speed | N/A | Instant |
+| UI | N/A | Flush/Recover buttons and dialog |
 
 ---
 
 ## Future Enhancements
 
 Possible improvements for v05.24+:
-1. Batch flush operations (flush multiple tokens in one TX)
+1. Batch flush operations (flush multiple tokens in one action)
 2. Selective recovery (recover only specific tokens, not all)
-3. Recovery via UTXO lookup (if you know the exact UTXO)
-4. Token "destruction" with proof (crypto commitment)
-5. Automated recovery scheduling (background recovery)
-6. Cross-wallet recovery (provide address history, recover without key)
+3. Automated "Hide" filters (hide flushed tokens from main view)
+4. Metadata-only storage (save token attributes separately for recovery)
 

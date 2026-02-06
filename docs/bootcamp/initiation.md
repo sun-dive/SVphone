@@ -4,7 +4,7 @@ Before making any code changes, read and understand these files in order:
 
 ## 1. Bitcoin White Paper
 Bitcoin SV (BSV) is the original Bitcoin and follows the original Bitcoin White Paper.
-In particular, pay attention to section 8 which talk about SPV.
+In particular, pay attention to section 8 which talks about SPV. Reply with the text from section 8.
 docs\bitcoin.pdf
 
 ## 2. Core Documentation (read first)
@@ -12,12 +12,23 @@ docs\bitcoin.pdf
 Read these to understand the protocol design and architecture:
 
 1. `docs/MPT_fundamental_design_principles.md` — Token lifecycle, SPV verification, data fields, immutable vs mutable fields
+
+Reply with a concise summary of what you read.
+
+
 2. `docs/MPT_structure_and_function.md` — Detailed structure and function documentation (note: covers v05 despite filename)
+
+Reply with a concise summary of what you read.
+
 
 ## 3. Protocol Layer (pure SPV, no network dependencies)
 
 Look at the lastest prototype in this folder
 3. `prototypes/`
+
+Reply with a concise summary of the latest code base and design.
+
+Reply with a concise summary of how close to the MPT_fundamental_design_principles.md document is the latest code and in which areas does it deviate.
 
 
 ## Key Concepts to Understand

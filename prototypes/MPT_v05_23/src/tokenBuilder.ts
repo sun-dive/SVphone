@@ -1947,136 +1947,49 @@ export class TokenBuilder {
     )
   }
 
-  // ── Flush Transaction Builders (v05.23) ────────────────────────
-
   /**
-   * Build a transaction that flushes a single token UTXO.
-   * Converts the 1-sat token UTXO to a normal P2PKH output.
+   * Recover a flushed token: change status from 'flushed' back to 'active'
+   * (internal-only, no blockchain transaction)
    */
-  private async buildFlushTx(
-    tokenUtxo: { txId: string; outputIndex: number; satoshis: number },
-    tokenSourceTx: Transaction,
-    fundingUtxos: Utxo[],
-    changeAddress: string,
-  ): Promise<{
-    rawHex: string
-    txId: string
-    fee: number
-    spentInputs: Array<{ txId: string; outputIndex: number }>
-    changeOutput: { outputIndex: number; satoshis: number } | null
-  }> {
-    const tx = new Transaction()
+  async recoverToken(tokenId: string): Promise<{ tokenId: string; status: string }> {
+    const token = await this.store.getToken(tokenId)
+    if (!token) throw new Error(`Token not found: ${tokenId}`)
 
-    // Input 0: The 1-sat token UTXO
-    tx.addInput({
-      sourceTransaction: tokenSourceTx,
-      sourceOutputIndex: tokenUtxo.outputIndex,
-      unlockingScriptTemplate: new P2PKH().unlock(this.key),
-    })
-
-    // Add funding inputs if needed for fees
-    for (const u of fundingUtxos) {
-      const sourceTx = await this.provider.getSourceTransaction(u.txId)
-      tx.addInput({
-        sourceTransaction: sourceTx,
-        sourceOutputIndex: u.outputIndex,
-        unlockingScriptTemplate: new P2PKH().unlock(this.key),
-      })
+    if (token.status !== 'flushed') {
+      throw new Error(`Token is not flushed (current status: ${token.status})`)
     }
 
-    // Calculate fee
-    const totalIn = tokenUtxo.satoshis + fundingUtxos.reduce((s, u) => s + u.satoshis, 0)
-    const fee = estimateFee(1 + fundingUtxos.length, 1, [], this.feePerKb)
+    // Change status back to active
+    token.status = 'active'
+    token.flushedAt = undefined
+    await this.store.updateToken(token)
 
-    if (totalIn < fee) {
-      throw new Error(
-        `Insufficient balance to cover flush fee. Have ${totalIn} sats, need ${fee} for fee.`,
-      )
-    }
-
-    const changeAmount = totalIn - fee
-
-    // Output: Change to owner (normal P2PKH, no OP_RETURN)
-    tx.addOutput({
-      lockingScript: new P2PKH().lock(changeAddress),
-      satoshis: changeAmount,
-    })
-
-    await tx.sign()
-
-    const txId = tx.id('hex') as string
-
-    return {
-      rawHex: tx.toHex(),
-      txId,
-      fee,
-      spentInputs: [
-        { txId: tokenUtxo.txId, outputIndex: tokenUtxo.outputIndex },
-        ...fundingUtxos.map(u => ({ txId: u.txId, outputIndex: u.outputIndex })),
-      ],
-      changeOutput: changeAmount > 0 ? { outputIndex: 0, satoshis: changeAmount } : null,
-    }
+    console.debug(`recoverToken: restored token ${tokenId} to active status`)
+    return { tokenId, status: 'active' }
   }
 
   /**
-   * Build a transaction that flushes fungible token UTXOs.
-   * All specified UTXOs are spent as regular satoshis.
+   * Recover a flushed fungible UTXO: change status from 'flushed' back to 'active'
+   * (internal-only, no blockchain transaction)
    */
-  private async buildFungibleFlushTx(
-    tokenId: string,
-    utxosToFlush: FungibleUtxo[],
-    changeAddress: string,
-  ): Promise<{
-    rawHex: string
-    txId: string
-    fee: number
-    spentInputs: Array<{ txId: string; outputIndex: number }>
-    changeOutput: { outputIndex: number; satoshis: number } | null
-  }> {
-    const tx = new Transaction()
+  async recoverFungibleUtxo(tokenId: string, utxoIndex: number): Promise<{ tokenId: string; utxoIndex: number }> {
+    const fungible = await this.store.getFungibleToken(tokenId)
+    if (!fungible) throw new Error(`Fungible token not found: ${tokenId}`)
 
-    // Collect inputs from UTXOs to flush
-    for (const utxo of utxosToFlush) {
-      const sourceTx = await this.provider.getSourceTransaction(utxo.txId)
-      tx.addInput({
-        sourceTransaction: sourceTx,
-        sourceOutputIndex: utxo.outputIndex,
-        unlockingScriptTemplate: new P2PKH().unlock(this.key),
-      })
+    const utxo = fungible.utxos[utxoIndex]
+    if (!utxo) throw new Error(`UTXO index out of range: ${utxoIndex}`)
+
+    if (utxo.status !== 'flushed') {
+      throw new Error(`UTXO is not flushed (current status: ${utxo.status})`)
     }
 
-    // Calculate fee
-    const totalIn = utxosToFlush.reduce((sum, u) => sum + u.satoshis, 0)
-    const fee = estimateFee(utxosToFlush.length, 1, [], this.feePerKb)
+    // Change status back to active
+    utxo.status = 'active'
+    utxo.flushedAt = undefined
+    await this.store.updateFungibleToken(fungible)
 
-    if (totalIn < fee) {
-      throw new Error(
-        `Insufficient balance to cover flush fee. Have ${totalIn} sats, need ${fee} for fee.`,
-      )
-    }
-
-    const changeAmount = totalIn - fee
-
-    // Output: All sats to owner (normal P2PKH)
-    tx.addOutput({
-      lockingScript: new P2PKH().lock(changeAddress),
-      satoshis: changeAmount,
-    })
-
-    await tx.sign()
-
-    const txId = tx.id('hex') as string
-
-    return {
-      rawHex: tx.toHex(),
-      txId,
-      fee,
-      spentInputs: utxosToFlush.map(u => ({
-        txId: u.txId,
-        outputIndex: u.outputIndex,
-      })),
-      changeOutput: changeAmount > 0 ? { outputIndex: 0, satoshis: changeAmount } : null,
-    }
+    console.debug(`recoverFungibleUtxo: restored UTXO ${utxoIndex} of ${tokenId} to active status`)
+    return { tokenId, utxoIndex }
   }
 }
 
