@@ -1970,7 +1970,6 @@ export class TokenBuilder {
       `Insufficient funding balance (${totalFunding} sats) to cover transfer fees. ${lastError}`
     )
   }
-}
 
   // ── Flush Transaction Builders (v05.23) ────────────────────────
 
@@ -2103,6 +2102,7 @@ export class TokenBuilder {
       changeOutput: changeAmount > 0 ? { outputIndex: 0, satoshis: changeAmount } : null,
     }
   }
+}
 
 // ─── Fee Estimation ─────────────────────────────────────────────────
 
