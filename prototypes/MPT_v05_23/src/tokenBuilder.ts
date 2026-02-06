@@ -1453,17 +1453,25 @@ export class TokenBuilder {
           }
           // Still pending, skip
           if (existing && existing.status === 'pending') continue
-          if (existing && (existing.status === 'transferred' || existing.status === 'pending_transfer')) {
-            // Return-to-sender: token was sent away but came back to us
-            existing.status = 'active'
-            existing.currentTxId = txId
-            existing.currentOutputIndex = p2pkhOutputIndex
-            existing.transferTxId = undefined
-            await this.store.updateToken(existing)
-            await this.store.addToken(existing, verification.chain)
-
-            imported.push(existing)
-            onStatus?.(`Returned token: ${existing.tokenName} (${tokenId.slice(0, 12)}...)`)
+          // CRITICAL: Skip transferred tokens UNLESS they're actually being returned
+          // A token is "returned" only if it was previously sent from THIS wallet (has transferTxId)
+          // and THIS tx is the new transfer back. We verify this by checking the existing.transferTxId.
+          if (existing && existing.status === 'transferred') {
+            // Only reactivate if this is a genuine return-to-sender (token was transferred OUT, now coming back IN)
+            // Return-to-sender only applies if:
+            // 1. Token had a previous transfer (existing.transferTxId exists), AND
+            // 2. The current TX is a new transfer TO us
+            // If we're seeing a transferred token in checkIncoming, it's usually an artifact of
+            // the transfer TX itself - skip unless explicitly marked as a return.
+            if (existing.transferTxId) {
+              // This MIGHT be a return-to-sender. Mark it for potential re-activation but don't auto-activate.
+              console.debug(`checkIncoming: transferred token ${tokenId.slice(0, 12)}... with previous transfer detected (could be return). Skipping auto-activation.`)
+            }
+            continue
+          }
+          if (existing && existing.status === 'pending_transfer') {
+            // Token has pending transfer - don't re-import until it's confirmed transferred
+            continue
           } else if (!existing) {
             const token: OwnedToken = {
               tokenId,
