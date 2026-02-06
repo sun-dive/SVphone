@@ -409,18 +409,24 @@ async function refreshTokenList() {
     ).join('')
     const activeCount = group.filter(t => t.status === 'active').length
     return `
-    <div class="token-card">
-      <div class="token-header">${escHtml(first.tokenName)} <span class="badge badge-active">${activeCount}/${group.length} active</span></div>
-      <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${genesisTxId}</code></div>
-      <div class="token-field"><span class="label">Rules:</span> ${renderRules(first.tokenRules)}</div>
-      <div class="token-field" style="margin-top:6px;">
-        <span class="label">Select token:</span>
-        <select id="${selectId}" onchange="window._selectGroupToken('${genesisTxId.slice(0, 12)}', this.value)" style="background:#0d1117;color:#c9d1d9;border:1px solid #30363d;padding:4px 8px;border-radius:4px;">
-          ${options}
-        </select>
+    <details class="token-card" style="border:1px solid #30363d;border-radius:6px;padding:0;margin-bottom:8px;">
+      <summary style="cursor:pointer;padding:12px;background:#0d1117;border-radius:6px;display:flex;align-items:center;gap:8px;user-select:none;list-style:none;border-bottom:1px solid #30363d;">
+        <span style="font-weight:bold;flex:1;">${escHtml(first.tokenName)}</span>
+        <span class="badge badge-active">${activeCount}/${group.length}</span>
+        <span style="font-size:0.8em;color:#8b949e;margin-left:auto;">▼</span>
+      </summary>
+      <div style="padding:12px;">
+        <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${genesisTxId}</code></div>
+        <div class="token-field"><span class="label">Rules:</span> ${renderRules(first.tokenRules)}</div>
+        <div class="token-field" style="margin-top:6px;">
+          <span class="label">Select token:</span>
+          <select id="${selectId}" onchange="window._selectGroupToken('${genesisTxId.slice(0, 12)}', this.value)" style="background:#0d1117;color:#c9d1d9;border:1px solid #30363d;padding:4px 8px;border-radius:4px;width:100%;">
+            ${options}
+          </select>
+        </div>
+        <div id="${detailId}" style="margin-top:12px;">${renderTokenDetail(first)}</div>
       </div>
-      <div id="${detailId}">${renderTokenDetail(first)}</div>
-    </div>`
+    </details>`
   }).join('')
 
   container.innerHTML = fungibleHtml + nftHtml
@@ -506,40 +512,49 @@ function renderFragmentCard(genesisTxId: string, group: OwnedToken[], rules: { s
   const completionBar = `<div style="background:#21262d;border-radius:3px;height:8px;margin:6px 0;overflow:hidden;"><div style="background:${barColor};height:100%;width:${pct}%;transition:width 0.3s;"></div></div>`
 
   return `
-    <div class="token-card">
-      <div class="token-header">${escHtml(first.tokenName)} <span class="badge ${pct === 100 ? 'badge-active' : 'badge-pending'}">${heldDisplay} / ${wholeTokens} whole</span></div>
-      <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${genesisTxId}</code></div>
-      <div class="token-field"><span class="label">Type:</span> Divisible token (${wholeTokens} tokens × ${fragsPerWhole} fragments = ${totalFragments} total pieces)</div>
-      <div class="token-field"><span class="label">Completion:</span> ${heldCount}/${totalFragments} pieces (${heldWholes} complete NFT${heldWholes !== 1 ? 's' : ''}${heldRemainder > 0 ? ` + ${heldRemainder}/${fragsPerWhole} pieces` : ''}) ${pct}%</div>
-      ${completionBar}
-      <div class="token-field"><span class="label">Held:</span> <span style="color:#3fb950;">${formatFragmentIndices(heldIndices, fragsPerWhole, wholeTokens)}</span></div>
-      ${missingIndices.length > 0 ? `<div class="token-field"><span class="label">Missing:</span> <span class="muted">${formatFragmentIndices(missingIndices, fragsPerWhole, wholeTokens)}</span></div>` : ''}
-      ${pendingFragments.length > 0 ? `<div class="token-field"><span class="label">Pending:</span> <span style="color:#d29922;">${formatFragmentIndices(pendingFragments.map(t => t.genesisOutputIndex).sort((a, b) => a - b), fragsPerWhole, wholeTokens)}</span></div>` : ''}
-      ${transferredFragments.length > 0 ? `<div class="token-field"><span class="label">Sent:</span> <span class="muted">${formatFragmentIndices(transferredFragments.map(t => t.genesisOutputIndex).sort((a, b) => a - b), fragsPerWhole, wholeTokens)}</span></div>` : ''}
-      <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
-      <div class="token-field"><span class="label">Rules:</span> ${renderRules(first.tokenRules)}</div>
-      <div class="token-actions" style="flex-direction:column;align-items:stretch;">
-        ${heldCount > 0 ? `
-        <div class="row" style="gap:6px;">
-          <input id="frag-amt-${genKey}" type="number" min="1" max="${heldCount}" value="1" style="width:80px;margin:0;" />
-          <button onclick="window._transferFragments('${genesisTxId}', '${genKey}')">Transfer Fragments</button>
-          <button onclick="window._verifyToken('${activeFragments[0].tokenId}')">Verify</button>
+    <details class="token-card" style="border:1px solid #30363d;border-radius:6px;padding:0;margin-bottom:8px;">
+      <summary style="cursor:pointer;padding:12px;background:#0d1117;border-radius:6px;display:flex;align-items:center;gap:12px;user-select:none;list-style:none;border-bottom:1px solid #30363d;">
+        <span style="font-weight:bold;flex:1;">${escHtml(first.tokenName)}</span>
+        <span class="badge ${pct === 100 ? 'badge-active' : 'badge-pending'}">${heldDisplay} / ${wholeTokens}</span>
+        <div style="width:80px;height:6px;background:#21262d;border-radius:3px;overflow:hidden;">
+          <div style="background:${barColor};height:100%;width:${pct}%;transition:width 0.3s;"></div>
         </div>
-        <span class="arch-note">Send 1-${heldCount} fragments to a recipient. Fragments are sent lowest-numbered first.</span>
-        ` : ''}
-        <div class="row" style="gap:6px;">
-          <a href="https://whatsonchain.com/tx/${genesisTxId}" target="_blank" rel="noopener">View Genesis TX</a>
+        <span style="font-size:0.8em;color:#8b949e;margin-left:auto;">▼</span>
+      </summary>
+      <div style="padding:12px;border-top:1px solid #30363d;">
+        <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${genesisTxId}</code></div>
+        <div class="token-field"><span class="label">Type:</span> Divisible token (${wholeTokens} tokens × ${fragsPerWhole} fragments = ${totalFragments} total pieces)</div>
+        <div class="token-field"><span class="label">Completion:</span> ${heldCount}/${totalFragments} pieces (${heldWholes} complete NFT${heldWholes !== 1 ? 's' : ''}${heldRemainder > 0 ? ` + ${heldRemainder}/${fragsPerWhole} pieces` : ''}) ${pct}%</div>
+        ${completionBar}
+        <div class="token-field"><span class="label">Held:</span> <span style="color:#3fb950;">${formatFragmentIndices(heldIndices, fragsPerWhole, wholeTokens)}</span></div>
+        ${missingIndices.length > 0 ? `<div class="token-field"><span class="label">Missing:</span> <span class="muted">${formatFragmentIndices(missingIndices, fragsPerWhole, wholeTokens)}</span></div>` : ''}
+        ${pendingFragments.length > 0 ? `<div class="token-field"><span class="label">Pending:</span> <span style="color:#d29922;">${formatFragmentIndices(pendingFragments.map(t => t.genesisOutputIndex).sort((a, b) => a - b), fragsPerWhole, wholeTokens)}</span></div>` : ''}
+        ${transferredFragments.length > 0 ? `<div class="token-field"><span class="label">Sent:</span> <span class="muted">${formatFragmentIndices(transferredFragments.map(t => t.genesisOutputIndex).sort((a, b) => a - b), fragsPerWhole, wholeTokens)}</span></div>` : ''}
+        <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
+        <div class="token-field"><span class="label">Rules:</span> ${renderRules(first.tokenRules)}</div>
+        <div class="token-actions" style="flex-direction:column;align-items:stretch;margin-top:12px;">
+          ${heldCount > 0 ? `
+          <div class="row" style="gap:6px;">
+            <input id="frag-amt-${genKey}" type="number" min="1" max="${heldCount}" value="1" style="width:80px;margin:0;" />
+            <button onclick="window._transferFragments('${genesisTxId}', '${genKey}')">Transfer Fragments</button>
+            <button onclick="window._verifyToken('${activeFragments[0].tokenId}')">Verify</button>
+          </div>
+          <span class="arch-note">Send 1-${heldCount} fragments to a recipient. Fragments are sent lowest-numbered first.</span>
+          ` : ''}
+          <div class="row" style="gap:6px;">
+            <a href="https://whatsonchain.com/tx/${genesisTxId}" target="_blank" rel="noopener">View Genesis TX</a>
+          </div>
         </div>
+        <details style="margin-top:12px;" ontoggle="if(this.open){var s=document.getElementById('fsel-${genKey}');if(s){var i=document.getElementById('transfer-token-id');if(i){var o=s.querySelector('option:not([data-pending])');if(o)i.value=o.value;}}}"><summary class="muted" style="cursor:pointer;font-size:0.85em;">Show individual fragment details</summary>
+          <div style="margin-top:6px;">
+            <select id="fsel-${genKey}" onchange="window._selectGroupToken('fdet-${genKey}', this.value)" style="background:#0d1117;color:#c9d1d9;border:1px solid #30363d;padding:4px 8px;border-radius:4px;width:100%;margin-bottom:6px;">
+              ${group.map(t => `<option value="${t.tokenId}"${t.status !== 'active' ? ' data-pending' : ''}>Fragment #${t.genesisOutputIndex} (${fragmentLabel(t.genesisOutputIndex, fragsPerWhole, wholeTokens)}) ${t.status !== 'active' ? '- ' + t.status : ''}</option>`).join('')}
+            </select>
+            <div id="fdet-${genKey}">${renderTokenDetail(first)}</div>
+          </div>
+        </details>
       </div>
-      <details style="margin-top:8px;" ontoggle="if(this.open){var s=document.getElementById('fsel-${genKey}');if(s){var i=document.getElementById('transfer-token-id');if(i){var o=s.querySelector('option:not([data-pending])');if(o)i.value=o.value;}}}"><summary class="muted" style="cursor:pointer;font-size:0.85em;">Show individual fragment details</summary>
-        <div style="margin-top:6px;">
-          <select id="fsel-${genKey}" onchange="window._selectGroupToken('fdet-${genKey}', this.value)" style="background:#0d1117;color:#c9d1d9;border:1px solid #30363d;padding:4px 8px;border-radius:4px;width:100%;margin-bottom:6px;">
-            ${group.map(t => `<option value="${t.tokenId}"${t.status !== 'active' ? ' data-pending' : ''}>Fragment #${t.genesisOutputIndex} (${fragmentLabel(t.genesisOutputIndex, fragsPerWhole, wholeTokens)}) ${t.status !== 'active' ? '- ' + t.status : ''}</option>`).join('')}
-          </select>
-          <div id="fdet-${genKey}">${renderTokenDetail(first)}</div>
-        </div>
-      </details>
-    </div>`
+    </details>`
 }
 
 function renderFungibleCard(ft: FungibleToken): string {
@@ -585,54 +600,61 @@ function renderFungibleCard(ft: FungibleToken): string {
       </details>` : ''
 
   return `
-    <div class="token-card" style="border-color:#238636;">
-      <div class="token-header">${escHtml(ft.tokenName)} <span class="badge badge-active">Fungible</span></div>
-      <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${ft.tokenId}</code></div>
-      <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${ft.genesisTxId}</code></div>
-      <div class="token-field"><span class="label">Total tokens:</span> <strong style="color:#3fb950;font-size:1.1em;">${totalBalance.toLocaleString()}</strong></div>
-      <div class="token-field"><span class="label">├ Available:</span> ${regularBalance.toLocaleString()}</div>
-      <div class="token-field"><span class="label">└ In messages:</span> ${messageBalance.toLocaleString()}${messageUtxos.length > 0 ? ` (${messageUtxos.length})` : ''}</div>
-      ${pendingBalance > 0 ? `<div class="token-field"><span class="label">Pending:</span> <span style="color:#d29922;">${pendingBalance.toLocaleString()} tokens</span></div>` : ''}
-      ${ft.createdAt ? `<div class="token-field"><span class="label">Created:</span> ${formatDate(ft.createdAt)}</div>` : ''}
-      <div class="token-actions" style="flex-direction:column;align-items:stretch;">
-        <div class="row" style="gap:6px;">
-          <input id="fungible-send-${genKey}" type="number" min="1" max="${regularBalance}" value="${Math.min(100, regularBalance)}" placeholder="Amount" style="width:120px;margin:0;" />
-          <button onclick="window._transferFungible('${ft.tokenId}', '${genKey}')"${regularBalance === 0 ? ' disabled title="No regular balance available"' : ''}>Send</button>
-          <button onclick="window._verifyFungible('${ft.tokenId}')">Verify</button>
+    <details class="token-card" style="border-color:#238636;border:1px solid #238636;border-radius:6px;padding:0;margin-bottom:8px;">
+      <summary style="cursor:pointer;padding:12px;background:rgba(35,134,54,0.1);border-radius:6px;display:flex;align-items:center;gap:8px;user-select:none;list-style:none;border-bottom:1px solid #238636;">
+        <span style="font-weight:bold;flex:1;">${escHtml(ft.tokenName)}</span>
+        <span class="badge badge-active">Fungible</span>
+        <span style="color:#3fb950;font-weight:bold;">${totalBalance.toLocaleString()} 🪙</span>
+        <span style="font-size:0.8em;color:#8b949e;margin-left:auto;">▼</span>
+      </summary>
+      <div style="padding:12px;">
+        <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${ft.tokenId}</code></div>
+        <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${ft.genesisTxId}</code></div>
+        <div class="token-field"><span class="label">Total tokens:</span> <strong style="color:#3fb950;font-size:1.1em;">${totalBalance.toLocaleString()}</strong></div>
+        <div class="token-field"><span class="label">├ Available:</span> ${regularBalance.toLocaleString()}</div>
+        <div class="token-field"><span class="label">└ In messages:</span> ${messageBalance.toLocaleString()}${messageUtxos.length > 0 ? ` (${messageUtxos.length})` : ''}</div>
+        ${pendingBalance > 0 ? `<div class="token-field"><span class="label">Pending:</span> <span style="color:#d29922;">${pendingBalance.toLocaleString()} tokens</span></div>` : ''}
+        ${ft.createdAt ? `<div class="token-field"><span class="label">Created:</span> ${formatDate(ft.createdAt)}</div>` : ''}
+        <div class="token-actions" style="flex-direction:column;align-items:stretch;margin-top:12px;">
+          <div class="row" style="gap:6px;">
+            <input id="fungible-send-${genKey}" type="number" min="1" max="${regularBalance}" value="${Math.min(100, regularBalance)}" placeholder="Amount" style="width:120px;margin:0;" />
+            <button onclick="window._transferFungible('${ft.tokenId}', '${genKey}')"${regularBalance === 0 ? ' disabled title="No regular balance available"' : ''}>Send</button>
+            <button onclick="window._verifyFungible('${ft.tokenId}')">Verify</button>
+          </div>
+          <div class="row" style="gap:6px; margin-top:4px;">
+            <textarea id="fungible-state-${genKey}" placeholder="State data (mutable, optional)" rows="3" style="flex:1;margin:0;resize:vertical;"></textarea>
+          </div>
+          <span class="arch-note">Send from available balance. To send a message UTXO, use "Forward" below.</span>
+          <div class="row" style="gap:6px; margin-top:6px;">
+            <a href="https://whatsonchain.com/tx/${ft.genesisTxId}" target="_blank" rel="noopener">View Genesis TX</a>
+          </div>
         </div>
-        <div class="row" style="gap:6px; margin-top:4px;">
-          <textarea id="fungible-state-${genKey}" placeholder="State data (mutable, optional)" rows="3" style="flex:1;margin:0;resize:vertical;"></textarea>
-        </div>
-        <span class="arch-note">Send from available balance. To send a message UTXO, use "Forward" below.</span>
-        <div class="row" style="gap:6px; margin-top:6px;">
-          <a href="https://whatsonchain.com/tx/${ft.genesisTxId}" target="_blank" rel="noopener">View Genesis TX</a>
-        </div>
+        ${messagesHtml}
+        <details style="margin-top:12px;"><summary class="muted" style="cursor:pointer;font-size:0.85em;">Show all UTXO details (${ft.utxos.length})</summary>
+          <div style="margin-top:6px;font-size:0.85em;">
+            ${ft.utxos.map(u => {
+              const stateDecoded = u.stateData ? tryDecodeHex(u.stateData) : ''
+              const hasStateData = stateDecoded && stateDecoded !== '00'
+              return `
+              <div style="padding:8px 0;border-bottom:1px solid #21262d;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span class="badge ${u.status === 'active' ? 'badge-active' : u.status === 'pending' ? 'badge-unconfirmed' : u.status === 'pending_transfer' ? 'badge-pending' : 'badge-transferred'}">${u.status === 'pending' ? 'unconfirmed' : u.status}</span>
+                  <strong>${u.satoshis.toLocaleString()} tokens</strong>
+                  ${u.receivedAt ? `<span class="muted" style="font-size:0.8em;">${formatDate(u.receivedAt)}</span>` : ''}
+                  <button onclick="window._removeUtxo('${ft.tokenId}', '${u.txId}', ${u.outputIndex})" style="margin-left:auto;font-size:0.7em;padding:2px 6px;background:#da3633;" title="Remove this UTXO from basket">×</button>
+                </div>
+                <code class="muted" style="font-size:0.8em;display:block;margin-top:4px;">${u.txId}:${u.outputIndex}</code>
+                ${hasStateData ? `
+                <div style="margin-top:6px;padding:6px;background:#161b22;border:1px solid #30363d;border-radius:4px;">
+                  <span class="muted" style="font-size:0.75em;">State Data:</span>
+                  <pre style="margin:4px 0 0 0;white-space:pre-wrap;word-break:break-word;font-size:0.85em;color:#c9d1d9;">${escHtml(stateDecoded)}</pre>
+                </div>` : ''}
+              </div>`
+            }).join('')}
+          </div>
+        </details>
       </div>
-      ${messagesHtml}
-      <details style="margin-top:8px;"><summary class="muted" style="cursor:pointer;font-size:0.85em;">Show all UTXO details (${ft.utxos.length})</summary>
-        <div style="margin-top:6px;font-size:0.85em;">
-          ${ft.utxos.map(u => {
-            const stateDecoded = u.stateData ? tryDecodeHex(u.stateData) : ''
-            const hasStateData = stateDecoded && stateDecoded !== '00'
-            return `
-            <div style="padding:8px 0;border-bottom:1px solid #21262d;">
-              <div style="display:flex;align-items:center;gap:8px;">
-                <span class="badge ${u.status === 'active' ? 'badge-active' : u.status === 'pending' ? 'badge-unconfirmed' : u.status === 'pending_transfer' ? 'badge-pending' : 'badge-transferred'}">${u.status === 'pending' ? 'unconfirmed' : u.status}</span>
-                <strong>${u.satoshis.toLocaleString()} tokens</strong>
-                ${u.receivedAt ? `<span class="muted" style="font-size:0.8em;">${formatDate(u.receivedAt)}</span>` : ''}
-                <button onclick="window._removeUtxo('${ft.tokenId}', '${u.txId}', ${u.outputIndex})" style="margin-left:auto;font-size:0.7em;padding:2px 6px;background:#da3633;" title="Remove this UTXO from basket">×</button>
-              </div>
-              <code class="muted" style="font-size:0.8em;display:block;margin-top:4px;">${u.txId}:${u.outputIndex}</code>
-              ${hasStateData ? `
-              <div style="margin-top:6px;padding:6px;background:#161b22;border:1px solid #30363d;border-radius:4px;">
-                <span class="muted" style="font-size:0.75em;">State Data:</span>
-                <pre style="margin:4px 0 0 0;white-space:pre-wrap;word-break:break-word;font-size:0.85em;color:#c9d1d9;">${escHtml(stateDecoded)}</pre>
-              </div>` : ''}
-            </div>`
-          }).join('')}
-        </div>
-      </details>
-    </div>`
+    </details>`
 }
 
 function renderTokenCard(t: OwnedToken): string {
@@ -650,23 +672,40 @@ function renderTokenCard(t: OwnedToken): string {
   const fragmentInfo = isFragment
     ? `<div class="token-field"><span class="label">Fragment:</span> ${fragmentLabel(t.genesisOutputIndex, r.divisibility, r.supply)} -- piece #${t.genesisOutputIndex} of ${totalFragments} total</div>`
     : ''
+
+  // Extract attribute icon if it's media (for collapsed summary)
+  let attrsIconHtml = ''
+  if (t.tokenAttributes && t.tokenAttributes !== '00') {
+    const meta = getFileMeta(t.tokenAttributes.length === 64 ? t.tokenAttributes : '')
+    if (meta) {
+      attrsIconHtml = `<span style="margin-left:8px;">${getMimeTypeIcon(meta.mimeType)}</span>`
+    }
+  }
+
   return `
-    <div class="token-card ${t.status === 'transferred' ? 'token-transferred' : ''} ${t.status === 'pending_transfer' ? 'token-pending' : ''}">
-      <div class="token-header">${escHtml(t.tokenName)}${nftLabel} ${statusBadge}</div>
-      <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${t.tokenId}</code></div>
-      ${fragmentInfo}
-      ${t.tokenScript ? `<div class="token-field"><span class="label">Script:</span> <code class="muted" style="font-size:0.8em;">${escHtml(t.tokenScript)}</code></div>` : ''}
-      <div class="token-field"><span class="label">Rules:</span> ${rules}</div>
-      <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
-      <div class="token-field"><span class="label">State Data:</span> ${stateDisplay}</div>
-      <div class="token-field"><span class="label">Current TXID:</span> <code class="selectable">${t.currentTxId}</code></div>
-      <div class="token-field"><span class="label">Output:</span> ${t.currentOutputIndex}</div>
-      <div class="token-field"><span class="label">Sats:</span> ${t.satoshis}</div>
-      ${t.createdAt ? `<div class="token-field"><span class="label">Created:</span> ${formatDate(t.createdAt)}</div>` : ''}
-      ${t.feePaid !== undefined ? `<div class="token-field"><span class="label">Fee:</span> ${t.feePaid} sats</div>` : ''}
-      ${t.transferTxId ? `<div class="token-field"><span class="label">Transfer TXID:</span> <code class="selectable">${t.transferTxId}</code></div>` : ''}
-      <div class="token-actions">${actions}</div>
-    </div>`
+    <details class="token-card ${t.status === 'transferred' ? 'token-transferred' : ''} ${t.status === 'pending_transfer' ? 'token-pending' : ''}" style="border:1px solid #30363d;border-radius:6px;padding:0;margin-bottom:8px;">
+      <summary style="cursor:pointer;padding:12px;background:#0d1117;border-radius:6px;display:flex;align-items:center;gap:8px;user-select:none;list-style:none;">
+        <span style="font-weight:bold;flex:1;">${escHtml(t.tokenName)}${nftLabel}</span>
+        ${statusBadge}
+        ${attrsIconHtml}
+        <span style="font-size:0.8em;color:#8b949e;margin-left:auto;">▼</span>
+      </summary>
+      <div style="padding:12px;border-top:1px solid #30363d;">
+        <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${t.tokenId}</code></div>
+        ${fragmentInfo}
+        ${t.tokenScript ? `<div class="token-field"><span class="label">Script:</span> <code class="muted" style="font-size:0.8em;">${escHtml(t.tokenScript)}</code></div>` : ''}
+        <div class="token-field"><span class="label">Rules:</span> ${rules}</div>
+        <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
+        <div class="token-field"><span class="label">State Data:</span> ${stateDisplay}</div>
+        <div class="token-field"><span class="label">Current TXID:</span> <code class="selectable">${t.currentTxId}</code></div>
+        <div class="token-field"><span class="label">Output:</span> ${t.currentOutputIndex}</div>
+        <div class="token-field"><span class="label">Sats:</span> ${t.satoshis}</div>
+        ${t.createdAt ? `<div class="token-field"><span class="label">Created:</span> ${formatDate(t.createdAt)}</div>` : ''}
+        ${t.feePaid !== undefined ? `<div class="token-field"><span class="label">Fee:</span> ${t.feePaid} sats</div>` : ''}
+        ${t.transferTxId ? `<div class="token-field"><span class="label">Transfer TXID:</span> <code class="selectable">${t.transferTxId}</code></div>` : ''}
+        <div class="token-actions">${actions}</div>
+      </div>
+    </details>`
 }
 
 function renderTokenDetail(t: OwnedToken): string {
