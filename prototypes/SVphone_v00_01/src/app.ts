@@ -146,10 +146,14 @@ async function migrateFromMPT() {
 
   // 4. Move proof chains to IndexedDB (large data, avoids localStorage quota)
   let proofChainsMigrated = 0
+  const keysToDelete: string[] = []
+
   for (const [tokenId, proofJson] of Object.entries(proofChainData)) {
     try {
       await proofChainCache.store(tokenId, proofJson)
       proofChainsMigrated++
+      // Mark old key for deletion
+      keysToDelete.push(`mpt:data:proof:${tokenId}`)
     } catch (e: unknown) {
       console.warn(`[Migration] ⚠ Failed to store proof chain in IndexedDB: ${tokenId}`)
     }
@@ -158,13 +162,28 @@ async function migrateFromMPT() {
     console.log(`[Migration] ✓ Migrated ${proofChainsMigrated} proof chains to IndexedDB`)
   }
 
-  // 5. Mark migration complete
+  // 5. Clean up old localStorage proof chains to free quota (CRITICAL)
+  let deletedKeys = 0
+  for (const key of keysToDelete) {
+    try {
+      localStorage.removeItem(key)
+      deletedKeys++
+    } catch (e: unknown) {
+      console.warn(`[Migration] Failed to delete ${key}`)
+    }
+  }
+  if (deletedKeys > 0) {
+    console.log(`[Migration] ✓ Deleted ${deletedKeys} old proof keys from localStorage (freed quota)`)
+  }
+
+  // 6. Mark migration complete (now with freed quota)
   try {
     localStorage.setItem(MIGRATION_FLAG, 'true')
-    console.log('[Migration] Complete! Proof chains in IndexedDB, old mpt:* keys preserved.')
+    console.log('[Migration] Complete! Proof chains in IndexedDB, old mpt:* keys cleaned up.')
   } catch (e: unknown) {
     if (e instanceof Error && e.name === 'QuotaExceededError') {
-      console.warn('[Migration] ⚠ Could not set migration flag (quota exceeded), but migration data is ready')
+      console.error('[Migration] ✗ CRITICAL: Could not set migration flag - localStorage still full!')
+      console.warn('[Migration] Try: localStorage.clear() in console to recover')
     } else {
       throw e
     }
