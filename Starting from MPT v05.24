@@ -1,0 +1,45 @@
+Current State (MPT/v05.24)
+Protocol Architecture:
+
+Pure SPV Protocol Layer (tokenProtocol.ts): Zero network dependencies; validates tokens via Merkle proofs + block headers
+Token ID: SHA-256(genesisTxId || outputIndex LE || immutableChunkBytes) — cryptographically binds identity to immutable metadata
+Two Token Modes:
+NFT: Each 1-sat output = unique token (fragments via divisibility)
+Fungible: All UTXOs share 1 Token ID, satoshis = token units
+Core Features (v05.24 latest):
+
+Genesis transactions mint tokens with OP_RETURN metadata
+Transfer transactions carry proof chains (Merkle proof history)
+SPV verification gate: Token ID check → Merkle proof verification → Block header confirmation
+UTXO Quarantine: 1-sat outputs protected from accidental spending
+File embedding: SHA-256 hash in tokenAttributes, full file in separate OP_RETURN
+Fragment tracking: Divisible tokens grouped by NFT number with completion tracking
+Auto-confirmation polling for transfer status
+Code Organization:
+
+tokenProtocol.ts — Cryptography (computeTokenId, Merkle proof verification)
+opReturnCodec.ts — OP_RETURN encoding/decoding with proof chain binary format
+tokenBuilder.ts — Token lifecycle (mint, transfer, verify, import)
+walletProvider.ts — Network layer (WhatsOnChain API)
+tokenStore.ts — localStorage persistence (tokens + proof chains)
+app.ts — Browser UI with minting, transfer, verification interfaces
+Refactoring Scope: MPT → P Token Protocol
+What Stays the Same:
+
+Core cryptographic verification logic (SHA-256, Merkle proofs, block headers)
+Token lifecycle and transaction structure
+Both NFT and Fungible modes
+Proof chain architecture
+What Changes (Naming/Branding):
+
+Protocol Identifier: "MPT" (0x4d 0x50 0x54) → "P" or "PTP" (new prefix bytes)
+Version Byte: 0x02 → TBD (consider 0x01 for P protocol v1 or 0x02 for continuity)
+File Marker: "MPT-FILE" → "P-FILE" or similar
+Constant Names: MPT_PREFIX, MPT_VERSION, MPT_FILE_MARKER → P-equivalents
+Documentation: All references to "Merkle Proof Token" → new protocol name
+Impact Areas:
+
+OP_RETURN parsing/encoding (version detection, chunk layout)
+Block explorers and external indexing (old MPT tokens remain on-chain; P tokens are new)
+Wallet UI labels and documentation
+localStorage keys (could namespace by protocol: p:data:token vs mpt:data:token)
