@@ -24,3 +24,7 @@ Development of a mobile app for submission to Google Play and Apple App Store.
 
 # 5.
 Ivestigating the feasibility of providing an upgrade path for old phones to use a KDE or similar mobile OS incorporating Metanet.
+
+
+# Why have you been invited here
+This needs to be done right. Babbage is in a possition to help make this happen and time is of the essence.
