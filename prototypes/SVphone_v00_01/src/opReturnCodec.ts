@@ -40,6 +40,10 @@ interface ScriptChunk {
 export const P_PREFIX = [0x50] // "P" in ASCII
 export const P_VERSION = 0x03
 
+// Legacy MPT protocol support (for recovering old tokens from blockchain)
+const MPT_PREFIX = [0x4d, 0x50, 0x54] // "MPT" in ASCII
+const MPT_VERSION = 0x02
+
 export interface TokenOpReturnData {
   tokenName: string       // UTF-8 text
   tokenScript: string     // hex, variable (empty = P2PKH fallback, consensus-enforced)
@@ -251,18 +255,37 @@ export function decodeOpReturn(script: LockingScript): TokenOpReturnData | null 
     console.debug(`decodeOpReturn: found ${chunks.length} chunks, raw script length ${raw.length} bytes, hex start: ${hexStart}...`)
   }
 
-  // Minimum: P version name script rules attrs stateData = 7 data chunks
+  // Minimum: prefix version name script rules attrs stateData = 7 data chunks
   if (chunks.length < 7) return null
 
-  // Check P prefix (chunk 0 = "P")
+  // Check prefix and version - support both P (new) and MPT (legacy) protocols
   const prefix = chunks[0]
-  if (prefix.length !== 1 || prefix[0] !== 0x50) {
+  const versionData = chunks[1]
+
+  let isP = false
+  let isMPT = false
+
+  // Check for P protocol (1-byte prefix, version 0x03)
+  if (prefix.length === 1 && prefix[0] === 0x50) {
+    if (versionData.length === 1 && versionData[0] === P_VERSION) {
+      isP = true
+    } else {
+      return null // P prefix but wrong version
+    }
+  }
+  // Check for MPT protocol (3-byte prefix, version 0x02) - legacy support
+  else if (prefix.length === 3 && prefix[0] === 0x4d && prefix[1] === 0x50 && prefix[2] === 0x54) {
+    if (versionData.length === 1 && versionData[0] === MPT_VERSION) {
+      isMPT = true
+      console.debug('decodeOpReturn: Found legacy MPT token - will import as P protocol')
+    } else {
+      return null // MPT prefix but wrong version
+    }
+  }
+  // Unknown prefix
+  else {
     return null
   }
-
-  // Check version (chunk 1) -- v05 = 0x03
-  const versionData = chunks[1]
-  if (versionData.length !== 1 || versionData[0] !== P_VERSION) return null
 
   const tokenName = bytesToString(chunks[2])
   const tokenScript = bytesToHex(chunks[3])

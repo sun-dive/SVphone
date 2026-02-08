@@ -393,7 +393,7 @@ function init() {
 
   refreshBalance()
   refreshTokenList()
-  silentCheckIncoming()
+  autoRecoverTokens()  // Always scan blockchain to recover lost tokens or import new ones
   startProofPolling()
   resumePendingTransferPolls()
 }
@@ -504,6 +504,50 @@ async function resumePendingTransferPolls() {
     }
   } catch {
     // Silent
+  }
+}
+
+/**
+ * ALWAYS scan blockchain for tokens on every reload.
+ * This ensures:
+ * - Lost tokens are recovered (migration corruption)
+ * - New incoming tokens are imported
+ * - Stored tokens stay in sync with blockchain state
+ * - Old MPT tokens are detected and upgraded to P protocol
+ */
+async function autoRecoverTokens() {
+  try {
+    console.log('[BlockchainSync] Starting full blockchain token scan...')
+    setText('incoming-status', 'Syncing tokens from blockchain...')
+
+    const imported = await builder.checkIncomingTokens((msg) => {
+      setText('incoming-status', msg)
+    })
+
+    const existingTokens = await store.listTokens()
+    const existingFungibleTokens = await store.listFungibleTokens()
+    const totalTokens = existingTokens.length + existingFungibleTokens.length
+
+    if (imported.length > 0) {
+      console.log(`[BlockchainSync] ✓ Found/recovered ${imported.length} new token(s)`)
+      setText('incoming-status', `Found ${imported.length} token(s)`)
+      await refreshTokenList()
+      // Restart proof polling for recovered tokens
+      if (proofPollTimeoutId) clearTimeout(proofPollTimeoutId)
+      startProofPolling()
+    } else {
+      console.log(`[BlockchainSync] ✓ Scan complete - ${totalTokens} token(s) in storage, all synced`)
+      // Clear status after a short delay
+      setTimeout(() => {
+        const current = (el('incoming-status') as HTMLElement)?.textContent || ''
+        if (current.includes('Syncing')) {
+          setText('incoming-status', totalTokens > 0 ? `Synced: ${totalTokens} token(s)` : 'Ready')
+        }
+      }, 2000)
+    }
+  } catch (e: any) {
+    console.error('[BlockchainSync] Error during scan:', e)
+    setText('incoming-status', `Sync error: ${e.message}`)
   }
 }
 
