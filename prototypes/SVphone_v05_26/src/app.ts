@@ -860,6 +860,11 @@ function renderHexField(hex: string, token?: OwnedToken): string {
 function renderStateData(stateHex: string, token?: OwnedToken): string {
   if (!stateHex || stateHex === '00') return '<span class="muted">(empty)</span>'
 
+  // DEBUG: Log stateData length for message truncation investigation
+  if (stateHex.length > 200) {
+    console.debug(`renderStateData: stateHex length=${stateHex.length}, first 100 chars: ${stateHex.substring(0, 100)}..., last 100 chars: ...${stateHex.substring(Math.max(0, stateHex.length - 100))}`)
+  }
+
   // Check for combined message+file format: message_hex + file_hash (64 chars)
   // If stateHex > 64 chars, try to detect combined format (with or without metadata)
   if (stateHex.length > 64 && token) {
@@ -876,11 +881,17 @@ function renderStateData(stateHex: string, token?: OwnedToken): string {
       try {
         const bytes = new Uint8Array(possibleMsgHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)))
         const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+        console.debug(`renderStateData: Decoded message from ${possibleMsgHex.length} hex chars (${bytes.length} bytes): "${decoded}"`)
         if (/^[\x20-\x7e\t\n\r]+$/.test(decoded)) {
           msgPreview = `"${escHtml(decoded)}"<br>`
           msgDecoded = true
+          console.debug(`renderStateData: Message is printable ASCII, displaying it`)
+        } else {
+          console.debug(`renderStateData: Message contains non-ASCII characters, not displaying as text`)
         }
-      } catch { /* not valid UTF-8 */ }
+      } catch (e) {
+        console.debug(`renderStateData: Failed to decode message as UTF-8:`, e)
+      }
 
       // If message decoded successfully, this is likely combined format
       if (msgDecoded) {
@@ -1151,6 +1162,12 @@ async function handleTransfer() {
   const tokenId = inputVal('transfer-token-id')
   const recipient = inputVal('transfer-recipient')
   const messageText = inputVal('transfer-message')
+
+  // DEBUG: Log message being sent
+  if (messageText) {
+    const messageHex = Array.from(new TextEncoder().encode(messageText)).map(b => b.toString(16).padStart(2, '0')).join('')
+    console.debug(`handleTransfer: Sending message "${messageText}" (${messageText.length} chars, ${messageHex.length} hex chars)`)
+  }
 
   if (!tokenId || !recipient) {
     setResult('transfer-result', 'Enter both Token ID and recipient BSV address.')

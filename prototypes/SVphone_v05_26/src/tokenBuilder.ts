@@ -1447,16 +1447,25 @@ export class TokenBuilder {
 
           const existing = await this.store.getToken(tokenId)
           // Skip if already active
-          if (existing && existing.status === 'active') continue
-          // Pending token just got confirmed - update to active
-          if (existing && existing.status === 'pending' && !isUnconfirmedTx) {
-            existing.status = 'active'
-            await this.store.updateToken(existing)
-            onStatus?.(`Confirmed token: ${existing.tokenName} (${tokenId.slice(0, 12)}...)`)
+          if (existing && existing.status === 'active') {
+            // Check if confirmation status needs updating
+            if (existing.blockHeight === 0 && blockHeight > 0) {
+              existing.blockHeight = blockHeight
+              existing.confirmationStatus = 'confirmed'
+              await this.store.updateToken(existing)
+              onStatus?.(`Confirmed token: ${existing.tokenName} (${tokenId.slice(0, 12)}...)`)
+            }
             continue
           }
-          // Still pending, skip
-          if (existing && existing.status === 'pending') continue
+          // Legacy pending tokens from before pure SPV refactoring: upgrade to active
+          if (existing && existing.status === 'pending') {
+            existing.status = 'active'
+            existing.blockHeight = blockHeight
+            existing.confirmationStatus = blockHeight === 0 ? 'unconfirmed' : 'confirmed'
+            await this.store.updateToken(existing)
+            onStatus?.(`Upgraded legacy token: ${existing.tokenName} (${tokenId.slice(0, 12)}...)`)
+            continue
+          }
           // Return-to-sender: token was sent away but came back to us
           if (existing && (existing.status === 'transferred' || existing.status === 'pending_transfer')) {
             existing.status = 'active'
