@@ -956,7 +956,7 @@ function textToHex(text: string): string {
 
 /**
  * Encode stateData with pipe delimiter between text and file hash.
- * Format: <text>|<fileHash> or |<fileHash> or <text>
+ * Format: <text>7c<fileHash> or 7c<fileHash> or <text> (where 7c = hex for |)
  * Escapes | in text as ~|~
  */
 function encodeStateData(text: string, fileHash?: string): string {
@@ -965,8 +965,8 @@ function encodeStateData(text: string, fileHash?: string): string {
   const encodedText = escapedText ? textToHex(escapedText) : ''
 
   if (fileHash) {
-    // Both text and file, or file only
-    return encodedText ? `${encodedText}|${fileHash}` : `|${fileHash}`
+    // Both text and file, or file only - use hex-encoded pipe (7c)
+    return encodedText ? `${encodedText}7c${fileHash}` : `7c${fileHash}`
   }
 
   // Text only (no pipe)
@@ -974,7 +974,7 @@ function encodeStateData(text: string, fileHash?: string): string {
 }
 
 /**
- * Decode stateData with pipe delimiter.
+ * Decode stateData with hex-encoded pipe delimiter (7c = 0x7C = |).
  * Returns { text, fileHash? } where text is unescaped UTF-8
  */
 function decodeStateData(stateHex: string): { text: string; fileHash?: string } {
@@ -982,16 +982,17 @@ function decodeStateData(stateHex: string): { text: string; fileHash?: string } 
     return { text: '' }
   }
 
-  // Split at first unescaped pipe using negative lookbehind/lookahead
-  // Pattern: | not preceded or followed by ~
-  const parts = stateHex.split(/(?<!~)\|(?!~)/)
+  // Split at first unescaped hex-encoded pipe (7c not preceded or followed by 7e7c7e)
+  // In hex: 7e = ~, 7c = |, so escaped pipe is 7e7c7e (~|~)
+  // Pattern: 7c not surrounded by 7e
+  const parts = stateHex.split(/(?<!7e)7c(?!7e)/)
 
   if (parts.length === 1) {
-    // No pipe found - text only
+    // No hex-pipe found - text only
     try {
       const bytes = new Uint8Array(stateHex.match(/.{2}/g)?.map(b => parseInt(b, 16)) || [])
       let decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-      // Unescape ~|~ back to |
+      // Unescape ~|~ (hex: 7e7c7e) back to | (hex: 7c)
       decoded = decoded.replace(/~\|~/g, '|')
       return { text: decoded }
     } catch {
@@ -1000,7 +1001,7 @@ function decodeStateData(stateHex: string): { text: string; fileHash?: string } 
   }
 
   if (parts.length === 2) {
-    // Found delimiter: parts[0] = text (may be empty), parts[1] = file hash
+    // Found hex-delimiter: parts[0] = text hex (may be empty), parts[1] = file hash hex
     const textHex = parts[0]
     const fileHash = parts[1]
 
@@ -1033,7 +1034,7 @@ function decodeStateData(stateHex: string): { text: string; fileHash?: string } 
     return { text, fileHash }
   }
 
-  // Multiple pipes found (shouldn't happen), treat as text only
+  // Multiple hex-pipes found (shouldn't happen), treat as text only
   try {
     const bytes = new Uint8Array(stateHex.match(/.{2}/g)?.map(b => parseInt(b, 16)) || [])
     let decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
