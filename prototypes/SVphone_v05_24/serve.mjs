@@ -40,7 +40,7 @@ const server = http.createServer((req, res) => {
       method: req.method,
       headers: {
         'Accept': req.headers.accept || '*/*',
-        'User-Agent': 'MPT-Prototype/1.0',
+        'User-Agent': 'SVphone-Prototype/1.0',
       },
     }
 
