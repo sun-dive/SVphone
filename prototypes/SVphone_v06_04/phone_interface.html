@@ -570,6 +570,7 @@
                 this.isMediaActive = false
                 this.callStartTime = null
                 this.durationInterval = null
+                this.isMintPending = false
 
                 this.init()
             }
@@ -718,6 +719,101 @@
                 })
             }
 
+            async checkForCallTokens() {
+                const tokenStore = window.tokenStore
+                if (!tokenStore) {
+                    this.log('⚠️  Token store not available', 'warning')
+                    return false
+                }
+
+                try {
+                    const tokens = await tokenStore.listTokens()
+                    const callTokens = tokens.filter(t => t.tokenAttributes === '63616c6c')
+
+                    if (callTokens.length > 0) {
+                        this.log(`✓ Found ${callTokens.length} call token(s)`, 'success')
+                        return true
+                    }
+                    return false
+                } catch (error) {
+                    this.log(`Error checking call tokens: ${error.message}`, 'error')
+                    return false
+                }
+            }
+
+            promptForMintQuantity() {
+                const input = prompt('How many call tokens do you want to mint?', '100')
+                if (input === null) return null
+                const quantity = parseInt(input)
+                if (isNaN(quantity) || quantity < 1) {
+                    this.log('Invalid quantity. Please enter a number >= 1', 'error')
+                    return null
+                }
+                return quantity
+            }
+
+            async autoMintCallTokens(tokenBuilder, quantity) {
+                try {
+                    this.log(`🔄 Minting ${quantity} call tokens...`, 'info')
+
+                    const result = await tokenBuilder.createGenesis({
+                        tokenName: 'P',
+                        attributes: '63616c6c',
+                        supply: quantity,
+                        divisibility: 0,
+                        restrictions: 0,
+                        rulesVersion: 1,
+                        stateData: ''
+                    })
+
+                    this.log(`✅ Genesis TX broadcast! TX: ${result.txId.slice(0, 12)}...`, 'success')
+                    this.log(`⏳ Waiting for block confirmation...`, 'info')
+
+                    // Poll for confirmation
+                    const confirmed = await this.waitForTokenConfirmation(result.txId, tokenBuilder)
+
+                    if (confirmed) {
+                        this.log(`✓ Tokens confirmed! ${quantity} call tokens ready to use`, 'success')
+                        return true
+                    } else {
+                        this.log('⏱️  Confirmation timed out. Tokens may still confirm later.', 'warning')
+                        return false
+                    }
+                } catch (error) {
+                    this.log(`❌ Mint failed: ${error.message}`, 'error')
+                    return false
+                }
+            }
+
+            async waitForTokenConfirmation(txId, tokenBuilder, maxWait = 600000) {
+                const startTime = Date.now()
+                const pollInterval = 5000
+
+                return new Promise((resolve) => {
+                    const checkConfirm = async () => {
+                        try {
+                            if (Date.now() - startTime > maxWait) {
+                                this.log('Confirmation polling timeout (10 minutes)', 'warning')
+                                resolve(false)
+                                return
+                            }
+
+                            const confirmed = await tokenBuilder.pollForConfirmation(txId)
+                            if (confirmed) {
+                                resolve(true)
+                                return
+                            }
+                        } catch (e) {
+                            this.log(`Poll error: ${e.message}`, 'error')
+                        }
+
+                        setTimeout(checkConfirm, pollInterval)
+                    }
+
+                    checkConfirm()
+                })
+            }
+
             bindEvents() {
                 // Call Manager Events
                 this.callManager.on('call:initiated-session', (session) => {
@@ -808,6 +904,33 @@
                         this.log('Error: Token builder not available', 'error')
                         return
                     }
+
+                    // ============ CHECK AND MINT CALL TOKENS ============
+                    if (this.isMintPending) {
+                        this.log('⏳ Mint already in progress. Please wait...', 'warning')
+                        return
+                    }
+
+                    const hasCallTokens = await this.checkForCallTokens()
+                    if (!hasCallTokens) {
+                        this.log('📋 No call tokens found. Initiating mint...', 'info')
+
+                        const quantity = this.promptForMintQuantity()
+                        if (quantity === null) {
+                            this.log('Mint cancelled by user', 'info')
+                            return
+                        }
+
+                        this.isMintPending = true
+                        const minted = await this.autoMintCallTokens(tokenBuilder, quantity)
+                        this.isMintPending = false
+
+                        if (!minted) {
+                            this.log('Call initiation cancelled due to mint failure', 'error')
+                            return
+                        }
+                    }
+                    // ====================================================
 
                     const realMintFn = async (token) => {
                         this.log(`Minting call token for ${token.callee}`, 'info')
