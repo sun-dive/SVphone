@@ -877,10 +877,10 @@
 
             async initializeCall() {
                 try {
-                    // Get wallet address from bundle.js wallet (shared with wallet.html)
-                    const walletAddress = document.getElementById('address')?.textContent
-                    if (!walletAddress || walletAddress === '...') {
-                        this.log('Error: Wallet not initialized. Open wallet.html first.', 'error')
+                    // Get wallet address from myAddress field (already synced from wallet.html)
+                    const walletAddress = document.getElementById('myAddress')?.value
+                    if (!walletAddress || walletAddress === '...' || walletAddress === '') {
+                        this.log('Error: Wallet address not loaded. Open wallet.html first.', 'error')
                         return
                     }
 
