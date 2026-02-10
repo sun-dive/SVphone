@@ -1023,13 +1023,13 @@
             }
 
             log(message, type = 'info') {
-                const console = document.getElementById('debugConsole')
+                const consoleDom = document.getElementById('debugConsole')
                 const line = document.createElement('div')
                 line.className = `console-line ${type}`
                 const timestamp = new Date().toLocaleTimeString()
                 line.textContent = `[${timestamp}] ${message}`
-                console.appendChild(line)
-                console.scrollTop = console.scrollHeight
+                consoleDom.appendChild(line)
+                consoleDom.scrollTop = consoleDom.scrollHeight
                 console.log(`[${type.toUpperCase()}] ${message}`)
             }
 
