@@ -395,9 +395,9 @@
                 <h2>Call Controls</h2>
 
                 <div class="form-group">
-                    <label for="myAddress">Your BSV Address</label>
-                    <input type="text" id="myAddress" placeholder="Enter your BSV address"
-                           value="1A1z7agoat5dwrQvV">
+                    <label for="myAddress">Your BSV Address <span style="opacity:0.7;">(from wallet.html)</span></label>
+                    <input type="text" id="myAddress" placeholder="(auto-populated from wallet)"
+                           readonly style="opacity:0.8;">
                 </div>
 
                 <div class="form-group">
@@ -539,7 +539,8 @@
         </div>
     </div>
 
-    <!-- Load all SVphone modules -->
+    <!-- Load wallet bundle and SVphone modules -->
+    <script src="bundle.js"></script>
     <script src="src/sv_connect/signaling.js"></script>
     <script src="src/sv_connect/peer_connection.js"></script>
     <script src="src/sv_connect/call_manager.js"></script>
@@ -573,6 +574,9 @@
             init() {
                 this.log('Initializing SVphone v06.01...', 'info')
 
+                // Sync wallet data from shared state (wallet.html)
+                this.syncWalletData()
+
                 // Create all components
                 this.signaling = new CallSignaling()
                 this.peerConnection = new PeerConnection({
@@ -590,6 +594,17 @@
                 this.bindEvents()
 
                 this.log('SVphone initialized successfully', 'success')
+            }
+
+            syncWalletData() {
+                // Get wallet address from bundle.js wallet state
+                const addressEl = document.getElementById('address')
+                if (addressEl && addressEl.textContent !== '...') {
+                    document.getElementById('myAddress').value = addressEl.textContent
+                    this.log(`Wallet synced: ${addressEl.textContent}`, 'success')
+                } else {
+                    this.log('Warning: Wallet not yet loaded. Open wallet.html first.', 'warning')
+                }
             }
 
             bindEvents() {
@@ -655,17 +670,18 @@
 
             async initializeCall() {
                 try {
-                    const address = document.getElementById('myAddress').value
-                    const ip = document.getElementById('myIp').value
-                    const port = parseInt(document.getElementById('myPort').value)
-
-                    if (!address) {
-                        this.log('Error: Enter your BSV address', 'error')
+                    // Get wallet address from bundle.js wallet (shared with wallet.html)
+                    const walletAddress = document.getElementById('address')?.textContent
+                    if (!walletAddress || walletAddress === '...') {
+                        this.log('Error: Wallet not initialized. Open wallet.html first.', 'error')
                         return
                     }
 
-                    await this.signaling.initialize(address, ip, port)
-                    this.log(`Initialized as ${address}`, 'success')
+                    const ip = document.getElementById('myIp').value
+                    const port = parseInt(document.getElementById('myPort').value)
+
+                    await this.signaling.initialize(walletAddress, ip, port)
+                    this.log(`Initialized as ${walletAddress}`, 'success')
 
                     const calleeAddress = document.getElementById('calleeAddress').value
                     if (!calleeAddress) {
@@ -675,12 +691,22 @@
 
                     const quality = document.getElementById('quality').value
 
-                    // Mock token minting (in real app, would use builder.createToken)
-                    const mockMintFn = async (token) => {
+                    // Use real token builder from bundle.js
+                    const tokenBuilder = window.tokenBuilder
+                    if (!tokenBuilder) {
+                        this.log('Error: Token builder not available', 'error')
+                        return
+                    }
+
+                    const realMintFn = async (token) => {
                         this.log(`Minting call token for ${token.callee}`, 'info')
-                        return {
-                            txId: 'mock_tx_' + Math.random().toString(36).substr(2, 9),
-                            tokenId: 'mock_token_' + Math.random().toString(36).substr(2, 9)
+                        try {
+                            const result = await tokenBuilder.createToken(token)
+                            this.log(`Token minted: ${result.tokenId}`, 'success')
+                            return result
+                        } catch (err) {
+                            this.log(`Token mint failed: ${err.message}`, 'error')
+                            throw err
                         }
                     }
 
@@ -688,7 +714,7 @@
                         audio: true,
                         video: true,
                         quality: quality,
-                        mintTokenFn: mockMintFn
+                        mintTokenFn: realMintFn
                     })
 
                     this.currentCallToken = session.callTokenId
