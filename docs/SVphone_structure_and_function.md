@@ -447,7 +447,7 @@ The OP_RETURN carries the same genesisTxId as all other fragments from the same 
 When a token or fragment is sent to a recipient and then returned to the original wallet:
 
 1. The original wallet's `checkIncomingTokens` detects the incoming transfer TX.
-2. SPV verification is performed (`verifyBeforeImport()`): Token ID derivation check, genesis TX Merkle proof, block header confirmation. If verification fails, the return is rejected.
+2. SPV verification is performed (`verifyBeforeImport()`): Token ID derivation check, and either genesis TX Merkle proof (if confirmed) or ancestor proof verification (if unconfirmed). If verification fails, the return is rejected.
 3. If the token already exists in the store with status `transferred` or `pending_transfer`, it is reactivated:
    - Status set back to `active`
    - `currentTxId` and `currentOutputIndex` updated to the new UTXO
@@ -755,7 +755,13 @@ The quarantine is unconditional. There is no "cleared" list or override mechanis
 
 ### Auto-Import on Quarantine
 
-When `getSafeUtxos()` encounters a quarantined 1-sat UTXO, it fires off `tryAutoImport()` in the background. This fetches the source TX, checks for a 1-sat P2PKH output paying to this wallet's address paired with a P OP_RETURN, and -- if found -- performs SPV verification before importing. The verification gate (`verifyBeforeImport()`) checks Token ID derivation, then verifies the genesis TX's Merkle proof against its block header. Only tokens that pass verification are imported into the local store. Unconfirmed TXs (no Merkle proof available) and tokens with invalid proofs remain in quarantine. The UTXO remains quarantined regardless of the auto-import result.
+When `getSafeUtxos()` encounters a quarantined 1-sat UTXO, it fires off `tryAutoImport()` in the background. This fetches the source TX, checks for a 1-sat P2PKH output paying to this wallet's address paired with a P OP_RETURN, and -- if found -- performs SPV verification before importing. The verification gate (`verifyBeforeImport()`) checks Token ID derivation.
+
+**For confirmed tokens:** Verifies the genesis TX's Merkle proof against its block header.
+
+**For unconfirmed tokens:** Verifies via ancestor proof (the input UTXO that funded the unconfirmed token) plus the genesis block header. This allows instant token acceptance without waiting for the current transaction to confirm on-chain.
+
+Only tokens that pass verification are imported into the local store. Tokens with invalid proofs remain in quarantine. The UTXO remains quarantined regardless of the auto-import result.
 
 ### Fungible Token Protection (New in v05.10)
 
@@ -911,7 +917,7 @@ Minted (createGenesis)
                                        active
 ```
 
-The recipient receives the token as `active` via auto-import or manual "Check Incoming", but only after SPV verification passes (genesis TX Merkle proof + block header check). If a transferred or pending token is detected coming back to the original wallet, it is reactivated as `active` with updated UTXO details (same verification gate applies).
+The recipient receives the token as `active` via auto-import or manual "Check Incoming" after SPV verification passes. For confirmed tokens, this verifies the genesis TX's Merkle proof. For unconfirmed tokens, this verifies via ancestor proof plus genesis block header, enabling instant acceptance without waiting for confirmation. If a transferred or pending token is detected coming back to the original wallet, it is reactivated as `active` with updated UTXO details (same verification gate applies).
 
 ### Token Lookup
 
@@ -1019,16 +1025,24 @@ Full proof chain verification (manual "Verify" button). Checks **all** entries i
 
 #### verifyBeforeImport(tokenId, genesisTxId, genesisOutputIndex, immutableBytes, proofChainEntries, currentTxId) *(private)*
 
-SPV verification gate for token import. Called by both `tryAutoImport()` and `checkIncomingTokens()` before storing any incoming token. Only checks the **genesis entry** (not the full chain).
+SPV verification gate for token import. Called by both `tryAutoImport()` and `checkIncomingTokens()` before storing any incoming token.
 
+**For confirmed tokens** (proofChainEntries present):
 1. Verify Token ID = `computeTokenId(genesisTxId, genesisOutputIndex, immutableBytes)` matches `tokenId`
-2. Build proof chain from entries; if empty, fetch Merkle proof for `currentTxId` on demand
-3. Find the genesis entry (last in chain, `entry.txId === genesisTxId`)
-4. Verify genesis entry's Merkle proof using `verifyMerkleProof()` (pure crypto, double SHA-256)
-5. Fetch block header at genesis entry's height, confirm `header.merkleRoot === genesisEntry.merkleRoot`
-6. Return `{ valid, chain, reason? }` — callers use the returned chain for storage
+2. Find the genesis entry (last in chain, `entry.txId === genesisTxId`)
+3. Verify genesis entry's Merkle proof using `verifyMerkleProof()` (SPV validation via double SHA-256)
+4. Fetch block header at genesis entry's height, confirm `header.merkleRoot === genesisEntry.merkleRoot`
+5. Return `{ valid: true, chain, reason: 'Verified via proof chain' }`
 
-Only the genesis TX's block header is required. This proves the token was legitimately created and mined. Transfer TXs are already validated by miners when spent, so their block inclusion is an implicit guarantee.
+**For unconfirmed tokens** (no proofChainEntries, instant SPV acceptance):
+1. Verify Token ID = `computeTokenId(genesisTxId, genesisOutputIndex, immutableBytes)` matches `tokenId` (local verification)
+2. **Fetch ancestor proof:** Get the source transaction's Input 0 (the confirmed input) and fetch its Merkle proof
+3. **Verify ancestor proof:** Use `verifyMerkleProof()` on the ancestor to prove the input UTXO exists and is confirmed
+4. **Retrieve genesis blockHeight:** From existing token record (if available) or from genesis proof
+5. **Fetch and verify genesis block header:** Confirm genesis TX is real via block header at that height
+6. Return `{ valid: true, chain: {}, reason: 'Verified via ancestor proof and genesis block header' }`
+
+**Key design principle:** Token ID verification is purely local (SHA-256 computation). Unconfirmed tokens can be verified and accepted immediately using ancestor proofs, without waiting for the current transaction to confirm on-chain. Genesis and ancestor block headers provide the SPV guarantee that these transactions are genuine. Transfer TXs themselves are validated by miners when spent, so their block inclusion is implicit.
 
 #### pollForProof(tokenId, txId)
 
@@ -1052,7 +1066,7 @@ Scans all stored tokens for missing proof chains and attempts to fetch them. Han
 2. For each unknown TX, fetch raw hex and parse outputs
 3. Scan all TX outputs for an OP_RETURN containing the P prefix (output index varies: genesis has OP_RETURN at Output 0, transfer has it at Output 1) paired with a 1-sat P2PKH output paying to this wallet's address
 4. Extract genesisTxId and proof chain from on-chain binary data
-5. **SPV verification gate:** Call `verifyBeforeImport()` to check Token ID derivation and verify the genesis TX's Merkle proof against its block header. Tokens that fail verification are rejected with a status message. For genesis TXs with multiple outputs, verification is performed once (all fragments share the same genesis TX).
+5. **SPV verification gate:** Call `verifyBeforeImport()` to check Token ID derivation and verify the token's provenance. For confirmed tokens, this verifies the genesis TX's Merkle proof against its block header. For unconfirmed tokens, this verifies via ancestor proof (the confirmed input UTXO) plus genesis block header, enabling instant acceptance. Tokens that fail verification are rejected with a status message. For genesis TXs with multiple outputs, verification is performed once (all fragments share the same genesis TX).
 6. Import verified tokens into the store
 7. **Return-to-sender:** If a token already exists with status `transferred` or `pending_transfer`, reactivate it with the new UTXO details (verification still applies)
 
