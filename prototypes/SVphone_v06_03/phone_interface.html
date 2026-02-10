@@ -655,9 +655,8 @@
                 const myIpField = document.getElementById('myIp')
                 const myPortField = document.getElementById('myPort')
 
-                // Generate random ephemeral port (49152-65535)
-                const ephemeralPort = Math.floor(Math.random() * (65535 - 49152 + 1)) + 49152
-                myPortField.value = ephemeralPort
+                // Use standard SIP port (most likely to work without configuration)
+                myPortField.value = 5060
 
                 // Try to detect public IP via STUN
                 this.detectPublicIP().then(ip => {
