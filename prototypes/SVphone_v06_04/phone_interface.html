@@ -618,6 +618,7 @@
 
             syncWalletData() {
                 const myAddressField = document.getElementById('myAddress')
+                const calleeAddressField = document.getElementById('calleeAddress')
                 let found = false
 
                 // Try 1: Get address from bundle.js wallet (if wallet.html is open in same session)
@@ -625,6 +626,7 @@
                 if (addressEl && addressEl.textContent && addressEl.textContent !== '...') {
                     const addr = addressEl.textContent.trim()
                     myAddressField.value = addr
+                    calleeAddressField.value = addr  // Auto-populate recipient with own address for testing
                     this.log(`✓ Wallet synced from bundle: ${addr}`, 'success')
                     found = true
                 }
@@ -634,6 +636,7 @@
                     const storedAddress = localStorage.getItem('svphone_wallet_address')
                     if (storedAddress && storedAddress !== '...') {
                         myAddressField.value = storedAddress
+                        calleeAddressField.value = storedAddress  // Auto-populate recipient with own address for testing
                         this.log(`✓ Wallet restored from storage: ${storedAddress}`, 'success')
                         found = true
                     }
