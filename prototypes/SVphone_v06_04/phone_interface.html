@@ -671,36 +671,56 @@
             }
 
             async detectPublicIP() {
-                try {
-                    // Try multiple STUN servers to detect public IP
-                    const stunServers = [
-                        'stun.l.google.com:19302',
-                        'stun1.l.google.com:19302',
-                        'stun2.l.google.com:19302'
-                    ]
+                return new Promise((resolve) => {
+                    // Use WebRTC to detect actual local/public IP via ICE candidates
+                    const pc = new RTCPeerConnection({
+                        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                    })
 
-                    for (const server of stunServers) {
-                        try {
-                            const response = await fetch(`https://stun.${server.split(':')[0]}/`, {
-                                method: 'OPTIONS',
-                                timeout: 5000
-                            }).catch(() => null)
+                    let ipFound = false
 
-                            if (response && response.ok) {
-                                // For testing, use a placeholder or fallback to localhost
-                                return '127.0.0.1'
+                    pc.onicecandidate = (ice) => {
+                        if (ipFound) return
+
+                        if (ice && ice.candidate) {
+                            const candidate = ice.candidate.candidate
+                            // Extract IP from candidate string (format: "candidate:... IP ... port")
+                            const ipMatch = candidate.match(/(\d+\.\d+\.\d+\.\d+)/g)
+                            if (ipMatch) {
+                                // Filter out 127.0.0.1 and get first valid IP
+                                const ip = ipMatch.find(ip => !ip.startsWith('127.'))
+                                if (ip) {
+                                    ipFound = true
+                                    this.log(`✓ Local IP detected: ${ip}`, 'success')
+                                    pc.close()
+                                    resolve(ip)
+                                    return
+                                }
                             }
-                        } catch (e) {
-                            continue
+                        }
+
+                        // If no more candidates, return localhost
+                        if (!ice.candidate && !ipFound) {
+                            ipFound = true
+                            this.log('Using localhost for testing', 'info')
+                            pc.close()
+                            resolve('127.0.0.1')
                         }
                     }
 
-                    // Fallback: return localhost for testing
-                    return '127.0.0.1'
-                } catch (error) {
-                    this.log(`IP detection error: ${error.message}`, 'error')
-                    return null
-                }
+                    // Trigger ICE gathering
+                    pc.createDataChannel('test')
+                    pc.createOffer().then(offer => pc.setLocalDescription(offer))
+
+                    // Timeout fallback (5 seconds)
+                    setTimeout(() => {
+                        if (!ipFound) {
+                            ipFound = true
+                            pc.close()
+                            resolve('127.0.0.1')
+                        }
+                    }, 5000)
+                })
             }
 
             bindEvents() {
