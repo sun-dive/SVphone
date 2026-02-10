@@ -71,8 +71,13 @@ class PeerConnection {
         this.emit('media:ready', { mediaStream: this.mediaStream })
         return this.mediaStream
       } catch (initialError) {
-        // If video constraints are too strict, try with relaxed constraints
-        if (options.video && initialError.name !== 'NotAllowedError') {
+        // Check if this is a permission/security error
+        const isPermissionError = initialError.name === 'NotAllowedError' ||
+                                  initialError.name === 'SecurityError' ||
+                                  initialError.message?.includes('Permission denied')
+
+        // If video constraints are too strict (and not a permission error), try with relaxed constraints
+        if (options.video && !isPermissionError) {
           console.warn('[PeerConnection] Video constraints too strict, trying with relaxed constraints:', initialError.message)
           const relaxedConstraints = {
             audio: options.audio ? this.audioConstraints : false,
@@ -87,8 +92,13 @@ class PeerConnection {
             this.emit('media:ready', { mediaStream: this.mediaStream })
             return this.mediaStream
           } catch (relaxedError) {
-            // If video still fails, try audio-only
-            if (options.audio) {
+            // Check again if this is a permission error
+            const isRelaxedPermissionError = relaxedError.name === 'NotAllowedError' ||
+                                             relaxedError.name === 'SecurityError' ||
+                                             relaxedError.message?.includes('Permission denied')
+
+            // If video still fails and it's not a permission error, try audio-only
+            if (options.audio && !isRelaxedPermissionError) {
               console.warn('[PeerConnection] Video unavailable, falling back to audio-only:', relaxedError.message)
               const audioOnlyConstraints = {
                 audio: this.audioConstraints,
@@ -100,15 +110,57 @@ class PeerConnection {
               })
               this.emit('media:ready', { mediaStream: this.mediaStream, audioOnly: true })
               return this.mediaStream
+            } else if (isRelaxedPermissionError) {
+              // Permission error on video - try audio only as last resort
+              if (options.audio) {
+                console.warn('[PeerConnection] Permission denied for video, trying audio-only:', relaxedError.message)
+                try {
+                  const audioOnlyConstraints = {
+                    audio: this.audioConstraints,
+                    video: false
+                  }
+                  this.mediaStream = await navigator.mediaDevices.getUserMedia(audioOnlyConstraints)
+                  console.log('[PeerConnection] Audio-only stream initialized (permission granted for audio):', {
+                    audioTracks: this.mediaStream.getAudioTracks().length
+                  })
+                  this.emit('media:ready', { mediaStream: this.mediaStream, audioOnly: true })
+                  return this.mediaStream
+                } catch (audioError) {
+                  // Audio also denied
+                  this.emitPermissionError(audioError)
+                  throw this.createPermissionErrorMessage(audioError)
+                }
+              } else {
+                this.emitPermissionError(relaxedError)
+                throw this.createPermissionErrorMessage(relaxedError)
+              }
             } else {
               throw relaxedError
             }
           }
-        } else if (initialError.name === 'NotAllowedError') {
-          // Permission denied - this needs user action
-          console.error('[PeerConnection] Permission denied by user:', initialError.message)
-          this.emit('media:permission-denied', { error: initialError })
-          throw new Error('Media permission denied. Please grant permission to access microphone and camera.')
+        } else if (isPermissionError) {
+          // Permission denied on first attempt - try audio-only as fallback
+          if (options.audio && options.video) {
+            console.warn('[PeerConnection] Permission denied for audio+video, trying audio-only:', initialError.message)
+            try {
+              const audioOnlyConstraints = {
+                audio: this.audioConstraints,
+                video: false
+              }
+              this.mediaStream = await navigator.mediaDevices.getUserMedia(audioOnlyConstraints)
+              console.log('[PeerConnection] Audio-only stream initialized (permission granted for audio):', {
+                audioTracks: this.mediaStream.getAudioTracks().length
+              })
+              this.emit('media:ready', { mediaStream: this.mediaStream, audioOnly: true })
+              return this.mediaStream
+            } catch (audioError) {
+              this.emitPermissionError(audioError)
+              throw this.createPermissionErrorMessage(audioError)
+            }
+          } else {
+            this.emitPermissionError(initialError)
+            throw this.createPermissionErrorMessage(initialError)
+          }
         } else {
           throw initialError
         }
@@ -129,6 +181,60 @@ class PeerConnection {
       this.mediaStream = null
       console.log('[PeerConnection] Media stream stopped')
     }
+  }
+
+  /**
+   * Create a user-friendly error message for permission errors
+   * @private
+   */
+  createPermissionErrorMessage(error) {
+    const errorName = error.name || 'Unknown'
+    const errorMessage = error.message || ''
+
+    if (errorName === 'NotAllowedError') {
+      return new Error(
+        'Media access denied. Please:\n' +
+        '1. Check browser permission settings\n' +
+        '2. Make sure this site is allowed to access microphone/camera\n' +
+        '3. Try allowing permissions when prompted'
+      )
+    } else if (errorName === 'SecurityError' || errorMessage.includes('secure')) {
+      return new Error(
+        'Security error accessing media. This may be due to:\n' +
+        '1. Site requires HTTPS connection\n' +
+        '2. Browser security restrictions\n' +
+        '3. Try using HTTPS instead of HTTP'
+      )
+    } else if (errorMessage.includes('Permission denied')) {
+      return new Error(
+        'Permission denied by system:\n' +
+        '1. Check OS-level privacy settings\n' +
+        '2. Allow this browser access to microphone/camera in System Settings\n' +
+        '3. Restart the browser and try again'
+      )
+    } else {
+      return new Error(
+        `Media access error (${errorName}): ${errorMessage}\n` +
+        'Please check browser and system permission settings.'
+      )
+    }
+  }
+
+  /**
+   * Emit permission error event with detailed info
+   * @private
+   */
+  emitPermissionError(error) {
+    console.error('[PeerConnection] Permission error:', {
+      name: error.name,
+      message: error.message,
+      code: error.code
+    })
+    this.emit('media:permission-denied', {
+      error: error,
+      errorName: error.name,
+      errorMessage: error.message
+    })
   }
 
   /**

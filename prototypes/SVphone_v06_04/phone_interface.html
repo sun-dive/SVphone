@@ -957,10 +957,12 @@
                     this.currentCallToken = session.callTokenId
                     this.log('✓ Call initiated successfully', 'success')
                 } catch (error) {
+                    const errorMsg = error.message || error.toString()
+
                     // Handle specific media permission errors
-                    if (error.message && error.message.includes('Media permission denied')) {
-                        this.log('⚠️  Please grant microphone/camera permission to make calls. Check your browser settings.', 'error')
-                    } else if (error.message && error.message.includes('Requested device not found')) {
+                    if (errorMsg.includes('Permission denied') || errorMsg.includes('Permission')) {
+                        this.log(`⚠️  ${errorMsg}`, 'error')
+                    } else if (errorMsg.includes('Requested device not found')) {
                         this.log('⚠️  No microphone or camera found. Attempting audio-only call...', 'warning')
                         // Retry with audio only by attempting the call again
                         try {
@@ -973,10 +975,10 @@
                             this.currentCallToken = session.callTokenId
                             this.log('✓ Audio-only call initiated', 'success')
                         } catch (audioError) {
-                            this.log(`Error: ${audioError.message}`, 'error')
+                            this.log(`Error: ${audioError.message || audioError.toString()}`, 'error')
                         }
                     } else {
-                        this.log(`Error: ${error.message}`, 'error')
+                        this.log(`Error: ${errorMsg}`, 'error')
                     }
                 }
             }
@@ -990,15 +992,17 @@
                                 video: true
                             })
                         } catch (error) {
+                            const errorMsg = error.message || error.toString()
+
                             // If audio+video fails, try audio-only
-                            if (error.message && error.message.includes('Requested device not found')) {
+                            if (errorMsg.includes('Requested device not found')) {
                                 this.log('🎥 Video not available, using audio-only', 'warning')
                                 await this.peerConnection.initializeMediaStream({
                                     audio: true,
                                     video: false
                                 })
-                            } else if (error.message && error.message.includes('Media permission denied')) {
-                                this.log('⚠️  Please grant microphone permission in browser settings', 'error')
+                            } else if (errorMsg.includes('Permission denied') || errorMsg.includes('Permission')) {
+                                this.log(`⚠️  ${errorMsg}`, 'error')
                                 throw error
                             } else {
                                 throw error
@@ -1014,7 +1018,8 @@
                         this.log('Media stream stopped', 'info')
                     }
                 } catch (error) {
-                    this.log(`Media error: ${error.message}`, 'error')
+                    const errorMsg = error.message || error.toString()
+                    this.log(`Media error: ${errorMsg}`, 'error')
                 }
             }
 
@@ -1044,10 +1049,12 @@
 
                     this.log('✓ Call accepted', 'success')
                 } catch (error) {
+                    const errorMsg = error.message || error.toString()
+
                     // Handle specific media permission errors
-                    if (error.message && error.message.includes('Media permission denied')) {
-                        this.log('⚠️  Please grant microphone/camera permission to accept calls. Check your browser settings.', 'error')
-                    } else if (error.message && error.message.includes('Requested device not found')) {
+                    if (errorMsg.includes('Permission denied') || errorMsg.includes('Permission')) {
+                        this.log(`⚠️  ${errorMsg}`, 'error')
+                    } else if (errorMsg.includes('Requested device not found')) {
                         this.log('⚠️  No microphone or camera found. Attempting audio-only call...', 'warning')
                         // Retry with audio only
                         try {
@@ -1061,10 +1068,11 @@
                             document.getElementById('endCallBtn').style.display = 'inline-block'
                             this.log('✓ Audio-only call accepted', 'success')
                         } catch (audioError) {
-                            this.log(`Error accepting call: ${audioError.message}`, 'error')
+                            const audioErrorMsg = audioError.message || audioError.toString()
+                            this.log(`Error accepting call: ${audioErrorMsg}`, 'error')
                         }
                     } else {
-                        this.log(`Error accepting call: ${error.message}`, 'error')
+                        this.log(`Error accepting call: ${errorMsg}`, 'error')
                     }
                 }
             }
@@ -1190,11 +1198,31 @@
 
             log(message, type = 'info') {
                 const consoleDom = document.getElementById('debugConsole')
-                const line = document.createElement('div')
-                line.className = `console-line ${type}`
                 const timestamp = new Date().toLocaleTimeString()
-                line.textContent = `[${timestamp}] ${message}`
-                consoleDom.appendChild(line)
+
+                // Handle multi-line messages (errors with instructions)
+                if (message.includes('\n')) {
+                    // First line with timestamp
+                    const lines = message.split('\n')
+                    lines.forEach((line, index) => {
+                        const logLine = document.createElement('div')
+                        logLine.className = `console-line ${type}`
+                        if (index === 0) {
+                            logLine.textContent = `[${timestamp}] ${line}`
+                        } else {
+                            logLine.textContent = `            ${line}`
+                            logLine.style.paddingLeft = '2em'
+                        }
+                        consoleDom.appendChild(logLine)
+                    })
+                } else {
+                    // Single line message
+                    const line = document.createElement('div')
+                    line.className = `console-line ${type}`
+                    line.textContent = `[${timestamp}] ${message}`
+                    consoleDom.appendChild(line)
+                }
+
                 consoleDom.scrollTop = consoleDom.scrollHeight
                 console.log(`[${type.toUpperCase()}] ${message}`)
             }
