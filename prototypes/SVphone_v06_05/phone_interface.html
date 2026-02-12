@@ -811,7 +811,7 @@
                     </select>
                 </div>
 
-                <button class="btn-primary" id="initiateCallBtn" onclick="app.initializeCall()">📞 Make a Call</button>
+                <button class="btn-primary" id="initiateCallBtn" onclick="app.initializeCall()">☎️ Make a Call</button>
                 <button class="btn-primary" onclick="app.toggleMediaStream()" id="mediaBtn">🎤 Start Media</button>
 
                 <div class="form-group">
@@ -1014,15 +1014,27 @@
                 if (!btn) return
 
                 const statusLabels = {
-                    'none': '📞 Make a Call',
+                    'none': '☎️ Make a Call',                 // Classic phone (idle)
                     'minting': '⏳ Minting Call Tokens',
                     'pending': '⌛ Waiting for Confirmation on Chain',
-                    'confirmed': '✓ Ready to Start a Call',
-                    'calling': '📞 Call Ringing'
+                    'confirmed': '☎️ Ready to Start a Call',  // Classic phone (ready)
+                    'calling': '📞 Call Ringing'              // Red phone (active)
                 }
 
                 btn.textContent = statusLabels[status] || statusLabels['none']
                 btn.disabled = status === 'minting' || status === 'pending'
+
+                // Change button color based on call state
+                if (status === 'calling') {
+                    // Red for active call
+                    btn.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)'
+                } else if (status === 'none' || status === 'confirmed') {
+                    // Green for idle/ready states
+                    btn.style.background = 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)'
+                } else {
+                    // Default blue for other states (minting, pending)
+                    btn.style.background = 'linear-gradient(135deg, #4a9eff 0%, #357abd 100%)'
+                }
             }
 
             syncWalletData() {
