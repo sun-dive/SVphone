@@ -1035,7 +1035,7 @@
                 if (addressEl && addressEl.textContent && addressEl.textContent !== '...') {
                     const addr = addressEl.textContent.trim()
                     myAddressField.value = addr
-                    calleeAddressField.value = addr  // Auto-populate recipient with own address for testing
+                    // Don't auto-populate callee - let user enter the address they want to call
                     this.log(`✓ Wallet synced from bundle: ${addr}`, 'success')
                     found = true
                 }
@@ -1045,7 +1045,7 @@
                     const storedAddress = localStorage.getItem('svphone_wallet_address')
                     if (storedAddress && storedAddress !== '...') {
                         myAddressField.value = storedAddress
-                        calleeAddressField.value = storedAddress  // Auto-populate recipient with own address for testing
+                        // Don't auto-populate callee - let user enter the address they want to call
                         this.log(`✓ Wallet restored from storage: ${storedAddress}`, 'success')
                         found = true
                     }
@@ -1304,7 +1304,12 @@
 
                     const calleeAddress = document.getElementById('calleeAddress').value
                     if (!calleeAddress) {
-                        this.log('Error: Enter recipient address', 'error')
+                        // If tokens are confirmed but no callee entered, provide helpful message
+                        if (this.callTokenStatus === 'confirmed') {
+                            this.log('📋 Tokens ready! Please enter the recipient BSV address to call', 'warning')
+                        } else {
+                            this.log('Error: Enter recipient address', 'error')
+                        }
                         return
                     }
 
