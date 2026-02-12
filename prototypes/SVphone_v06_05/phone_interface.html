@@ -1389,7 +1389,13 @@
                         return  // CRITICAL: Stop here and wait for confirmation
                     }
 
-                    // Tokens exist - update button and proceed to initiate call
+                    // Tokens exist - but check if they're still being minted/confirmed
+                    if (this.isMintPending || this.callTokenStatus === 'minting' || this.callTokenStatus === 'pending') {
+                        this.log('⏳ Please wait - tokens are still being minted or confirmed', 'warning')
+                        return
+                    }
+
+                    // Tokens are confirmed - ready to initiate call
                     this.updateCallButtonStatus('calling')
                     // ====================================================
 
