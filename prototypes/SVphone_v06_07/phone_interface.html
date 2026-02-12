@@ -1204,7 +1204,8 @@
 
                 try {
                     const tokens = await tokenStore.listTokens()
-                    const callTokens = tokens.filter(t => t.tokenName === 'svphone-call-v1')
+                    // Check for call tokens (format: svphone-call-v1-XXXXX)
+                    const callTokens = tokens.filter(t => t.tokenName && t.tokenName.startsWith('svphone-call-v1-'))
 
                     if (callTokens.length > 0) {
                         this.log(`✓ Found ${callTokens.length} call token(s)`, 'success')
@@ -1408,7 +1409,8 @@
                             const filtered = tokens.filter((t, idx) => {
                                 console.debug(`[RECV]   [${idx+1}/${tokens.length}] Token: name="${t.tokenName}", id=${t.tokenId?.slice(0,10)}...`)
 
-                                if (t.tokenName !== 'svphone-call-v1') {
+                                // Check if token name is a call token (format: svphone-call-v1-XXXXX where XXXXX is caller ident)
+                                if (!t.tokenName || !t.tokenName.startsWith('svphone-call-v1-')) {
                                     console.debug(`[RECV]       ❌ Not a call token (is "${t.tokenName}")`)
                                     return false
                                 }
@@ -1530,9 +1532,9 @@
                                 const tokens = await tokenBuilder.checkIncomingTokens((msg) => {
                                     // Silent polling - don't spam logs
                                 })
-                                // Filter for call tokens (svphone-call-v1) where this address is the recipient
+                                // Filter for call tokens (svphone-call-v1-XXXXX) where this address is the recipient
                                 return tokens.filter(t => {
-                                    if (t.tokenName !== 'svphone-call-v1') return false
+                                    if (!t.tokenName || !t.tokenName.startsWith('svphone-call-v1-')) return false
 
                                     // Parse hex-encoded tokenAttributes to get call metadata
                                     try {
@@ -1616,8 +1618,10 @@
                                 .join('')
 
                             // Create new token
+                            // Include first 5 chars of caller address in token name for tracking
+                            const callerIdent = token.caller ? token.caller.slice(0, 5) : 'unkn'
                             const result = await tokenBuilder.createGenesis({
-                                tokenName: token.tokenName || 'svphone-call-v1',
+                                tokenName: `svphone-call-v1-${callerIdent}`,
                                 tokenScript: token.tokenScript || '',
                                 attributes: attributesHex || '00',
                                 supply: token.tokenRules?.supply || 1,
