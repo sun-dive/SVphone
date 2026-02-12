@@ -1140,7 +1140,7 @@
 
                 try {
                     const tokens = await tokenStore.listTokens()
-                    const callTokens = tokens.filter(t => t.tokenAttributes === '63616c6c')
+                    const callTokens = tokens.filter(t => t.tokenName === 'svphone-call-v1')
 
                     if (callTokens.length > 0) {
                         this.log(`✓ Found ${callTokens.length} call token(s)`, 'success')
