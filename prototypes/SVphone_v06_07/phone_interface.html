@@ -1199,20 +1199,38 @@
                 const tokenStore = window.tokenStore
                 if (!tokenStore) {
                     this.log('⚠️  Token store not available', 'warning')
+                    console.warn('[CHECK] tokenStore not available')
                     return false
                 }
 
                 try {
                     const tokens = await tokenStore.listTokens()
-                    // Check for call tokens (format: svphone-call-v1-XXXXX)
-                    const callTokens = tokens.filter(t => t.tokenName && t.tokenName.startsWith('svphone-call-v1-'))
+                    console.debug(`[CHECK] Total tokens in store: ${tokens.length}`)
+                    console.debug(`[CHECK] Token names: ${tokens.map(t => `"${t.tokenName}"`).join(', ')}`)
 
+                    // Check for call tokens (both old format: svphone-call-v1, and new format: svphone-call-v1-XXXXX)
+                    const callTokens = tokens.filter(t => {
+                        const isMatch = t.tokenName && (
+                            t.tokenName === 'svphone-call-v1' ||
+                            t.tokenName.startsWith('svphone-call-v1-')
+                        )
+                        if (isMatch) {
+                            console.debug(`[CHECK] ✓ Found call token: "${t.tokenName}"`)
+                        } else {
+                            console.debug(`[CHECK] ✗ Skipping non-call token: "${t.tokenName}"`)
+                        }
+                        return isMatch
+                    })
+
+                    console.debug(`[CHECK] Filtered to ${callTokens.length} call tokens`)
                     if (callTokens.length > 0) {
                         this.log(`✓ Found ${callTokens.length} call token(s)`, 'success')
                         return true
                     }
+                    console.debug(`[CHECK] No call tokens found`)
                     return false
                 } catch (error) {
+                    console.error(`[CHECK] Error checking call tokens:`, error)
                     this.log(`Error checking call tokens: ${error.message}`, 'error')
                     return false
                 }
