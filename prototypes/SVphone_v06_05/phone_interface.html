@@ -1471,9 +1471,6 @@
                         this.currentCallToken = session.callTokenId
                         this.log('✓ Call initiated successfully', 'success')
                     }
-
-                    this.currentCallToken = session.callTokenId
-                    this.log('✓ Call initiated successfully', 'success')
                 } catch (error) {
                     const errorMsg = error.message || error.toString()
 
@@ -1487,8 +1484,7 @@
                             const session = await this.callManager.initiateCall(calleeAddress, {
                                 audio: true,
                                 video: false,
-                                quality: quality,
-                                mintTokenFn: realMintFn
+                                quality: quality
                             })
                             this.currentCallToken = session.callTokenId
                             this.log('✓ Audio-only call initiated', 'success')
