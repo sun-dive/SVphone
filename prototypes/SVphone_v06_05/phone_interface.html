@@ -1470,15 +1470,14 @@
                             return
                         }
 
-                        // Tokens are available - initiate call with realMintFn
+                        // Tokens are available - initiate call WITHOUT creating new tokens
                         this.updateCallButtonStatus('calling')
                         this.log(`📞 Initiating call to ${calleeAddress} using existing tokens...`, 'info')
 
                         const session = await this.callManager.initiateCall(calleeAddress, {
                             audio: true,
                             video: true,
-                            quality: quality,
-                            mintTokenFn: realMintFn
+                            quality: quality
                         })
 
                         this.currentCallToken = session.callTokenId
