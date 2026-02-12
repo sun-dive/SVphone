@@ -1364,11 +1364,24 @@
                 try {
                     const checkIncomingTokensFn = async (address) => {
                         try {
+                            console.debug(`[RECV] Polling for incoming tokens... (myAddress=${address.slice(0,10)}...)`)
                             const tokens = await tokenBuilder.checkIncomingTokens(() => {})
+                            console.debug(`[RECV] Found ${tokens.length} total tokens`)
+
+                            if (tokens.length === 0) {
+                                console.debug(`[RECV] No tokens found in this poll cycle`)
+                                return []
+                            }
+
                             // Filter for call tokens where this address is the recipient
                             // tokenAttributes is hex-encoded JSON, need to parse it to check callee
-                            return tokens.filter(t => {
-                                if (t.tokenName !== 'svphone-call-v1') return false
+                            const filtered = tokens.filter(t => {
+                                console.debug(`[RECV] Checking token: tokenName="${t.tokenName}", tokenId=${t.tokenId?.slice(0,10)}...`)
+
+                                if (t.tokenName !== 'svphone-call-v1') {
+                                    console.debug(`[RECV]   ❌ Not a call token (name=${t.tokenName})`)
+                                    return false
+                                }
 
                                 // Parse hex-encoded tokenAttributes to get call metadata
                                 try {
@@ -1379,25 +1392,40 @@
                                       attributesJson += String.fromCharCode(parseInt(hex, 16))
                                     }
                                     const attrs = JSON.parse(attributesJson)
-                                    return attrs.callee === address
+                                    console.debug(`[RECV]   Parsed attributes: caller=${attrs.caller?.slice(0,10)}..., callee=${attrs.callee?.slice(0,10)}...`)
+
+                                    if (attrs.callee !== address) {
+                                        console.debug(`[RECV]   ❌ Not for me (callee mismatch)`)
+                                        return false
+                                    }
+
+                                    console.debug(`[RECV]   ✅ This is for me! Adding to results`)
+                                    return true
+                                  } else {
+                                    console.debug(`[RECV]   ❌ No tokenAttributes found`)
                                   }
                                 } catch (e) {
-                                  console.debug('[BgPolling] Could not parse tokenAttributes')
+                                  console.warn('[RECV] Could not parse tokenAttributes:', e.message)
                                 }
                                 return false
                             })
+
+                            console.debug(`[RECV] Filtered to ${filtered.length} incoming call tokens`)
+                            return filtered
                         } catch (error) {
-                            console.error('[BgPolling] Error checking tokens:', error)
+                            console.error('[RECV] Error checking tokens:', error)
                             return []
                         }
                     }
 
                     const verifyTokenFn = async (token) => {
                         try {
+                            console.debug(`[RECV] Verifying token ${token.tokenId?.slice(0,10)}...`)
                             const result = await tokenBuilder.verifyToken(token.tokenId)
+                            console.debug(`[RECV] Verification result: valid=${result.valid}, reason=${result.reason || 'none'}`)
                             return result
                         } catch (error) {
-                            console.error('[BgPolling] Error verifying token:', error)
+                            console.error('[RECV] Error verifying token:', error.message)
                             return { valid: false, reason: error.message }
                         }
                     }
@@ -1507,6 +1535,11 @@
 
                     // Define realMintFn to create call tokens (always available)
                     const realMintFn = async (token) => {
+                        console.debug(`[SEND] 📤 Creating call token...`)
+                        console.debug(`[SEND]   Caller: ${token.caller}`)
+                        console.debug(`[SEND]   Callee: ${token.callee}`)
+                        console.debug(`[SEND]   Sender IP: ${token.senderIp}:${token.senderPort}`)
+
                         this.log(`Creating call token for ${token.callee}`, 'info')
                         try {
                             // Encode call attributes as JSON for attributes field
@@ -1520,9 +1553,11 @@
                                 quality: token.quality,
                                 mediaTypes: token.mediaTypes
                             })
+                            console.debug(`[SEND]   Attributes JSON: ${attributesJson.slice(0,100)}...`)
                             const attributesHex = Array.from(new TextEncoder().encode(attributesJson))
                                 .map(b => b.toString(16).padStart(2, '0'))
                                 .join('')
+                            console.debug(`[SEND]   Attributes Hex: ${attributesHex.slice(0,50)}... (${attributesHex.length} chars)`)
 
                             // Encode call state as JSON for state field
                             const stateJson = JSON.stringify({
@@ -1548,6 +1583,11 @@
 
                             const tokenId = result.tokenIds?.[0] || result.tokenId
                             const genesisTx = result.txId
+
+                            console.debug(`[SEND] ✅ Token created successfully!`)
+                            console.debug(`[SEND]   Token ID: ${tokenId}`)
+                            console.debug(`[SEND]   Genesis TX: ${genesisTx}`)
+                            console.debug(`[SEND]   Status: Broadcast to mempool (waiting for confirmation)`)
 
                             this.log(`✓ Token created: ${tokenId}`, 'success')
                             this.log(`Genesis TX: ${genesisTx}`, 'success')
@@ -1577,6 +1617,8 @@
                     const hasCallTokens = await this.checkForCallTokens()
                     if (!hasCallTokens) {
                         // No tokens available - mint new ones
+                        console.debug(`[SEND] 📤 Initiating call (no tokens exist, will mint new ones)`)
+                        console.debug(`[SEND]   Callee: ${calleeAddress}`)
                         this.log('📋 No call tokens found. Minting new tokens...', 'info')
                         this.updateCallButtonStatus('minting')
 
@@ -1590,6 +1632,7 @@
                         })
 
                         this.currentCallToken = session.callTokenId
+                        console.debug(`[SEND] ✅ Call initiated with session ID: ${session.callTokenId}`)
                         this.log('✓ Call initiated successfully', 'success')
                     } else {
                         // Tokens exist - check if they're still being created/confirmed
@@ -1599,6 +1642,8 @@
                         }
 
                         // Tokens are available - initiate call WITHOUT creating new tokens
+                        console.debug(`[SEND] 📤 Initiating call (using existing tokens)`)
+                        console.debug(`[SEND]   Callee: ${calleeAddress}`)
                         this.updateCallButtonStatus('calling')
                         this.log(`📞 Initiating call to ${calleeAddress} using existing tokens...`, 'info')
 
@@ -1609,6 +1654,7 @@
                         })
 
                         this.currentCallToken = session.callTokenId
+                        console.debug(`[SEND] ✅ Call initiated with session ID: ${session.callTokenId}`)
                         this.log('✓ Call initiated successfully', 'success')
                     }
                 } catch (error) {
@@ -1678,6 +1724,11 @@
             }
 
             showIncomingCall(caller, callTokenId) {
+                console.debug(`[RECV] ✅ INCOMING CALL DETECTED!`)
+                console.debug(`[RECV]   Caller: ${caller}`)
+                console.debug(`[RECV]   Token ID: ${callTokenId}`)
+                console.debug(`[RECV]   Displaying incoming call UI...`)
+
                 // Display incoming call panel
                 document.getElementById('incomingCall').style.display = 'block'
                 document.getElementById('incomingFrom').textContent = caller
