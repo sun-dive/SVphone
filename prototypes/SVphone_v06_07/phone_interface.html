@@ -1691,16 +1691,18 @@
                             return
                         }
 
-                        // Tokens are available - initiate call WITHOUT creating new tokens
-                        console.debug(`[SEND] 📤 Initiating call (using existing tokens)`)
+                        // Tokens are available - BUT we still need to BROADCAST them to recipient
+                        // Must use mintTokenFn to actually transmit the token on blockchain
+                        console.debug(`[SEND] 📤 Initiating call (broadcasting existing token)`)
                         console.debug(`[SEND]   Callee: ${calleeAddress}`)
                         this.updateCallButtonStatus('calling')
-                        this.log(`📞 Initiating call to ${calleeAddress} using existing tokens...`, 'info')
+                        this.log(`📞 Initiating call to ${calleeAddress} (broadcasting token)...`, 'info')
 
                         const session = await this.callManager.initiateCall(calleeAddress, {
                             audio: true,
                             video: true,
-                            quality: quality
+                            quality: quality,
+                            mintTokenFn: realMintFn  // MUST broadcast even with existing tokens!
                         })
 
                         this.currentCallToken = session.callTokenId
