@@ -1365,9 +1365,38 @@
                     const realMintFn = async (token) => {
                         this.log(`Minting call token for ${token.callee}`, 'info')
                         try {
-                            const result = await tokenBuilder.createToken(token)
-                            this.log(`Token minted: ${result.tokenId}`, 'success')
-                            return result
+                            // Convert call token to genesis params format
+                            const genesisParams = {
+                                tokenName: token.tokenName || 'svphone-call-v1',
+                                tokenScript: token.tokenScript || '',
+                                supply: token.tokenRules?.supply || 1,
+                                divisibility: token.tokenRules?.divisibility || 0,
+                                restrictions: token.tokenRules?.restrictions || 0,
+                                rulesVersion: token.tokenRules?.version || 1,
+                                // Encode call attributes as hex (caller, callee, IP, port, sessionKey, codec, quality)
+                                attributes: this.encodeCallAttributes({
+                                    caller: token.caller,
+                                    callee: token.callee,
+                                    senderIp: token.senderIp,
+                                    senderPort: token.senderPort,
+                                    sessionKey: token.sessionKey,
+                                    codec: token.codec,
+                                    quality: token.quality,
+                                    mediaTypes: token.mediaTypes
+                                }),
+                                // Encode call state as hex (status, initiatedAt, timestamp)
+                                stateData: this.encodeCallState({
+                                    status: token.status,
+                                    initiatedAt: token.initiatedAt,
+                                    timestamp: token.timestamp
+                                })
+                            }
+
+                            const tokenIds = await tokenBuilder.createGenesis(genesisParams)
+                            const tokenId = Array.isArray(tokenIds) ? tokenIds[0] : tokenIds
+
+                            this.log(`Token minted: ${tokenId}`, 'success')
+                            return { tokenId, tokenIds }
                         } catch (err) {
                             this.log(`Token mint failed: ${err.message}`, 'error')
                             throw err
@@ -1492,6 +1521,34 @@
                     oscillator.stop(startTime + 1.5)
                 } catch (error) {
                     console.warn('Ringtone playback failed:', error)
+                }
+            }
+
+            encodeCallAttributes(attrs) {
+                // Encode call attributes as hex string for tokenAttributes field
+                // Format: caller|callee|ip|port|sessionKey|codec|quality|mediaTypes
+                try {
+                    const data = JSON.stringify(attrs)
+                    return Array.from(new TextEncoder().encode(data))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join('')
+                } catch (error) {
+                    console.warn('Failed to encode call attributes:', error)
+                    return '00'
+                }
+            }
+
+            encodeCallState(state) {
+                // Encode call state as hex string for stateData field
+                // Format: {status, initiatedAt, timestamp}
+                try {
+                    const data = JSON.stringify(state)
+                    return Array.from(new TextEncoder().encode(data))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join('')
+                } catch (error) {
+                    console.warn('Failed to encode call state:', error)
+                    return ''
                 }
             }
 
