@@ -1404,7 +1404,12 @@
                             })
 
                             const tokenId = result.tokenIds?.[0] || result.tokenId
-                            this.log(`Token minted: ${tokenId}`, 'success')
+                            const genesisTx = result.txId
+
+                            // Display token creation details
+                            this.log(`✓ Token minted: ${tokenId}`, 'success')
+                            this.log(`Genesis TX: ${genesisTx}`, 'success')
+                            this.log(`View on blockchain: https://whatsonchain.com/tx/${genesisTx}`, 'info')
 
                             // CRITICAL: Poll for Merkle proof - this prevents duplicate tokens when genesis TX is confirmed
                             this.log('⏳ Polling for Merkle proof (may take ~10 minutes)...', 'info')
