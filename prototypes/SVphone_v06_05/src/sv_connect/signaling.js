@@ -45,6 +45,31 @@ class CallSignaling {
   }
 
   /**
+   * Parse tokenAttributes from hex-encoded JSON string
+   * @private
+   */
+  parseTokenAttributes(tokenAttributesHex) {
+    if (!tokenAttributesHex) return {}
+
+    try {
+      // Convert hex string to bytes, then to UTF-8 string
+      let attributesJson = ''
+      for (let i = 0; i < tokenAttributesHex.length; i += 2) {
+        const hex = tokenAttributesHex.substr(i, 2)
+        attributesJson += String.fromCharCode(parseInt(hex, 16))
+      }
+
+      // Parse JSON
+      return JSON.parse(attributesJson)
+    } catch (error) {
+      console.error('[CallSignaling] Failed to parse tokenAttributes:', error, {
+        tokenAttributesHex: tokenAttributesHex?.slice(0, 50)
+      })
+      return {}
+    }
+  }
+
+  /**
    * Initialize the signaling layer with wallet address and network info
    */
   async initialize(myAddress, myIp, myPort) {
@@ -184,21 +209,50 @@ class CallSignaling {
     const pollOnce = async () => {
       try {
         const incomingTokens = await checkIncomingTokensFn(this.myAddress)
+        console.debug(`[CallSignaling] Poll found ${incomingTokens.length} tokens`)
 
         for (const token of incomingTokens) {
           // Check if it's a call initiation token
-          if (token.tokenName === 'svphone-call-v1' && token.callee === this.myAddress) {
-            // Verify token via SPV before accepting
-            const verification = await verifyTokenFn(token)
+          if (token.tokenName !== 'svphone-call-v1') {
+            console.debug(`[CallSignaling] Skip token: not a call token (name=${token.tokenName})`)
+            continue
+          }
 
-            if (verification.valid) {
-              this.handleIncomingCall(token)
-            } else {
-              console.warn('[CallSignaling] Incoming call token failed verification:', {
-                tokenId: token.tokenId,
-                reason: verification.reason
-              })
-            }
+          // Parse tokenAttributes to extract call metadata
+          const attributes = this.parseTokenAttributes(token.tokenAttributes)
+          console.debug(`[CallSignaling] Token attributes parsed:`, {
+            callee: attributes.callee,
+            caller: attributes.caller,
+            myAddress: this.myAddress
+          })
+
+          if (attributes.callee !== this.myAddress) {
+            console.debug(`[CallSignaling] Skip token: callee mismatch (token.callee=${attributes.callee}, myAddress=${this.myAddress})`)
+            continue
+          }
+
+          // Verify token via SPV before accepting
+          console.log(`[CallSignaling] Verifying incoming call token from ${attributes.caller}`)
+          const verification = await verifyTokenFn(token)
+
+          if (verification.valid) {
+            console.log(`[CallSignaling] Token verified! Processing incoming call`)
+            // Merge parsed attributes back into token for handleIncomingCall
+            token.caller = attributes.caller
+            token.callee = attributes.callee
+            token.senderIp = attributes.senderIp
+            token.senderPort = attributes.senderPort
+            token.sessionKey = attributes.sessionKey
+            token.codec = attributes.codec
+            token.quality = attributes.quality
+            token.mediaTypes = attributes.mediaTypes || ['audio', 'video']
+
+            this.handleIncomingCall(token)
+          } else {
+            console.warn('[CallSignaling] Incoming call token failed verification:', {
+              tokenId: token.tokenId,
+              reason: verification.reason
+            })
           }
         }
       } catch (error) {

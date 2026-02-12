@@ -1366,11 +1366,26 @@
                         try {
                             const tokens = await tokenBuilder.checkIncomingTokens(() => {})
                             // Filter for call tokens where this address is the recipient
-                            return tokens.filter(t =>
-                                (t.tokenName === 'svphone-call-v1') &&
-                                (t.callee === address || t.stateData?.callee === address ||
-                                 (t.tokenAttributes && JSON.parse(t.tokenAttributes || '{}').callee === address))
-                            )
+                            // tokenAttributes is hex-encoded JSON, need to parse it to check callee
+                            return tokens.filter(t => {
+                                if (t.tokenName !== 'svphone-call-v1') return false
+
+                                // Parse hex-encoded tokenAttributes to get call metadata
+                                try {
+                                  if (t.tokenAttributes) {
+                                    let attributesJson = ''
+                                    for (let i = 0; i < t.tokenAttributes.length; i += 2) {
+                                      const hex = t.tokenAttributes.substr(i, 2)
+                                      attributesJson += String.fromCharCode(parseInt(hex, 16))
+                                    }
+                                    const attrs = JSON.parse(attributesJson)
+                                    return attrs.callee === address
+                                  }
+                                } catch (e) {
+                                  console.debug('[BgPolling] Could not parse tokenAttributes')
+                                }
+                                return false
+                            })
                         } catch (error) {
                             console.error('[BgPolling] Error checking tokens:', error)
                             return []
@@ -1442,10 +1457,25 @@
                                     // Silent polling - don't spam logs
                                 })
                                 // Filter for call tokens (svphone-call-v1) where this address is the recipient
-                                return tokens.filter(t =>
-                                    (t.tokenName === 'svphone-call-v1') &&
-                                    (t.callee === myAddress || t.stateData?.callee === myAddress || t.tokenAttributes?.callee === myAddress)
-                                )
+                                return tokens.filter(t => {
+                                    if (t.tokenName !== 'svphone-call-v1') return false
+
+                                    // Parse hex-encoded tokenAttributes to get call metadata
+                                    try {
+                                      if (t.tokenAttributes) {
+                                        let attributesJson = ''
+                                        for (let i = 0; i < t.tokenAttributes.length; i += 2) {
+                                          const hex = t.tokenAttributes.substr(i, 2)
+                                          attributesJson += String.fromCharCode(parseInt(hex, 16))
+                                        }
+                                        const attrs = JSON.parse(attributesJson)
+                                        return attrs.callee === myAddress
+                                      }
+                                    } catch (e) {
+                                      console.debug('[Polling] Could not parse tokenAttributes')
+                                    }
+                                    return false
+                                })
                             } catch (error) {
                                 console.error('[Polling] Error checking tokens:', error)
                                 return []
