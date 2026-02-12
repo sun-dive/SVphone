@@ -1359,6 +1359,12 @@
                             this.log('Call initiation cancelled due to mint failure', 'error')
                             return
                         }
+
+                        // IMPORTANT: Tokens are being minted but not confirmed yet
+                        // Wait for user confirmation before proceeding to initiate call
+                        this.log('📋 Call tokens minting - waiting for blockchain confirmation...', 'warning')
+                        this.log('⏳ Once tokens are confirmed, click "Initiate Call" again to make your call', 'info')
+                        return  // CRITICAL: Stop here and wait for confirmation
                     }
                     // ====================================================
 
