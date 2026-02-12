@@ -674,16 +674,6 @@
                     <input type="number" id="myPort" placeholder="Ephemeral port">
                 </div>
 
-                <div class="form-group">
-                    <label for="quality">Preferred Quality</label>
-                    <select id="quality">
-                        <option value="hd" selected>HD (2.5 Mbps, 30fps, 1280×720)</option>
-                        <option value="vhd">VHD (5 Mbps, 60fps, 1920×1080)</option>
-                        <option value="sd">SD (500 kbps, 24fps, 640×480)</option>
-                        <option value="ld">LD (100 kbps, 15fps, 320×240)</option>
-                    </select>
-                </div>
-
                 <!-- Microphone Test Section -->
                 <div class="mic-test-section" id="micTestSection">
                     <div class="section-header" onclick="app.toggleMicTest()">
@@ -809,6 +799,16 @@
                             <small>Click "Start Test" to check your camera</small>
                         </div>
                     </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="quality">Preferred Quality</label>
+                    <select id="quality">
+                        <option value="hd" selected>HD (2.5 Mbps, 30fps, 1280×720)</option>
+                        <option value="vhd">VHD (5 Mbps, 60fps, 1920×1080)</option>
+                        <option value="sd">SD (500 kbps, 24fps, 640×480)</option>
+                        <option value="ld">LD (100 kbps, 15fps, 320×240)</option>
+                    </select>
                 </div>
 
                 <button class="btn-primary" id="initiateCallBtn" onclick="app.initializeCall()">📞 Make a Call</button>
@@ -1233,6 +1233,7 @@
                     this.currentCallToken = session.callTokenId
                     this.currentRole = 'caller'
                     this.updateCallStatus('ringing', 'Call ringing...')
+                    this.playRingtone()  // Play ring sound when calling
                 })
 
                 this.callManager.on('call:incoming-session', (session) => {
