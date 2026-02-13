@@ -1284,7 +1284,7 @@
             }
 
             promptForMintQuantity() {
-                const input = prompt('How many call tokens do you want to mint?', '100')
+                const input = prompt('How many call tokens do you want to mint?', '1')
                 if (input === null) return null
                 const quantity = parseInt(input)
                 if (isNaN(quantity) || quantity < 1) {
