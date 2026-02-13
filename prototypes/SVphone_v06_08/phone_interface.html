@@ -1416,9 +1416,9 @@
                 console.debug(`[RECV] Polling startup check: tokenBuilder=${!!tokenBuilder}, myAddress=${!!myAddress}`)
 
                 if (!tokenBuilder || !myAddress) {
-                    console.warn(`[RECV] ⏳ Waiting for wallet to load (will retry in 2s)...`)
-                    console.warn(`[RECV]   - tokenBuilder available: ${!!tokenBuilder}`)
-                    console.warn(`[RECV]   - myAddress value: ${myAddress ? myAddress.slice(0, 10) + '...' : 'not set'}`)
+                    this.log(`⏳ Waiting for wallet to load (will retry in 2s)...`, 'warning')
+                    this.log(`   - tokenBuilder available: ${!!tokenBuilder}`, 'warning')
+                    this.log(`   - myAddress value: ${myAddress ? myAddress.slice(0, 10) + '...' : 'not set'}`, 'warning')
                     // Retry after wallet loads
                     setTimeout(() => this.startBackgroundPolling(), 2000)
                     return
@@ -1428,51 +1428,52 @@
                 if (!this.signaling.myAddress) {
                     console.debug(`[RECV] 🔧 Initializing signaling with address: ${myAddress.slice(0,10)}...`)
                     this.signaling.myAddress = myAddress
-                    console.debug(`[RECV]   ✓ Signaling initialized with address`)
+                    this.log(`[RECV]   ✓ Signaling initialized with address`, 'debug')
                 } else {
-                    console.debug(`[RECV] ✓ Signaling already initialized with address: ${this.signaling.myAddress.slice(0,10)}...`)
+                    this.log(`[RECV] ✓ Signaling already initialized with address: ${this.signaling.myAddress.slice(0,10)}...`, 'debug')
                 }
 
                 try {
+                    const appInstance = this  // Capture this context for logging
                     const checkIncomingTokensFn = async (address) => {
                         try {
-                            console.debug(`[RECV] 🔍 Polling for incoming tokens... (address=${address?.slice(0,10)}...)`)
+                            appInstance.log(`🔍 Polling for incoming tokens... (address=${address?.slice(0,10)}...)`, 'debug')
 
                             if (!address) {
-                                console.error('[RECV] ❌ No address provided to checkIncomingTokensFn!')
+                                appInstance.log('[RECV] ❌ No address provided!', 'error')
                                 return []
                             }
 
                             if (!tokenBuilder) {
-                                console.error('[RECV] ❌ tokenBuilder not available during polling!')
+                                appInstance.log('[RECV] ❌ tokenBuilder not available!', 'error')
                                 return []
                             }
 
                             const tokens = await tokenBuilder.checkIncomingTokens(() => {})
-                            console.debug(`[RECV] ✓ checkIncomingTokens() returned ${tokens?.length || 0} tokens`)
+                            appInstance.log(`✓ checkIncomingTokens() returned ${tokens?.length || 0} tokens`, 'debug')
 
                             if (!tokens || tokens.length === 0) {
-                                console.debug(`[RECV] ℹ️  No tokens found in this poll cycle`)
+                                appInstance.log(`[RECV] ℹ️  No tokens found in this poll cycle`, 'debug')
                                 return []
                             }
 
                             // Filter for call tokens where this address is the recipient
                             // tokenAttributes is hex-encoded JSON, need to parse it to check callee
-                            console.debug(`[RECV] 🔎 Filtering ${tokens.length} tokens for incoming calls...`)
+                            appInstance.log(`[RECV] 🔎 Filtering ${tokens.length} tokens for incoming calls...`, 'debug')
 
                             const filtered = tokens.filter((t, idx) => {
-                                console.debug(`[RECV]   [${idx+1}/${tokens.length}] Token: name="${t.tokenName}", id=${t.tokenId?.slice(0,10)}...`)
+                                appInstance.log(`[RECV]   [${idx+1}/${tokens.length}] Token: name="${t.tokenName}", id=${t.tokenId?.slice(0,10)}...`, 'debug')
 
                                 // Check if token name is a call token (format: CALL-XXXXX where XXXXX is caller ident)
                                 if (!t.tokenName || !t.tokenName.startsWith('CALL-')) {
-                                    console.debug(`[RECV]       ❌ Not a call token (is "${t.tokenName}")`)
+                                    appInstance.log(`[RECV]       ❌ Not a call token (is "${t.tokenName}")`, 'debug')
                                     return false
                                 }
 
                                 // Parse hex-encoded tokenAttributes to get call metadata
                                 try {
                                   if (!t.tokenAttributes) {
-                                    console.debug(`[RECV]       ⚠️  No tokenAttributes found`)
+                                    appInstance.log(`[RECV]       ⚠️  No tokenAttributes found`, 'debug')
                                     return false
                                   }
 
@@ -1483,7 +1484,7 @@
                                       attributesJson += String.fromCharCode(parseInt(hex, 16))
                                     }
                                   } catch (parseErr) {
-                                    console.warn(`[RECV]       ❌ Failed to decode hex attributes:`, parseErr.message)
+                                    appInstance.log(`[RECV]       ❌ Failed to decode hex attributes: ${parseErr.message}`, 'warning')
                                     return false
                                   }
 
@@ -1491,52 +1492,52 @@
                                   try {
                                     attrs = JSON.parse(attributesJson)
                                   } catch (jsonErr) {
-                                    console.warn(`[RECV]       ❌ Hex decoded but not valid JSON:`, jsonErr.message)
+                                    appInstance.log(`[RECV]       ❌ Hex decoded but not valid JSON: ${jsonErr.message}`, 'warning')
                                     return false
                                   }
 
-                                  console.debug(`[RECV]       ✓ Parsed: caller=${attrs.caller?.slice(0,10)}..., callee=${attrs.callee?.slice(0,10)}...`)
+                                  appInstance.log(`[RECV]       ✓ Parsed: caller=${attrs.caller?.slice(0,10)}..., callee=${attrs.callee?.slice(0,10)}...`, 'debug')
 
                                   if (attrs.callee !== address) {
-                                        console.debug(`[RECV]       ❌ Callee mismatch (want ${address.slice(0,10)}..., got ${attrs.callee?.slice(0,10)}...)`)
+                                        appInstance.log(`[RECV]       ❌ Callee mismatch (want ${address.slice(0,10)}..., got ${attrs.callee?.slice(0,10)}...)`, 'debug')
                                         return false
                                   }
 
-                                    console.debug(`[RECV]       ✅ MATCH! This token is for me!`)
+                                    appInstance.log(`[RECV]       ✅ MATCH! This token is for me!`, 'debug')
                                     return true
                                 } catch (e) {
-                                  console.error('[RECV]       ❌ Unexpected error:', e.message)
+                                  appInstance.log('[RECV]       ❌ Unexpected error: ' + e.message, 'error')
                                 }
                                 return false
                             })
 
-                            console.debug(`[RECV] 📋 Filter result: ${filtered.length} of ${tokens.length} are incoming calls`)
+                            appInstance.log(`[RECV] 📋 Filter result: ${filtered.length} of ${tokens.length} are incoming calls`, 'debug')
                             return filtered
                         } catch (error) {
-                            console.error('[RECV] Error checking tokens:', error)
+                            appInstance.log('[RECV] Error checking tokens: ' + error.message, 'error')
                             return []
                         }
                     }
 
                     const verifyTokenFn = async (token) => {
                         try {
-                            console.debug(`[RECV] Verifying token ${token.tokenId?.slice(0,10)}...`)
+                            appInstance.log(`[RECV] Verifying token ${token.tokenId?.slice(0,10)}...`, 'debug')
                             const result = await tokenBuilder.verifyToken(token.tokenId)
-                            console.debug(`[RECV] Verification result: valid=${result.valid}, reason=${result.reason || 'none'}`)
+                            appInstance.log(`[RECV] Verification result: valid=${result.valid}, reason=${result.reason || 'none'}`, 'debug')
                             return result
                         } catch (error) {
-                            console.error('[RECV] Error verifying token:', error.message)
+                            appInstance.log('[RECV] Error verifying token: ' + error.message, 'error')
                             return { valid: false, reason: error.message }
                         }
                     }
 
                     // Start polling (5 second interval)
-                    console.log(`[RECV] 📞 Starting background polling with address: ${this.signaling.myAddress?.slice(0,10)}...`)
+                    this.log(`[RECV] 📞 Starting background polling with address: ${this.signaling.myAddress?.slice(0,10)}...`, 'debug')
                     this.signaling.startPolling(checkIncomingTokensFn, verifyTokenFn)
-                    console.log(`[RECV] ✓ Polling initialized (interval: ${this.signaling.pollingInterval}ms)`)
+                    this.log(`[RECV] ✓ Polling initialized (interval: ${this.signaling.pollingInterval}ms)`, 'debug')
                     this.log('📞 Background polling for incoming calls started', 'success')
                 } catch (error) {
-                    console.error('[BgPolling] Failed to start:', error)
+                    this.log('[BgPolling] Failed to start: ' + error.message, 'error')
                 }
             }
 
