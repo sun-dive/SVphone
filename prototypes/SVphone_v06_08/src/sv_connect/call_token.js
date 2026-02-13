@@ -8,6 +8,14 @@
 // Fee rate for all blockchain operations (sats/KB)
 const CALL_TOKEN_FEE_RATE = 100
 
+// CALL token rules (immutable, defined once here)
+const CALL_TOKEN_RULES = {
+  supply: 1,              // Single NFT per call
+  divisibility: 0,        // Never divisible
+  restrictions: 0x0001,   // One-time-use
+  version: 1              // Rules version
+}
+
 class CallTokenManager {
   constructor(tokenBuilder, uiLogger) {
     this.tokenBuilder = tokenBuilder
@@ -41,10 +49,10 @@ class CallTokenManager {
         tokenName: `CALL-${callerIdent}`,
         tokenScript: callToken.tokenScript || '',
         attributes: attributesHex,
-        supply: callToken.tokenRules?.supply || 1,
-        divisibility: callToken.tokenRules?.divisibility || 0,
-        restrictions: callToken.tokenRules?.restrictions || 0,
-        rulesVersion: callToken.tokenRules?.version || 1,
+        supply: CALL_TOKEN_RULES.supply,
+        divisibility: CALL_TOKEN_RULES.divisibility,
+        restrictions: CALL_TOKEN_RULES.restrictions,
+        rulesVersion: CALL_TOKEN_RULES.version,
         stateData: stateHex
       })
 

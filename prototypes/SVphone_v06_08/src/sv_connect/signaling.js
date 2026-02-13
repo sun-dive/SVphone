@@ -18,10 +18,12 @@
  * - Version: 0x03
  * - tokenName: "svphone-call-v1" (UTF-8)
  * - tokenScript: "" (empty, standard P2PKH)
- * - tokenRules: supply=1, divisibility=0, restrictions=0x0001 (one-time-use)
+ * - tokenRules: supply=1, divisibility=0, restrictions=0x0001 (one-time-use, defined in CallTokenManager)
  * - tokenAttributes: contains call metadata (caller, callee, IP, port, session key)
  * - stateData: call state (status="ringing", duration=0, quality="hd")
  * - proofChain: [] (empty until confirmed)
+ *
+ * Note: tokenRules are defined in CallTokenManager.CALL_TOKEN_RULES, not in this signaling layer
  */
 
 class CallSignaling {
@@ -94,16 +96,6 @@ class CallSignaling {
    */
   createCallToken(calleeAddress, sessionKey, options = {}) {
     const callToken = {
-      // P token metadata
-      tokenName: 'svphone-call-v1',
-      tokenScript: '',
-      tokenRules: {
-        supply: 1,
-        divisibility: 0,
-        restrictions: 0x0001, // One-time-use
-        version: 1
-      },
-
       // Call attributes (mutable, stored in tokenAttributes)
       caller: this.myAddress,
       callee: calleeAddress,
