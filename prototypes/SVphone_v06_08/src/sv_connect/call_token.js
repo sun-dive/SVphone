@@ -29,28 +29,21 @@ class CallTokenManager {
   async createAndBroadcastCallToken(callToken) {
     console.debug(`[CallToken] Creating and broadcasting call token for ${callToken.callee}`)
 
-    const attributesHex = this.encodeCallTokenAttributes(callToken)
-    const stateHex = this.encodeCallTokenState(callToken)
     const callerIdent = callToken.caller?.slice(0, 5) || 'unkn'
 
     this.log(`Creating call token for ${callToken.callee}`, 'info')
 
-    console.debug(`[CallToken] Token encoding:`)
-    console.debug(`[CallToken]   - attributes length: ${attributesHex.length} chars`)
-    console.debug(`[CallToken]   - stateData length: ${stateHex.length} chars`)
-    console.debug(`[CallToken]   - tokenName: CALL-${callerIdent}`)
-
     try {
-      // Create token on blockchain (use tokenBuilder.createGenesis directly)
+      // Create simple P token for call signaling (metadata stays in signaling layer)
       const result = await this.tokenBuilder.createGenesis({
         tokenName: `CALL-${callerIdent}`,
-        tokenScript: callToken.tokenScript || '',
-        attributes: attributesHex,
+        tokenScript: '',  // No consensus rules needed
+        attributes: '00',  // Empty (metadata not stored in token)
         supply: CALL_TOKEN_RULES.supply,
         divisibility: CALL_TOKEN_RULES.divisibility,
         restrictions: CALL_TOKEN_RULES.restrictions,
         rulesVersion: CALL_TOKEN_RULES.version,
-        stateData: stateHex
+        stateData: '00'  // Empty (state tracked in signaling layer)
       })
 
       const tokenId = result.tokenIds?.[0] || result.tokenId
@@ -75,55 +68,6 @@ class CallTokenManager {
       this.log(`Token creation failed: ${err.message}`, 'error')
       throw err
     }
-  }
-
-  /**
-   * Encode call token attributes (immutable metadata)
-   * JSON → UTF-8 → Hex
-   */
-  encodeCallTokenAttributes(token) {
-    const attributesJson = JSON.stringify({
-      caller: token.caller,
-      callee: token.callee,
-      senderIp: token.senderIp,
-      senderPort: token.senderPort,
-      sessionKey: token.sessionKey,
-      codec: token.codec,
-      quality: token.quality,
-      mediaTypes: token.mediaTypes
-    })
-
-    console.debug(`[CallToken] Attributes JSON: ${attributesJson.slice(0, 100)}...`)
-
-    const attributesHex = Array.from(new TextEncoder().encode(attributesJson))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-
-    console.debug(`[CallToken] Attributes Hex: ${attributesHex.slice(0, 50)}... (${attributesHex.length} chars)`)
-
-    return attributesHex || '00'
-  }
-
-  /**
-   * Encode call token state (mutable metadata)
-   * JSON → UTF-8 → Hex
-   */
-  encodeCallTokenState(token) {
-    const stateJson = JSON.stringify({
-      status: token.status,
-      initiatedAt: token.initiatedAt,
-      timestamp: token.timestamp
-    })
-
-    console.debug(`[CallToken] State JSON: ${stateJson}`)
-
-    const stateHex = Array.from(new TextEncoder().encode(stateJson))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-
-    console.debug(`[CallToken] State Hex: ${stateHex.slice(0, 50)}... (${stateHex.length} chars)`)
-
-    return stateHex || '00'
   }
 
   /**
