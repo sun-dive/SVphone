@@ -816,14 +816,10 @@
                 <button class="btn-primary" onclick="app.toggleMediaStream()" id="mediaBtn">🎤 Start Media</button>
 
                 <div class="form-group">
-                    <div style="display: flex; gap: 8px; align-items: flex-end; width: 100%;">
-                        <div style="flex: 1; min-width: 0;">
-                            <label for="calleeAddress" style="display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9em; opacity: 0.9;">CALL BSV Address</label>
-                            <input type="text" id="calleeAddress" placeholder="Enter address to call" style="width: 100%; padding: 10px 12px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px; background: rgba(30, 60, 114, 0.6); color: #fff; font-size: 0.95em; font-weight: 500; display: block; box-sizing: border-box;">
-                        </div>
-                        <button id="lastCalledBtn" style="background: #30363d; padding: 8px 12px; border-radius: 4px; color: #8b949e; cursor: pointer; display: none; white-space: nowrap; height: fit-content;" onclick="app.quickDial()">↲ Redial</button>
-                    </div>
-                    <div id="lastCalledInfo" style="font-size: 0.85em; color: #8b949e; display: none; margin-top: 6px;">
+                    <label for="calleeAddress">CALL BSV Address</label>
+                    <input type="text" id="calleeAddress" placeholder="Enter address to call" style="width: 100%; padding: 10px 12px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px; background: rgba(30, 60, 114, 0.6); color: #fff; font-size: 0.95em; font-weight: 500; display: block; box-sizing: border-box; margin-bottom: 8px;">
+                    <button id="lastCalledBtn" style="background: #30363d; padding: 8px 12px; border-radius: 4px; color: #8b949e; cursor: pointer; display: none; white-space: nowrap; margin-bottom: 8px;" onclick="app.quickDial()">↲ Redial: <span id="lastCalledBtnText"></span></button>
+                    <div id="lastCalledInfo" style="font-size: 0.85em; color: #8b949e; display: none;">
                         Last called: <strong id="lastCalledAddress"></strong>
                     </div>
                 </div>
@@ -1112,11 +1108,17 @@
             loadLastCalled() {
                 const lastCalledAddress = localStorage.getItem('svphone_phone_last_called_address')
                 const lastCalledBtn = document.getElementById('lastCalledBtn')
+                const lastCalledBtnText = document.getElementById('lastCalledBtnText')
                 const lastCalledInfo = document.getElementById('lastCalledInfo')
+                const lastCalledAddressEl = document.getElementById('lastCalledAddress')
 
                 if (lastCalledAddress && lastCalledAddress.trim()) {
-                    document.getElementById('lastCalledAddress').textContent = lastCalledAddress
+                    // Show the redial button with the address
+                    lastCalledBtnText.textContent = lastCalledAddress.slice(0, 10) + '...'
                     lastCalledBtn.style.display = 'block'
+
+                    // Show the info text
+                    lastCalledAddressEl.textContent = lastCalledAddress
                     lastCalledInfo.style.display = 'block'
                 } else {
                     lastCalledBtn.style.display = 'none'
