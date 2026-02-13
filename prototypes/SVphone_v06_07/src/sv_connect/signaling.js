@@ -228,28 +228,41 @@ class CallSignaling {
             myAddress: this.myAddress
           })
 
-          if (attributes.callee !== this.myAddress) {
-            console.debug(`[CallSignaling] Skip token: callee mismatch (token.callee=${attributes.callee}, myAddress=${this.myAddress})`)
+          // Check if this is an incoming call token (we are the callee)
+          const isIncomingCall = attributes.callee === this.myAddress
+
+          // Check if this is a response token (we initiated the call)
+          const isResponseToken = attributes.caller === this.myAddress
+
+          if (!isIncomingCall && !isResponseToken) {
+            console.debug(`[CallSignaling] Skip token: not relevant to us (caller=${attributes.caller}, callee=${attributes.callee}, myAddress=${this.myAddress})`)
             continue
           }
 
-          // Verify token via SPV before accepting
-          console.log(`[CallSignaling] Verifying incoming call token from ${attributes.caller}`)
+          // Verify token via SPV before processing
+          const tokenType = isIncomingCall ? 'incoming call' : 'call response'
+          console.log(`[CallSignaling] Verifying ${tokenType} token`)
           const verification = await verifyTokenFn(token)
 
           if (verification.valid) {
-            console.log(`[CallSignaling] Token verified! Processing incoming call`)
-            // Merge parsed attributes back into token for handleIncomingCall
-            token.caller = attributes.caller
-            token.callee = attributes.callee
-            token.senderIp = attributes.senderIp
-            token.senderPort = attributes.senderPort
-            token.sessionKey = attributes.sessionKey
-            token.codec = attributes.codec
-            token.quality = attributes.quality
-            token.mediaTypes = attributes.mediaTypes || ['audio', 'video']
+            if (isIncomingCall) {
+              console.log(`[CallSignaling] Token verified! Processing incoming call`)
+              // Merge parsed attributes back into token for handleIncomingCall
+              token.caller = attributes.caller
+              token.callee = attributes.callee
+              token.senderIp = attributes.senderIp
+              token.senderPort = attributes.senderPort
+              token.sessionKey = attributes.sessionKey
+              token.codec = attributes.codec
+              token.quality = attributes.quality
+              token.mediaTypes = attributes.mediaTypes || ['audio', 'video']
 
-            this.handleIncomingCall(token)
+              this.handleIncomingCall(token)
+            } else if (isResponseToken) {
+              console.log(`[CallSignaling] Token verified! Processing call response`)
+              // Parse stateData to extract callee's response (connection data)
+              this.handleCallResponse(token, attributes)
+            }
           } else {
             console.warn('[CallSignaling] Incoming call token failed verification:', {
               tokenId: token.tokenId,
@@ -315,6 +328,51 @@ class CallSignaling {
     })
 
     console.log('[CallSignaling] Incoming call from:', token.caller)
+  }
+
+  /**
+   * Handle call response token from callee
+   * @private
+   */
+  handleCallResponse(token, attributes) {
+    console.debug('[CallSignaling] Processing call response token')
+
+    // Parse stateData to extract callee's connection information
+    let responseData = {}
+    if (token.stateData) {
+      try {
+        // Decode hex-encoded stateData
+        let stateDataJson = ''
+        for (let i = 0; i < token.stateData.length; i += 2) {
+          const hex = token.stateData.substr(i, 2)
+          stateDataJson += String.fromCharCode(parseInt(hex, 16))
+        }
+        responseData = JSON.parse(stateDataJson)
+        console.debug('[CallSignaling] Parsed response data:', responseData)
+      } catch (err) {
+        console.warn('[CallSignaling] Failed to parse response stateData:', err.message)
+        return
+      }
+    }
+
+    // Check if this is actually a response (status = answered)
+    if (responseData.status !== 'answered') {
+      console.debug('[CallSignaling] Token is not a call response (status=' + (responseData.status || 'none') + ')')
+      return
+    }
+
+    // Emit call:answered event with callee's connection data
+    this.emit('call:answered', {
+      callTokenId: token.tokenId,
+      callee: responseData.recipientAddress,
+      calleeIp: responseData.recipientIp,
+      calleePort: responseData.recipientPort,
+      calleeSessionKey: responseData.recipientSessionKey,
+      audioOnly: responseData.audioOnly || false,
+      timestamp: Date.now()
+    })
+
+    console.log('[CallSignaling] Call response received from:', responseData.recipientAddress)
   }
 
   /**

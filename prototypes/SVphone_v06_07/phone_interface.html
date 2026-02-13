@@ -961,6 +961,7 @@
 
                 this.currentCallToken = null
                 this.currentRole = null
+                this.calleeConnectionData = null  // Connection data from callee's response
                 this.isMediaActive = false
                 this.callStartTime = null
                 this.durationInterval = null
@@ -1370,6 +1371,22 @@
                     this.showIncomingCall(session.caller, session.callTokenId)
                     this.currentCallToken = session.callTokenId
                     this.currentRole = 'callee'
+                })
+
+                this.callManager.on('call:answered-session', (session) => {
+                    console.debug(`[RECV] ✅ CALL ANSWERED by ${session.callee || session.answerer}`)
+                    this.log(`📞 Call answered by ${session.callee || session.answerer}`, 'success')
+                    this.updateCallStatus('answered', 'Call answered - connecting...')
+                    // Extract callee's connection data if available
+                    if (session.calleeIp && session.calleePort) {
+                        console.debug(`[RECV] Callee connection: ${session.calleeIp}:${session.calleePort}`)
+                        this.calleeConnectionData = {
+                            address: session.calleeAddress,
+                            ip: session.calleeIp,
+                            port: session.calleePort,
+                            sessionKey: session.calleeSessionKey
+                        }
+                    }
                 })
 
                 this.callManager.on('call:connected', () => {
