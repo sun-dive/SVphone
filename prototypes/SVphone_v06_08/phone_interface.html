@@ -1594,8 +1594,9 @@
                             throw new Error('CallTokenManager not initialized')
                         }
                         const result = await this.callTokenManager.createAndBroadcastCallToken(token)
+                        // Token confirmed - update button to show ready state
                         this.updateCallButtonStatus('confirmed')
-                        this.log('✓✓ Call connected!', 'success')
+                        this.log('✓ Token confirmed - ready to initiate call', 'success')
                         return result
                     }
 
@@ -1608,13 +1609,15 @@
                         this.updateCallButtonStatus('minting')
 
                         // Use callTokenCreateFn to create tokens since none exist
-                        this.updateCallButtonStatus('calling')
                         const session = await this.callManager.initiateCall(calleeAddress, {
                             audio: true,
                             video: true,
                             quality: quality,
                             mintTokenFn: callTokenCreateFn
                         })
+
+                        // Token confirmed and call initiated - update button status
+                        this.updateCallButtonStatus('calling')
 
                         this.currentCallToken = session.callTokenId
                         console.debug(`[SEND] ✅ Call initiated with session ID: ${session.callTokenId}`)
