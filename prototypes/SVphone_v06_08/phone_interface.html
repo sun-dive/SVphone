@@ -1447,6 +1447,7 @@
                     const checkIncomingTokensFn = async (address) => {
                         try {
                             appInstance.log(`🔍 Polling for incoming tokens... (address=${address?.slice(0,10)}...)`, 'debug')
+                            console.debug(`[RECV] Full polling address: ${address}`)
 
                             if (!address) {
                                 appInstance.log('[RECV] ❌ No address provided!', 'error')
@@ -1458,8 +1459,17 @@
                                 return []
                             }
 
+                            console.debug(`[RECV] Calling tokenBuilder.checkIncomingTokens()...`)
                             const tokens = await tokenBuilder.checkIncomingTokens(() => {})
+                            console.debug(`[RECV] Raw tokens returned:`, tokens)
                             appInstance.log(`✓ checkIncomingTokens() returned ${tokens?.length || 0} tokens`, 'debug')
+
+                            if (tokens && tokens.length > 0) {
+                                console.debug(`[RECV] Token details:`)
+                                tokens.forEach((t, i) => {
+                                    console.debug(`  [${i}] ID: ${t.tokenId?.slice(0,16)}..., Name: ${t.tokenName}, TX: ${t.currentTxId?.slice(0,16)}...`)
+                                })
+                            }
 
                             if (!tokens || tokens.length === 0) {
                                 appInstance.log(`[RECV] ℹ️  No tokens found in this poll cycle`, 'debug')
@@ -1469,12 +1479,20 @@
                             // Filter for call tokens where this address is the recipient
                             // tokenAttributes is hex-encoded JSON, need to parse it to check callee
                             appInstance.log(`[RECV] 🔎 Filtering ${tokens.length} tokens for incoming calls...`, 'debug')
+                            console.debug(`[RECV] Starting filter with ${tokens.length} tokens`)
 
                             const filtered = tokens.filter((t, idx) => {
+                                console.debug(`[RECV] [${idx+1}/${tokens.length}] Checking token:`, {
+                                    tokenId: t.tokenId?.slice(0,20),
+                                    tokenName: t.tokenName,
+                                    currentTxId: t.currentTxId?.slice(0,20),
+                                    hasAttributes: !!t.tokenAttributes
+                                })
                                 appInstance.log(`[RECV]   [${idx+1}/${tokens.length}] Token: name="${t.tokenName}", id=${t.tokenId?.slice(0,10)}...`, 'debug')
 
                                 // Check if token name is a call token (format: CALL-XXXXX where XXXXX is caller ident)
                                 if (!t.tokenName || !t.tokenName.startsWith('CALL-')) {
+                                    console.debug(`[RECV]   ❌ Not a call token: tokenName="${t.tokenName}"`)
                                     appInstance.log(`[RECV]       ❌ Not a call token (is "${t.tokenName}")`, 'debug')
                                     return false
                                 }
@@ -1483,16 +1501,21 @@
                                 // Supports both binary format (v1) and legacy JSON format
                                 try {
                                   if (!t.tokenAttributes) {
+                                    console.debug(`[RECV]   ❌ No tokenAttributes found`)
                                     appInstance.log(`[RECV]       ⚠️  No tokenAttributes found`, 'debug')
                                     return false
                                   }
+
+                                  console.debug(`[RECV]   Parsing attributes (first 20 chars): ${t.tokenAttributes.substring(0, 20)}...`)
 
                                   // Use signaling layer's parser (auto-detects binary v1 or legacy JSON)
                                   let attrs
                                   if (appInstance.signaling && appInstance.signaling.parseTokenAttributes) {
                                     attrs = appInstance.signaling.parseTokenAttributes(t.tokenAttributes)
+                                    console.debug(`[RECV]   ✓ Parsed with signaling parser:`, attrs)
                                   } else {
                                     // Fallback: Try legacy JSON parsing if signaling not available
+                                    console.debug(`[RECV]   ⚠️  Signaling parser unavailable, trying legacy JSON`)
                                     appInstance.log(`[RECV]       ⚠️  Signaling parser unavailable, trying legacy JSON`, 'debug')
                                     let attributesJson = ''
                                     for (let i = 0; i < t.tokenAttributes.length; i += 2) {
@@ -1500,20 +1523,25 @@
                                       attributesJson += String.fromCharCode(parseInt(hex, 16))
                                     }
                                     attrs = JSON.parse(attributesJson)
+                                    console.debug(`[RECV]   ✓ Parsed with fallback parser:`, attrs)
                                   }
 
                                   if (!attrs || !attrs.callee) {
+                                    console.debug(`[RECV]   ❌ Failed to parse attributes or missing callee`, attrs)
                                     appInstance.log(`[RECV]       ❌ Failed to parse attributes or missing callee`, 'warning')
                                     return false
                                   }
 
+                                  console.debug(`[RECV]   Checking callee: want=${address}, got=${attrs.callee}`)
                                   appInstance.log(`[RECV]       ✓ Parsed: caller=${attrs.caller?.slice(0,10)}..., callee=${attrs.callee?.slice(0,10)}...`, 'debug')
 
                                   if (attrs.callee !== address) {
+                                        console.debug(`[RECV]   ❌ Callee mismatch`)
                                         appInstance.log(`[RECV]       ❌ Callee mismatch (want ${address.slice(0,10)}..., got ${attrs.callee?.slice(0,10)}...)`, 'debug')
                                         return false
                                   }
 
+                                    console.debug(`[RECV]   ✅ MATCH! Token is for ${address}`)
                                     appInstance.log(`[RECV]       ✅ MATCH! This token is for me!`, 'debug')
                                     return true
                                 } catch (e) {
@@ -1550,12 +1578,14 @@
 
                     // Listen for incoming call events from signaling layer
                     this.signaling.on('call:incoming', (data) => {
+                        console.debug(`[RECV] ✅ call:incoming event received:`, data)
                         this.log(`[RECV] 🔔 Signaling layer detected incoming call`, 'info')
                         this.showIncomingCall(data.caller, data.callTokenId)
                     })
 
                     // Listen for call response events (callee accepted the call)
                     this.signaling.on('call:answered', (data) => {
+                        console.debug(`[SEND] ✅ call:answered event received:`, data)
                         this.log(`[SEND] 🔔 Call answered! Recipient accepted the call`, 'success')
                         console.debug(`[SEND] Call answered event data:`, data)
 
@@ -1565,6 +1595,7 @@
                             // Initiate P2P connection to the callee
                             this.initiateP2PConnection(data.callTokenId, data.callee, data.calleeIp, data.calleePort)
                         } else {
+                            console.warn(`[SEND] Missing callee connection info:`, data)
                             this.log(`⚠️ Missing callee connection info`, 'warning')
                         }
                     })

@@ -406,23 +406,34 @@ class CallSignaling {
 
     const pollOnce = async () => {
       try {
+        console.debug(`[CallSignaling] 🔍 Poll cycle started for address: ${this.myAddress?.slice(0,20)}...`)
         const incomingTokens = await checkIncomingTokensFn(this.myAddress)
-        console.debug(`[CallSignaling] Poll found ${incomingTokens.length} tokens`)
+        console.debug(`[CallSignaling] Poll cycle found ${incomingTokens.length} incoming tokens`)
+
+        if (incomingTokens.length === 0) {
+          console.debug(`[CallSignaling] No tokens in this poll cycle, will retry in ${this.pollingInterval}ms`)
+        }
 
         for (const token of incomingTokens) {
+          console.debug(`[CallSignaling] Processing token: id=${token.tokenId?.slice(0,20)}..., name=${token.tokenName}`)
+
           // Check if it's a call initiation token
           // Format: CALL-XXXXX (where XXXXX is caller identifier)
           if (!token.tokenName || (!token.tokenName.startsWith('CALL-'))) {
-            console.debug(`[CallSignaling] Skip token: not a call token (name=${token.tokenName})`)
+            console.debug(`[CallSignaling] ❌ Skip token: not a call token (name=${token.tokenName})`)
             continue
           }
 
+          console.debug(`[CallSignaling] ✓ Token is a CALL token, parsing attributes...`)
+
           // Parse tokenAttributes to extract call metadata
           const attributes = this.parseTokenAttributes(token.tokenAttributes)
-          console.debug(`[CallSignaling] Token attributes parsed:`, {
-            callee: attributes.callee,
-            caller: attributes.caller,
-            myAddress: this.myAddress
+          console.debug(`[CallSignaling] ✓ Token attributes parsed:`, {
+            callee: attributes.callee?.slice(0,20),
+            caller: attributes.caller?.slice(0,20),
+            myAddress: this.myAddress?.slice(0,20),
+            hasIp: !!attributes.senderIp,
+            hasPort: !!attributes.senderPort
           })
 
           // Check if this is an incoming call token (we are the callee)
@@ -431,8 +442,10 @@ class CallSignaling {
           // Check if this is a response token (we initiated the call)
           const isResponseToken = attributes.caller === this.myAddress
 
+          console.debug(`[CallSignaling] Token role check: isIncomingCall=${isIncomingCall}, isResponseToken=${isResponseToken}`)
+
           if (!isIncomingCall && !isResponseToken) {
-            console.debug(`[CallSignaling] Skip token: not relevant to us (caller=${attributes.caller}, callee=${attributes.callee}, myAddress=${this.myAddress})`)
+            console.debug(`[CallSignaling] ❌ Skip token: not relevant to us (caller=${attributes.caller?.slice(0,20)}, callee=${attributes.callee?.slice(0,20)}, myAddress=${this.myAddress?.slice(0,20)})`)
             continue
           }
 
@@ -532,20 +545,29 @@ class CallSignaling {
    * @private
    */
   handleCallResponse(token, attributes) {
-    console.debug('[CallSignaling] Processing call response token')
+    console.debug('[CallSignaling] 🔄 Processing call response token')
+    console.debug('[CallSignaling] Token ID:', token.tokenId?.slice(0,20))
+    console.debug('[CallSignaling] StateData length:', token.stateData?.length || 0)
 
     // Parse stateData to extract callee's connection information
     let responseData = {}
     if (token.stateData) {
       try {
+        console.debug('[CallSignaling] ✓ Token has stateData, decoding...')
         // Decode hex-encoded stateData
         let stateDataJson = ''
         for (let i = 0; i < token.stateData.length; i += 2) {
           const hex = token.stateData.substr(i, 2)
           stateDataJson += String.fromCharCode(parseInt(hex, 16))
         }
+        console.debug('[CallSignaling] Decoded stateData JSON:', stateDataJson.substring(0, 100) + '...')
         responseData = JSON.parse(stateDataJson)
-        console.debug('[CallSignaling] Parsed response data:', responseData)
+        console.debug('[CallSignaling] ✓ Parsed response data:',  {
+          status: responseData.status,
+          recipientAddress: responseData.recipientAddress?.slice(0,20),
+          hasIp: !!responseData.recipientIp,
+          hasPort: !!responseData.recipientPort
+        })
       } catch (err) {
         console.warn('[CallSignaling] Failed to parse response stateData:', err.message)
         return
@@ -554,12 +576,14 @@ class CallSignaling {
 
     // Check if this is actually a response (status = answered)
     if (responseData.status !== 'answered') {
-      console.debug('[CallSignaling] Token is not a call response (status=' + (responseData.status || 'none') + ')')
+      console.debug('[CallSignaling] ❌ Token is not a call response (status=' + (responseData.status || 'none') + ')')
       return
     }
 
+    console.debug('[CallSignaling] ✓ Status is "answered", emitting call:answered event...')
+
     // Emit call:answered event with callee's connection data
-    this.emit('call:answered', {
+    const eventData = {
       callTokenId: token.tokenId,
       callee: responseData.recipientAddress,
       calleeIp: responseData.recipientIp,
@@ -567,9 +591,17 @@ class CallSignaling {
       calleeSessionKey: responseData.recipientSessionKey,
       audioOnly: responseData.audioOnly || false,
       timestamp: Date.now()
+    }
+    console.debug('[CallSignaling] Emitting event with data:', {
+      callTokenId: eventData.callTokenId?.slice(0,20),
+      callee: eventData.callee?.slice(0,20),
+      calleeIp: eventData.calleeIp,
+      calleePort: eventData.calleePort
     })
 
-    console.log('[CallSignaling] Call response received from:', responseData.recipientAddress)
+    this.emit('call:answered', eventData)
+
+    console.log('[CallSignaling] ✅ Call response received from:', responseData.recipientAddress?.slice(0,20))
   }
 
   /**
