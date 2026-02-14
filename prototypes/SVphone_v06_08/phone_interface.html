@@ -1553,6 +1553,21 @@
                         this.log(`[RECV] 🔔 Signaling layer detected incoming call`, 'info')
                         this.showIncomingCall(data.caller, data.callTokenId)
                     })
+
+                    // Listen for call response events (callee accepted the call)
+                    this.signaling.on('call:answered', (data) => {
+                        this.log(`[SEND] 🔔 Call answered! Recipient accepted the call`, 'success')
+                        console.debug(`[SEND] Call answered event data:`, data)
+
+                        // Recipient's connection info is in the event data
+                        if (data.calleeIp && data.calleePort) {
+                            this.log(`📍 Connecting to recipient at ${data.calleeIp}:${data.calleePort}`, 'info')
+                            // Initiate P2P connection to the callee
+                            this.initiateP2PConnection(data.callTokenId, data.callee, data.calleeIp, data.calleePort)
+                        } else {
+                            this.log(`⚠️ Missing callee connection info`, 'warning')
+                        }
+                    })
                 } catch (error) {
                     this.log('[BgPolling] Failed to start: ' + error.message, 'error')
                 }
