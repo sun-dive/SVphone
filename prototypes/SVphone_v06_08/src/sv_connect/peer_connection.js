@@ -2,9 +2,8 @@
  * WebRTC Peer Connection Manager (v06.00)
  *
  * Manages peer-to-peer media connections for voice and video calls.
- * Uses direct P2P with mDNS discovery for NAT traversal.
- * Firewalls typically allow ports 3478-3497 (standard VoIP ports), enabling traversal.
- * Uses DTLS-SRTP for encryption.
+ * Uses direct P2P connection with WebRTC's built-in NAT traversal.
+ * Encrypted with DTLS-SRTP.
  */
 
 class PeerConnection {
@@ -263,16 +262,13 @@ class PeerConnection {
         })
       }
 
-      // ICE candidate handling
+      // Candidate handling for P2P connection
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
           this.emit('ice:candidate', {
             peerId: peerId,
             candidate: event.candidate
           })
-          console.log('[PeerConnection] ICE candidate generated for', peerId)
-        } else {
-          console.log('[PeerConnection] ICE gathering complete for', peerId)
         }
       }
 
@@ -301,9 +297,9 @@ class PeerConnection {
         }
       }
 
-      // ICE connection state
+      // Connection monitoring (ICE connection state change)
       peerConnection.oniceconnectionstatechange = () => {
-        console.log('[PeerConnection] ICE connection state:', peerId, peerConnection.iceConnectionState)
+        // State tracked via onconnectionstatechange event above
       }
 
       // Signaling state
