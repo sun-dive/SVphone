@@ -148,6 +148,16 @@ class CallTokenManager {
    */
   async createAndBroadcastCallToken(callToken) {
     console.debug(`[CallToken] Creating and broadcasting call token for ${callToken.callee}`)
+    console.debug(`[CallToken] Full token object:`, {
+      caller: callToken.caller,
+      callee: callToken.callee,
+      senderIp: callToken.senderIp,
+      senderPort: callToken.senderPort,
+      sessionKey: callToken.sessionKey?.slice?.(0, 20) + '...',
+      codec: callToken.codec,
+      quality: callToken.quality,
+      mediaTypes: callToken.mediaTypes
+    })
 
     const callerIdent = callToken.caller?.slice(0, 5) || 'unkn'
 
@@ -206,17 +216,25 @@ class CallTokenManager {
 
       // Transfer token to recipient (INSTANT after genesis confirmed)
       console.debug(`[CallToken] 📤 Transferring confirmed token to recipient: ${callToken.callee}`)
+      console.debug(`[CallToken] Transfer parameters: tokenId=${tokenId}, calleeAddress=${callToken.callee}`)
       this.log(`📤 Transferring token to recipient (instant)...`, 'info')
 
       let transferResult
       try {
+        console.debug(`[CallToken] Calling tokenBuilder.createTransfer(${tokenId}, ${callToken.callee})`)
         transferResult = await this.tokenBuilder.createTransfer(tokenId, callToken.callee)
         console.debug(`[CallToken] ✅ Token transferred instantly!`)
+        console.debug(`[CallToken] Transfer result:`, transferResult)
         console.debug(`[CallToken] Transfer TX: ${transferResult.txId}`)
         this.log(`✓ Token transferred instantly: ${transferResult.txId}`, 'success')
         this.log(`View transfer on blockchain: https://whatsonchain.com/tx/${transferResult.txId}`, 'info')
       } catch (err) {
         console.error(`[CallToken] ❌ Token transfer failed:`, err)
+        console.error(`[CallToken] Transfer error details:`, {
+          message: err.message,
+          stack: err.stack,
+          name: err.name
+        })
         this.log(`⚠️ Token transfer failed: ${err.message}`, 'warning')
         throw err
       }
