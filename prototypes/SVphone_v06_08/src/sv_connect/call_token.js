@@ -17,7 +17,7 @@
 const CALL_TOKEN_RULES = {
   supply: 1,              // Single NFT per call
   divisibility: 0,        // Never divisible
-  restrictions: 0x0001,   // One-time-use
+  restrictions: 0,        // NFT (no restrictions)
   version: 1              // Rules version
 }
 
