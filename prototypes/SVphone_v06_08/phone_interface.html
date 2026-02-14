@@ -639,6 +639,177 @@
             color: #4a9eff;
             border: 1px solid rgba(74, 158, 255, 0.3);
         }
+
+        /* Active Call Panel Styles */
+        .active-call-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        .call-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .call-info {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .call-status-badge {
+            font-size: 1.2em;
+            padding: 5px 10px;
+            background: rgba(31, 194, 82, 0.2);
+            border-radius: 4px;
+            color: #1fc252;
+        }
+
+        .call-timer {
+            font-family: monospace;
+            font-size: 1.1em;
+            color: #8b949e;
+        }
+
+        .call-peer-address {
+            font-size: 1em;
+            color: #58a6ff;
+            font-weight: 500;
+        }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            flex: 1;
+            min-height: 300px;
+        }
+
+        .video-container {
+            position: relative;
+            background: #0d1117;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-label {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #fff;
+        }
+
+        .audio-controls,
+        .video-controls,
+        .call-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .control-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            background: rgba(88, 166, 255, 0.2);
+            color: #58a6ff;
+            cursor: pointer;
+            font-size: 0.95em;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .control-btn:hover {
+            background: rgba(88, 166, 255, 0.3);
+        }
+
+        .control-btn.danger {
+            background: rgba(248, 81, 73, 0.2);
+            color: #f85149;
+        }
+
+        .control-btn.danger:hover {
+            background: rgba(248, 81, 73, 0.3);
+        }
+
+        .control-btn.active {
+            background: rgba(31, 194, 82, 0.2);
+            color: #1fc252;
+        }
+
+        .call-stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            padding: 10px;
+            background: rgba(48, 54, 61, 0.5);
+            border-radius: 6px;
+            font-size: 0.85em;
+        }
+
+        .stat {
+            display: flex;
+            gap: 8px;
+        }
+
+        .stat label {
+            color: #8b949e;
+            font-weight: 500;
+        }
+
+        .stat span {
+            color: #58a6ff;
+            font-family: monospace;
+        }
+
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .volume-control input {
+            width: 100px;
+            height: 5px;
+            cursor: pointer;
+        }
+
+        @media (max-width: 800px) {
+            .video-grid {
+                grid-template-columns: 1fr;
+                min-height: 200px;
+            }
+
+            .call-stats {
+                gap: 15px;
+                flex-wrap: wrap;
+            }
+        }
     </style>
 </head>
 <body>
@@ -929,6 +1100,74 @@
             <h2>Debug Console</h2>
             <div class="console" id="debugConsole"></div>
             <button class="btn-warning" onclick="app.clearConsole()" style="margin-top:10px; width: auto;">Clear Console</button>
+        </div>
+    </div>
+
+    <!-- Active Call Panel (fullscreen during calls) -->
+    <div class="active-call-panel" id="activeCallPanel" style="display: none;">
+        <!-- Call Header -->
+        <div class="call-header">
+            <div class="call-info">
+                <span class="call-status-badge" id="callStatusBadge">📞 Connected</span>
+                <span class="call-timer" id="callTimer">00:00</span>
+            </div>
+            <span class="call-peer-address" id="callPeerAddress">Waiting...</span>
+        </div>
+
+        <!-- Video Grid -->
+        <div class="video-grid">
+            <div class="video-container local">
+                <video id="localVideo" autoplay muted playsinline></video>
+                <div class="video-label">You</div>
+            </div>
+            <div class="video-container remote">
+                <video id="remoteVideo" autoplay playsinline></video>
+                <div class="video-label">Caller</div>
+            </div>
+        </div>
+
+        <!-- Audio Controls -->
+        <div class="audio-controls">
+            <button id="toggleAudioBtn" class="control-btn audio" onclick="app.toggleAudioMute()" title="Mute/Unmute">
+                🎤 Mute
+            </button>
+            <div class="volume-control">
+                <input type="range" id="volumeSlider" min="0" max="100" value="100" oninput="app.setVolume(this.value)">
+                <span id="volumeValue">100%</span>
+            </div>
+        </div>
+
+        <!-- Video Controls -->
+        <div class="video-controls">
+            <button id="toggleVideoBtn" class="control-btn video" onclick="app.toggleVideo()" title="Toggle Video">
+                📹 Video: ON
+            </button>
+            <button id="fullscreenBtn" class="control-btn" onclick="app.enterCallFullscreen()" title="Fullscreen">
+                ⛶ Fullscreen
+            </button>
+        </div>
+
+        <!-- Call Stats -->
+        <div class="call-stats" id="callStats">
+            <div class="stat">
+                <label>Bitrate:</label>
+                <span id="bitrateValue">-</span>
+            </div>
+            <div class="stat">
+                <label>Quality:</label>
+                <span id="qualityValue">HD</span>
+            </div>
+            <div class="stat">
+                <label>RTT:</label>
+                <span id="rttValue">-ms</span>
+            </div>
+        </div>
+
+        <!-- Call Actions -->
+        <div class="call-actions">
+            <button id="endCallBtn" class="control-btn danger" onclick="app.endActiveCall()" title="End Call">
+                🛑 End Call
+            </button>
         </div>
     </div>
 
@@ -2542,6 +2781,133 @@
 
             clearConsole() {
                 document.getElementById('debugConsole').innerHTML = ''
+            }
+
+            // Active Call Panel Methods
+            showActiveCallPanel(peerAddress) {
+                const panel = document.getElementById('activeCallPanel')
+                if (panel) {
+                    panel.style.display = 'flex'
+                    document.getElementById('callPeerAddress').textContent = peerAddress.substring(0, 15) + '...'
+                    this.startCallTimer()
+                    this.startCallStatsMonitoring()
+                    this.log('📞 Active call panel opened', 'success')
+                }
+            }
+
+            hideActiveCallPanel() {
+                const panel = document.getElementById('activeCallPanel')
+                if (panel) {
+                    panel.style.display = 'none'
+                    this.stopCallTimer()
+                    this.stopCallStatsMonitoring()
+                    this.log('📞 Active call panel closed', 'info')
+                }
+            }
+
+            startCallTimer() {
+                let seconds = 0
+                this.callTimerInterval = setInterval(() => {
+                    seconds++
+                    const mins = Math.floor(seconds / 60)
+                    const secs = seconds % 60
+                    document.getElementById('callTimer').textContent =
+                        `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+                }, 1000)
+            }
+
+            stopCallTimer() {
+                if (this.callTimerInterval) {
+                    clearInterval(this.callTimerInterval)
+                    this.callTimerInterval = null
+                }
+                document.getElementById('callTimer').textContent = '00:00'
+            }
+
+            startCallStatsMonitoring() {
+                this.statsInterval = setInterval(async () => {
+                    if (this.peerConnection && this.currentPeerId) {
+                        const stats = await this.peerConnection.getStats(this.currentPeerId)
+                        if (stats && stats.connection) {
+                            // Update bitrate
+                            const bitrate = (stats.connection.availableOutgoingBitrate / 1000000).toFixed(2)
+                            document.getElementById('bitrateValue').textContent = `${bitrate} Mbps`
+
+                            // Update RTT
+                            const rtt = (stats.connection.currentRoundTripTime * 1000).toFixed(0)
+                            document.getElementById('rttValue').textContent = `${rtt}ms`
+                        }
+                    }
+                }, 2000)
+            }
+
+            stopCallStatsMonitoring() {
+                if (this.statsInterval) {
+                    clearInterval(this.statsInterval)
+                    this.statsInterval = null
+                }
+                document.getElementById('bitrateValue').textContent = '-'
+                document.getElementById('rttValue').textContent = '-ms'
+            }
+
+            toggleAudioMute() {
+                const btn = document.getElementById('toggleAudioBtn')
+                if (this.peerConnection && this.peerConnection.mediaStream) {
+                    const audioTracks = this.peerConnection.mediaStream.getAudioTracks()
+                    if (audioTracks.length > 0) {
+                        const isMuted = !audioTracks[0].enabled
+                        audioTracks[0].enabled = isMuted
+                        btn.textContent = isMuted ? '🎤 Mute' : '🔇 Unmuted'
+                        btn.classList.toggle('active', !isMuted)
+                        this.log(isMuted ? '🎤 Audio unmuted' : '🔇 Audio muted', 'info')
+                    }
+                }
+            }
+
+            toggleVideo() {
+                const btn = document.getElementById('toggleVideoBtn')
+                if (this.peerConnection && this.peerConnection.mediaStream) {
+                    const videoTracks = this.peerConnection.mediaStream.getVideoTracks()
+                    if (videoTracks.length > 0) {
+                        const isOn = videoTracks[0].enabled
+                        videoTracks[0].enabled = !isOn
+                        btn.textContent = isOn ? '📹 Video: OFF' : '📹 Video: ON'
+                        btn.classList.toggle('active', !isOn)
+                        this.log(isOn ? '📹 Video disabled' : '📹 Video enabled', 'info')
+                    } else {
+                        this.log('⚠️ No video tracks available', 'warning')
+                    }
+                }
+            }
+
+            setVolume(value) {
+                document.getElementById('volumeValue').textContent = value + '%'
+                if (this.peerConnection && this.peerConnection.mediaStream) {
+                    const audioTracks = this.peerConnection.mediaStream.getAudioTracks()
+                    audioTracks.forEach(track => {
+                        const gainNode = track.getSettings ? track.getSettings() : {}
+                        // Note: actual volume control would require Web Audio API integration
+                    })
+                }
+            }
+
+            enterCallFullscreen() {
+                const panel = document.getElementById('activeCallPanel')
+                if (panel.requestFullscreen) {
+                    panel.requestFullscreen()
+                } else if (panel.webkitRequestFullscreen) {
+                    panel.webkitRequestFullscreen()
+                }
+            }
+
+            endActiveCall() {
+                this.hideActiveCallPanel()
+                if (this.peerConnection) {
+                    this.peerConnection.closeAllConnections()
+                }
+                this.currentPeerId = null
+                this.currentCallToken = null
+                this.log('📞 Call ended', 'info')
             }
         }
 
