@@ -549,27 +549,80 @@ class CallSignaling {
     console.debug('[CallSignaling] Token ID:', token.tokenId?.slice(0,20))
     console.debug('[CallSignaling] StateData length:', token.stateData?.length || 0)
 
-    // Parse stateData to extract callee's connection information
+    // Parse stateData to extract callee's connection information (binary format)
     let responseData = {}
     if (token.stateData) {
       try {
-        console.debug('[CallSignaling] ✓ Token has stateData, decoding...')
-        // Decode hex-encoded stateData
-        let stateDataJson = ''
+        console.debug('[CallSignaling] ✓ Token has stateData, decoding binary format...')
+
+        // Convert hex to bytes
+        const bytes = []
         for (let i = 0; i < token.stateData.length; i += 2) {
           const hex = token.stateData.substr(i, 2)
-          stateDataJson += String.fromCharCode(parseInt(hex, 16))
+          bytes.push(parseInt(hex, 16))
         }
-        console.debug('[CallSignaling] Decoded stateData JSON:', stateDataJson.substring(0, 100) + '...')
-        responseData = JSON.parse(stateDataJson)
+
+        console.debug('[CallSignaling] StateData bytes (first 10):', bytes.slice(0, 10).map(b => '0x' + b.toString(16).padStart(2, '0')).join(', '))
+
+        // Binary format: [Version(1)] [Status(1)] [RecipientAddressLen(1)] [RecipientAddress(var)]
+        //               [IPType+IP(4-16)] [Port(2)] [KeyLen(1)] [Key(var)]
+        let offset = 0
+
+        // Version (1 byte)
+        const version = bytes[offset++]
+        console.debug('[CallSignaling] StateData version:', '0x' + version.toString(16))
+
+        // Status (1 byte): 0x01 = answered, 0x02 = rejected, etc.
+        const statusCode = bytes[offset++]
+        const statusMap = { 0x01: 'answered', 0x02: 'rejected', 0x03: 'ended' }
+        responseData.status = statusMap[statusCode] || 'unknown'
+
+        // Recipient address (variable-length)
+        const addressLen = bytes[offset++]
+        const addressBytes = bytes.slice(offset, offset + addressLen)
+        responseData.recipientAddress = String.fromCharCode(...addressBytes)
+        offset += addressLen
+
+        // IP address (4 or 16 bytes for IPv4/IPv6)
+        const ipByte = bytes[offset++]
+        const isIPv6 = (ipByte & 0x80) !== 0
+        const ip1 = ipByte & 0x7F
+
+        if (!isIPv6) {
+          // IPv4: 4 bytes
+          const ip2 = bytes[offset++]
+          const ip3 = bytes[offset++]
+          const ip4 = bytes[offset++]
+          responseData.recipientIp = `${ip1}.${ip2}.${ip3}.${ip4}`
+        } else {
+          // IPv6: 16 bytes (simplified)
+          const ipv6Bytes = [ip1, ...bytes.slice(offset, offset + 15)]
+          offset += 15
+          responseData.recipientIp = ipv6Bytes.slice(0, 8).map((b, i) => {
+            const nextB = ipv6Bytes[i + 8] || 0
+            return ((b << 8) | nextB).toString(16)
+          }).join(':')
+        }
+
+        // Port (2 bytes, big-endian)
+        const port = (bytes[offset++] << 8) | bytes[offset++]
+        responseData.recipientPort = port
+
+        // Session key (variable-length)
+        const keyLen = bytes[offset++]
+        const keyBytes = bytes.slice(offset, offset + keyLen)
+        responseData.recipientSessionKey = String.fromCharCode(...keyBytes)
+
         console.debug('[CallSignaling] ✓ Parsed response data:',  {
           status: responseData.status,
           recipientAddress: responseData.recipientAddress?.slice(0,20),
-          hasIp: !!responseData.recipientIp,
-          hasPort: !!responseData.recipientPort
+          recipientIp: responseData.recipientIp,
+          recipientPort: responseData.recipientPort,
+          hasKey: !!responseData.recipientSessionKey
         })
       } catch (err) {
         console.warn('[CallSignaling] Failed to parse response stateData:', err.message)
+        console.warn('[CallSignaling] StateData hex (first 100):', token.stateData.substring(0, 100))
         return
       }
     }

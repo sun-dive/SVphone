@@ -1852,12 +1852,66 @@
 
             encodeCallState(state) {
                 // Encode call state as hex string for stateData field
-                // Format: {status, initiatedAt, timestamp}
+                // Binary format: [Version(1)] [Status(1)] [RecipientAddressLen(1)] [RecipientAddress(var)]
+                //               [IPType+IP(4-16)] [Port(2)] [KeyLen(1)] [Key(var)]
                 try {
-                    const data = JSON.stringify(state)
-                    return Array.from(new TextEncoder().encode(data))
-                        .map(b => b.toString(16).padStart(2, '0'))
-                        .join('')
+                    const bytes = []
+
+                    // Version marker (0x01 = response format v1)
+                    bytes.push(0x01)
+
+                    // Status (0x01 = answered, 0x02 = rejected, etc.)
+                    const statusMap = { 'answered': 0x01, 'rejected': 0x02, 'ended': 0x03 }
+                    bytes.push(statusMap[state.status] || 0x01)
+
+                    // Recipient address (variable-length)
+                    const addressBuf = new TextEncoder().encode(state.recipientAddress)
+                    bytes.push(addressBuf.length)
+                    bytes.push(...addressBuf)
+
+                    // IP address and port
+                    const ip = state.recipientIp
+                    const port = state.recipientPort
+
+                    // Detect IP version (0=IPv4, 1=IPv6)
+                    const isIPv6 = ip.includes(':')
+                    const ipBits = isIPv6 ? 1 : 0
+
+                    if (!isIPv6) {
+                        // IPv4: 4 bytes
+                        const parts = ip.split('.').map(p => parseInt(p, 10))
+                        bytes.push((ipBits << 7) | (parts[0] & 0x7F))
+                        bytes.push(parts[1])
+                        bytes.push(parts[2])
+                        bytes.push(parts[3])
+                    } else {
+                        // IPv6: 16 bytes (simplified)
+                        const parts = ip.split(':').filter(p => p.length > 0)
+                        const ipv6Bytes = new Uint8Array(16)
+                        let byteIndex = 0
+                        for (let i = 0; i < parts.length && byteIndex < 16; i++) {
+                            const val = parseInt(parts[i], 16) || 0
+                            ipv6Bytes[byteIndex++] = (val >> 8) & 0xFF
+                            ipv6Bytes[byteIndex++] = val & 0xFF
+                        }
+                        bytes.push((ipBits << 7) | (ipv6Bytes[0] & 0x7F))
+                        bytes.push(...Array.from(ipv6Bytes).slice(1))
+                    }
+
+                    // Port (2 bytes, big-endian)
+                    bytes.push((port >> 8) & 0xFF)
+                    bytes.push(port & 0xFF)
+
+                    // Session key (variable-length)
+                    const keyData = state.recipientSessionKey
+                    const keyBuf = typeof keyData === 'string'
+                        ? new TextEncoder().encode(keyData)
+                        : keyData
+                    bytes.push(keyBuf.length)
+                    bytes.push(...keyBuf)
+
+                    // Convert to hex string
+                    return bytes.map(b => ('0' + b.toString(16)).slice(-2)).join('')
                 } catch (error) {
                     console.warn('Failed to encode call state:', error)
                     return ''
@@ -1907,10 +1961,9 @@
                         recipientSessionKey: recipientSessionKey,
                         answeredAt: Date.now()
                     }
-                    const responseJson = JSON.stringify(responseData)
-                    const responseStateHex = Array.from(new TextEncoder().encode(responseJson))
-                        .map(b => b.toString(16).padStart(2, '0'))
-                        .join('')
+                    // Encode response as binary format (byte-efficient)
+                    const responseStateHex = this.encodeCallState(responseData)
+                    console.debug(`[SEND] Response encoded to ${responseStateHex.length / 2} bytes`)
 
                     // Call manager accepts the call
                     await this.callManager.acceptCall(this.currentCallToken, {
