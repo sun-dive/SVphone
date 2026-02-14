@@ -1532,18 +1532,28 @@
                                     return false
                                   }
 
-                                  console.debug(`[RECV]   Checking callee: want=${address}, got=${attrs.callee}`)
+                                  console.debug(`[RECV]   Checking: am I the callee (incoming call) or caller (response)?`)
                                   appInstance.log(`[RECV]       ✓ Parsed: caller=${attrs.caller?.slice(0,10)}..., callee=${attrs.callee?.slice(0,10)}...`, 'debug')
 
-                                  if (attrs.callee !== address) {
-                                        console.debug(`[RECV]   ❌ Callee mismatch`)
-                                        appInstance.log(`[RECV]       ❌ Callee mismatch (want ${address.slice(0,10)}..., got ${attrs.callee?.slice(0,10)}...)`, 'debug')
-                                        return false
-                                  }
+                                  // Accept token if:
+                                  // 1. I'm the callee (incoming call from caller to me)
+                                  // 2. I'm the caller (response token - original token returned by callee)
+                                  const isIncomingCall = attrs.callee === address
+                                  const isResponseToken = attrs.caller === address
 
-                                    console.debug(`[RECV]   ✅ MATCH! Token is for ${address}`)
-                                    appInstance.log(`[RECV]       ✅ MATCH! This token is for me!`, 'debug')
+                                  if (isIncomingCall) {
+                                    console.debug(`[RECV]   ✅ INCOMING CALL! I'm the callee (receiver)`)
+                                    appInstance.log(`[RECV]       ✅ INCOMING CALL! Token from caller ${attrs.caller?.slice(0,10)}...`, 'debug')
                                     return true
+                                  } else if (isResponseToken) {
+                                    console.debug(`[RECV]   ✅ RESPONSE TOKEN! I'm the caller (original sender)`)
+                                    appInstance.log(`[RECV]       ✅ RESPONSE! Token returned by ${attrs.callee?.slice(0,10)}...`, 'debug')
+                                    return true
+                                  } else {
+                                    console.debug(`[RECV]   ❌ Token not for me (caller=${attrs.caller?.slice(0,10)}, callee=${attrs.callee?.slice(0,10)})`)
+                                    appInstance.log(`[RECV]       ❌ Token not for me (want ${address.slice(0,10)}... as caller or callee)`, 'debug')
+                                    return false
+                                  }
                                 } catch (e) {
                                   appInstance.log('[RECV]       ❌ Unexpected error parsing token attributes: ' + e.message, 'error')
                                 }
