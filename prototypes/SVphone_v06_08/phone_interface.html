@@ -2279,9 +2279,11 @@
                     console.debug(`[SEND] Call accepted, session:`, acceptedSession)
 
                     // Get the SDP answer that was created
-                    if (acceptedSession?.mediaAnswer) {
-                        responseData.sdpAnswer = acceptedSession.mediaAnswer.sdp || JSON.stringify(acceptedSession.mediaAnswer)
-                        console.debug(`[SEND] Encoding SDP answer (${responseData.sdpAnswer?.length || 0} chars)`)
+                    if (acceptedSession?.mediaAnswer?.sdp) {
+                        responseData.sdpAnswer = acceptedSession.mediaAnswer.sdp
+                        console.debug(`[SEND] SDP answer ready: ${responseData.sdpAnswer.length} chars`)
+                    } else {
+                        console.warn(`[SEND] ⚠️ No SDP answer from mediaAnswer:`, acceptedSession?.mediaAnswer)
                     }
 
                     // Encode response as binary format (byte-efficient)
@@ -2371,14 +2373,16 @@
                                 }
 
                                 // Include SDP answer from session
-                                if (audioSession?.mediaAnswer) {
-                                    responseData.sdpAnswer = audioSession.mediaAnswer.sdp || JSON.stringify(audioSession.mediaAnswer)
+                                if (audioSession?.mediaAnswer?.sdp) {
+                                    responseData.sdpAnswer = audioSession.mediaAnswer.sdp
+                                } else {
+                                    console.warn(`[SEND-AUDIO] ⚠️ No SDP answer from mediaAnswer:`, audioSession?.mediaAnswer)
                                 }
 
-                                const responseJson = JSON.stringify(responseData)
-                                const responseStateHex = Array.from(new TextEncoder().encode(responseJson))
-                                    .map(b => b.toString(16).padStart(2, '0'))
-                                    .join('')
+                                // Encode response as binary format (byte-efficient, NO JSON)
+                                const responseStateHex = this.encodeCallState(responseData)
+                                console.debug(`[SEND-AUDIO] ✅ Response encoded to ${responseStateHex.length / 2} bytes`)
+                                console.debug(`[SEND-AUDIO] Response state hex (full):`, responseStateHex)
 
                                 // Send the token back to the caller
                                 const tokenBuilder = window.tokenBuilder
