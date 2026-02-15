@@ -274,18 +274,24 @@ class CallManager {
     }
 
     if (session) {
+      console.debug('[CallManager] onPeerConnected: Found session, setting status to connected')
       session.status = 'connected'
       session.connectedAt = Date.now()
 
       // Start collecting statistics
+      console.debug('[CallManager] onPeerConnected: Starting stats monitoring')
       this.startStatsMonitoring(session.callTokenId)
 
+      console.debug('[CallManager] onPeerConnected: About to emit call:connected event')
       this.emit('call:connected', {
         callTokenId: session.callTokenId,
         timestamp: Date.now()
       })
+      console.debug('[CallManager] onPeerConnected: Emitted call:connected event')
 
       console.log('[CallManager] Peer connected')
+    } else {
+      console.error('[CallManager] onPeerConnected: NO SESSION FOUND! This is the problem!')
     }
   }
 

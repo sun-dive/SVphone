@@ -1372,9 +1372,12 @@
                 })
 
                 this.callManager.on('call:connected', () => {
+                    console.debug('[call:connected] Event listener fired!')
                     this.log('📞 Call connected! Media stream established', 'success')
                     this.updateCallStatus('connected', 'Call connected')
+                    console.debug('[call:connected] About to call showCallStats()')
                     this.showCallStats()
+                    console.debug('[call:connected] showCallStats() completed')
                     this.callStartTime = Date.now()
                     this.startDurationTimer()
                 })
@@ -2189,8 +2192,29 @@
             }
 
             showCallStats() {
-                document.getElementById('videoContainer').style.display = 'grid'
-                document.getElementById('statsGrid').style.display = 'grid'
+                console.debug('[showCallStats] Called')
+
+                const videoContainer = document.getElementById('videoContainer')
+                const statsGrid = document.getElementById('statsGrid')
+
+                console.debug('[showCallStats] videoContainer:', videoContainer)
+                console.debug('[showCallStats] statsGrid:', statsGrid)
+
+                if (videoContainer) {
+                    console.debug('[showCallStats] Setting videoContainer display to grid')
+                    videoContainer.style.display = 'grid'
+                    console.debug('[showCallStats] videoContainer.style.display =', videoContainer.style.display)
+                } else {
+                    console.error('[showCallStats] ERROR: videoContainer element not found!')
+                }
+
+                if (statsGrid) {
+                    console.debug('[showCallStats] Setting statsGrid display to grid')
+                    statsGrid.style.display = 'grid'
+                    console.debug('[showCallStats] statsGrid.style.display =', statsGrid.style.display)
+                } else {
+                    console.error('[showCallStats] ERROR: statsGrid element not found!')
+                }
             }
 
             updateStats(stats) {
