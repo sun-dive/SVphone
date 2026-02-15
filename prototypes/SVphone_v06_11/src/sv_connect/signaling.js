@@ -350,12 +350,25 @@ class CallSignaling {
         // Mint new token if mintTokenFn provided
         result = await mintTokenFn(callToken)
       } else {
-        // Use existing token if no mintTokenFn provided
-        // For now, generate a pseudo-result with call token data
-        // The actual token broadcasting will use existing tokens from tokenBuilder
-        result = {
-          tokenId: callToken.callTokenId || `existing-${Date.now()}`,
-          txId: callToken.currentTxId || `existing-tx-${Date.now()}`
+        // Use existing token - must transfer it to recipient
+        // Note: This assumes tokenBuilder is available globally or passed in constructor
+        if (typeof window !== 'undefined' && window.tokenBuilder) {
+          console.debug('[CallSignaling] 📤 Transferring reusable token to recipient:', callToken.callee)
+          const transferResult = await window.tokenBuilder.createTransfer(
+            callToken.callTokenId,
+            callToken.callee
+          )
+          result = {
+            tokenId: callToken.callTokenId,
+            txId: transferResult.txId
+          }
+          console.debug('[CallSignaling] ✅ Reusable token transferred:', {
+            tokenId: result.tokenId,
+            txId: result.txId,
+            recipient: callToken.callee
+          })
+        } else {
+          throw new Error('tokenBuilder not available for reusable token transfer')
         }
       }
 
