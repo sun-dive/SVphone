@@ -745,12 +745,25 @@ class CallSignaling {
       timestamp: Date.now()
     }
 
+    // Emit call:answered event with CALLER's connection info (for callee to establish P2P back)
+    // callToken contains the CALLER's information (from the incoming call token)
     this.emit('call:answered', {
       callTokenId: callTokenId,
       answerer: this.myAddress,
+      // Include caller's connection info from the incoming call token so callee can connect back
+      calleeAddress: callToken.caller,      // Caller's address
+      calleeIp: callToken.senderIp,         // Caller's IP (from incoming token)
+      calleePort: callToken.senderPort,     // Caller's port (from incoming token)
+      calleeSessionKey: callToken.sessionKey, // Caller's session key
       timestamp: Date.now()
     })
 
+    console.debug('[CallSignaling] Emitting call:answered with caller connection info:', {
+      calleeAddress: callToken.caller?.slice(0,20),
+      calleeIp: callToken.senderIp,
+      calleePort: callToken.senderPort,
+      answerer: this.myAddress?.slice(0,20)
+    })
     console.log('[CallSignaling] Accepted call:', callTokenId)
 
     return answerToken
