@@ -1569,6 +1569,10 @@
                         return null
                     }
 
+                    // Sort by creation time (newest first) - check newest tokens first
+                    callTokens.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+                    console.debug(`[REUSE] Sorted tokens by creation time (newest first)`)
+
                     // Check each call token's attributes to see if it's for this recipient
                     for (const token of callTokens) {
                         try {
