@@ -1030,7 +1030,7 @@ export class TokenBuilder {
     tokenId: string,
     txId: string,
     onStatus?: (msg: string) => void,
-    maxAttempts = 60,
+    maxAttempts = 240,
     intervalMs = 15000,
   ): Promise<boolean> {
     for (let i = 0; i < maxAttempts; i++) {

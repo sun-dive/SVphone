@@ -192,7 +192,7 @@ class CallTokenManager {
 
       // PPV Model: Wait for genesis confirmation (BLOCKING - required before transfer)
       console.debug(`[CallToken] ⏳ Waiting for genesis confirmation before transfer - polling every 5s`)
-      this.log('⏳ Waiting for genesis confirmation (~10 minutes) - polling every 5s...', 'info')
+      this.log('⏳ Waiting for genesis confirmation (~60 minutes) - polling every 15s...', 'info')
 
       try {
         const genesisConfirmed = await this.tokenBuilder.pollForProof(tokenId, result.txId, () => {
