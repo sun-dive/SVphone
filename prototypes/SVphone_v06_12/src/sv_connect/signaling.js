@@ -16,16 +16,18 @@
  * Call token format (P protocol):
  * - Prefix: 0x50 (P)
  * - Version: 0x03
- * - tokenName: "svphone-call-v1" (UTF-8)
+ * - tokenName: "CALL-XXXXX" (UTF-8)
  * - tokenScript: "" (empty, standard P2PKH)
- * - tokenRules: supply=1, divisibility=0, restrictions=0x0001 (one-time-use, defined in CallTokenManager)
- * - tokenAttributes (binary v1): [IP][Port][SessionKey][Codec][Quality][MediaTypes][SDPLen][SDP]
+ * - tokenRules: supply=1, divisibility=0, restrictions=caller_hash+callee_hash (8 hex chars each for 32-bit SHA256)
+ * - tokenAttributes (binary v1): [Version(1)][IP(4-16)][Port(2)][KeyLen(1)][Key(var)][Codec(1)][Quality(1)][MediaTypes(1)][SDPLen(2)][SDP(var)]
  *   * SDP contains offer (genesis) or answer (transfer response)
- *   * Caller/callee addresses already in transaction metadata, not encoded here
+ *   * Caller/callee addresses are in transaction metadata, verified via 32-bit SHA256 hashes in tokenRules.restrictions
  * - stateData: call state (status="ringing", duration=0, quality="hd")
  * - proofChain: [] (empty until confirmed)
  *
- * Note: tokenRules are defined in CallTokenManager.CALL_TOKEN_RULES, not in this signaling layer
+ * Verification:
+ * - Callee verifies CALLER by checking hash(token.caller) in tokenRules.restrictions
+ * - Caller verifies CALLEE by checking hash(token.callee) in tokenRules.restrictions (when token returned)
  */
 
 class CallSignaling {
@@ -68,15 +70,9 @@ class CallSignaling {
       // Version marker (0x01 = binary format v1)
       bytes.push(0x01)
 
-      // Caller address (variable-length string)
-      const callerBuf = new TextEncoder().encode(attributes.caller)
-      bytes.push(callerBuf.length)
-      bytes.push(...callerBuf)
-
-      // Callee address (variable-length string)
-      const calleeBuf = new TextEncoder().encode(attributes.callee)
-      bytes.push(calleeBuf.length)
-      bytes.push(...calleeBuf)
+      // NOTE: Caller and callee are NOT encoded here
+      // They are stored in transaction metadata and verified via 32-bit SHA256 hashes in tokenRules.restrictions
+      // This ensures addresses cannot be spoofed and keeps tokenAttributes focused on connection data
 
       // IP address and port
       const ip = attributes.senderIp
