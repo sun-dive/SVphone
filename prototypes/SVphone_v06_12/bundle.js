@@ -16345,7 +16345,10 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
               continue;
             }
             const existing = await this.store.getToken(tokenId);
-            if (existing && existing.status === "active") continue;
+            if (existing && existing.status === "active") {
+              console.debug(`[tokenBuilder] Skipping token ${tokenId.slice(0, 12)}... (existing with status=active)`);
+              continue;
+            }
             if (existing && existing.status === "pending" && !isUnconfirmedTx) {
               existing.status = "active";
               await this.store.updateToken(existing);
@@ -16354,11 +16357,13 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
             }
             if (existing && existing.status === "pending") continue;
             if (existing && (existing.status === "transferred" || existing.status === "pending_transfer")) {
+              console.log(`[tokenBuilder] \u2713 RETURN-TO-SENDER path: ${opData.tokenName}, status=${existing.status}`);
               existing.status = "active";
               existing.currentTxId = txId;
               existing.currentOutputIndex = p2pkhOutputIndex;
               existing.transferTxId = void 0;
               existing.stateData = opData.stateData;
+              console.debug(`[tokenBuilder] isCALL=${opData.tokenName?.startsWith("CALL-")}`);
               if (opData.tokenName?.startsWith("CALL-")) {
                 console.log(`[tokenBuilder] \u{1F4DE} CALL token (RETURNED) detected: ${opData.tokenName}, extracting addresses`);
                 try {

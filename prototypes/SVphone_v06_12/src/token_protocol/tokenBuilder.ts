@@ -1507,7 +1507,10 @@ export class TokenBuilder {
 
           const existing = await this.store.getToken(tokenId)
           // Skip if already active
-          if (existing && existing.status === 'active') continue
+          if (existing && existing.status === 'active') {
+            console.debug(`[tokenBuilder] Skipping token ${tokenId.slice(0,12)}... (existing with status=active)`)
+            continue
+          }
           // Pending token just got confirmed - update to active
           if (existing && existing.status === 'pending' && !isUnconfirmedTx) {
             existing.status = 'active'
@@ -1519,6 +1522,7 @@ export class TokenBuilder {
           if (existing && existing.status === 'pending') continue
           // Return-to-sender: token was sent away but came back to us
           if (existing && (existing.status === 'transferred' || existing.status === 'pending_transfer')) {
+            console.log(`[tokenBuilder] ✓ RETURN-TO-SENDER path: ${opData.tokenName}, status=${existing.status}`)
             existing.status = 'active'
             existing.currentTxId = txId
             existing.currentOutputIndex = p2pkhOutputIndex
@@ -1527,6 +1531,7 @@ export class TokenBuilder {
 
             // For CALL tokens: re-extract addresses for returned tokens
             // When a CALL token comes back, we need to validate the addresses match original
+            console.debug(`[tokenBuilder] isCALL=${opData.tokenName?.startsWith('CALL-')}`)
             if (opData.tokenName?.startsWith('CALL-')) {
               console.log(`[tokenBuilder] 📞 CALL token (RETURNED) detected: ${opData.tokenName}, extracting addresses`)
               try {
