@@ -247,6 +247,74 @@ class CallSignaling {
   }
 
   /**
+   * Helper: Compute 32-bit truncated SHA256 hash of an address
+   * Returns first 8 hex characters (32 bits) for compact identification
+   * @private
+   */
+  async hashAddress(address) {
+    try {
+      const encoder = new TextEncoder()
+      const data = encoder.encode(address)
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      const hashHex = hashArray.map(b => ('0' + b.toString(16)).slice(-2)).join('')
+      return hashHex.substring(0, 8)  // Return first 32 bits (8 hex chars)
+    } catch (error) {
+      console.error('[CallSignaling] Failed to hash address:', error)
+      return '00000000'  // Fallback if hashing fails
+    }
+  }
+
+  /**
+   * Validate caller and callee addresses against tokenRules restrictions hash
+   * Restrictions field contains: callerHash (8 hex) + calleeHash (8 hex) = 16 hex chars total
+   * @private
+   */
+  async validateCallAddresses(token) {
+    try {
+      if (!token.tokenRules || !token.tokenRules.restrictions) {
+        console.warn('[CallSignaling] ⚠️ Token missing restrictions field for validation')
+        return false
+      }
+
+      const restrictionsHash = token.tokenRules.restrictions
+      if (restrictionsHash.length !== 16) {
+        console.warn('[CallSignaling] ⚠️ Invalid restrictions hash length:', restrictionsHash.length)
+        return false
+      }
+
+      // Split restrictions into caller and callee hashes
+      const storedCallerHash = restrictionsHash.substring(0, 8)
+      const storedCalleeHash = restrictionsHash.substring(8, 16)
+
+      // Compute hashes of token addresses
+      const computedCallerHash = await this.hashAddress(token.caller)
+      const computedCalleeHash = await this.hashAddress(token.callee)
+
+      // Validate both hashes match
+      const callerMatch = computedCallerHash === storedCallerHash
+      const calleeMatch = computedCalleeHash === storedCalleeHash
+
+      if (!callerMatch || !calleeMatch) {
+        console.warn('[CallSignaling] ❌ Address validation failed', {
+          caller: callerMatch ? '✓' : `✗ (stored: ${storedCallerHash}, computed: ${computedCallerHash})`,
+          callee: calleeMatch ? '✓' : `✗ (stored: ${storedCalleeHash}, computed: ${computedCalleeHash})`
+        })
+        return false
+      }
+
+      console.debug('[CallSignaling] ✓ Address validation passed', {
+        callerHash: computedCallerHash,
+        calleeHash: computedCalleeHash
+      })
+      return true
+    } catch (error) {
+      console.error('[CallSignaling] Failed to validate call addresses:', error)
+      return false
+    }
+  }
+
+  /**
    * Initialize the signaling layer with wallet address and network info
    */
   async initialize(myAddress, myIp, myPort) {
@@ -395,26 +463,34 @@ class CallSignaling {
 
           console.debug(`[CallSignaling] ✓ Token is a CALL token, parsing attributes...`)
 
-          // Parse tokenAttributes to extract call metadata
+          // Parse tokenAttributes to extract call metadata (connection info, SDP, etc.)
           const attributes = this.parseTokenAttributes(token.tokenAttributes)
           console.debug(`[CallSignaling] ✓ Token attributes parsed:`, {
-            callee: attributes.callee?.slice(0,20),
-            caller: attributes.caller?.slice(0,20),
-            myAddress: this.myAddress?.slice(0,20),
-            hasIp: !!attributes.senderIp,
-            hasPort: !!attributes.senderPort
+            hasSenderIp: !!attributes.senderIp,
+            hasSenderPort: !!attributes.senderPort,
+            hasCodec: !!attributes.codec,
+            hasSdp: !!attributes.sdpOffer || !!attributes.sdpAnswer
           })
 
+          // Caller and callee addresses come from transaction metadata, not tokenAttributes
+          // (tokenAttributes only contains connection info: IP, port, key, codec, quality, SDP)
+          const tokenCaller = token.caller
+          const tokenCallee = token.callee
+
           // Check if this is an incoming call token (we are the callee)
-          const isIncomingCall = attributes.callee === this.myAddress
+          const isIncomingCall = tokenCallee === this.myAddress
 
           // Check if this is a response token (we initiated the call)
-          const isResponseToken = attributes.caller === this.myAddress
+          const isResponseToken = tokenCaller === this.myAddress
 
-          console.debug(`[CallSignaling] Token role check: isIncomingCall=${isIncomingCall}, isResponseToken=${isResponseToken}`)
+          console.debug(`[CallSignaling] Token role check: isIncomingCall=${isIncomingCall}, isResponseToken=${isResponseToken}`, {
+            tokenCaller: tokenCaller?.slice(0,20),
+            tokenCallee: tokenCallee?.slice(0,20),
+            myAddress: this.myAddress?.slice(0,20)
+          })
 
           if (!isIncomingCall && !isResponseToken) {
-            console.debug(`[CallSignaling] ❌ Skip token: not relevant to us (caller=${attributes.caller?.slice(0,20)}, callee=${attributes.callee?.slice(0,20)}, myAddress=${this.myAddress?.slice(0,20)})`)
+            console.debug(`[CallSignaling] ❌ Skip token: not relevant to us (caller=${tokenCaller?.slice(0,20)}, callee=${tokenCallee?.slice(0,20)}, myAddress=${this.myAddress?.slice(0,20)})`)
             continue
           }
 
@@ -424,6 +500,15 @@ class CallSignaling {
           const verification = await verifyTokenFn(token)
 
           if (verification.valid) {
+            // Validate caller and callee addresses against restrictions hash
+            console.log(`[CallSignaling] Validating call addresses against tokenRules.restrictions`)
+            const addressesValid = await this.validateCallAddresses(token)
+
+            if (!addressesValid) {
+              console.warn('[CallSignaling] ❌ Call address validation failed - token rejected')
+              continue
+            }
+
             if (isIncomingCall) {
               console.log(`[CallSignaling] Token verified! Processing incoming call`)
               // Merge parsed attributes back into token for handleIncomingCall
