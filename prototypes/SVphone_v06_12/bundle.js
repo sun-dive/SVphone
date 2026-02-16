@@ -17173,10 +17173,16 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
   window.TokenStore = TokenStore;
   window.WalletProvider = WalletProvider;
   window.initWallet = init;
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
+  function initAndExpose() {
     init();
+    window.builder = builder;
+    window.store = store;
+    window.provider = provider;
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAndExpose);
+  } else {
+    initAndExpose();
   }
 })();
 //# sourceMappingURL=bundle.js.map
