@@ -1529,44 +1529,36 @@ export class TokenBuilder {
             existing.transferTxId = undefined
             existing.stateData = opData.stateData
 
-            // For CALL tokens: preserve original addresses (they are immutable!)
-            // Return-to-sender CALL tokens keep the same caller/callee from genesis
-            // The TX structure (input → output) shows transfer path, not original relationship
+            // For CALL tokens: re-extract addresses for returned tokens
+            // When a CALL token comes back, we need to validate the addresses match original
             console.debug(`[tokenBuilder] isCALL=${opData.tokenName?.startsWith('CALL-')}`)
             if (opData.tokenName?.startsWith('CALL-')) {
-              console.log(`[tokenBuilder] 📞 CALL token (RETURNED) detected: ${opData.tokenName}`)
-
-              // IMPORTANT: Preserve original caller/callee - they don't change on return
-              // If token was already stored, keep existing addresses
-              if (existing.caller && existing.callee) {
-                console.log(`[tokenBuilder] ✅ CALLER (PRESERVED): ${existing.caller}`)
-                console.log(`[tokenBuilder] ✅ CALLEE (PRESERVED): ${existing.callee}`)
-              } else {
-                // Fallback: if no existing addresses, try to extract them
-                console.debug(`[tokenBuilder] ⚠️ No existing addresses, attempting extraction...`)
-                try {
-                  const calleeOutput = tx.outputs[p2pkhOutputIndex]
-                  if (calleeOutput?.lockingScript) {
-                    const calleeAddrScript = calleeOutput.lockingScript.toHex()
-                    const calleeAddr = extractAddressFromP2pkhScript(calleeAddrScript)
-                    if (calleeAddr) {
-                      existing.callee = calleeAddr
-                      console.log(`[tokenBuilder] ✅ CALLEE extracted: ${calleeAddr}`)
-                    }
+              console.log(`[tokenBuilder] 📞 CALL token (RETURNED) detected: ${opData.tokenName}, extracting addresses`)
+              try {
+                // Extract callee from the P2PKH output (who the token is being sent to)
+                const calleeOutput = tx.outputs[p2pkhOutputIndex]
+                if (calleeOutput?.lockingScript) {
+                  const calleeAddrScript = calleeOutput.lockingScript.toHex()
+                  const calleeAddr = extractAddressFromP2pkhScript(calleeAddrScript)
+                  if (calleeAddr) {
+                    existing.callee = calleeAddr
+                    console.log(`[tokenBuilder] ✅ CALLEE (RETURNED) extracted: ${calleeAddr}`)
                   }
-                  if (tx.inputs?.length > 0) {
-                    let callerAddr = extractCallerFromSPVEnvelope(tx.inputs[0] as any)
-                    if (!callerAddr) {
-                      callerAddr = await extractCallerFromBlockchain(this.provider, tx.inputs[0] as any)
-                    }
-                    if (callerAddr) {
-                      existing.caller = callerAddr
-                      console.log(`[tokenBuilder] ✅ CALLER extracted: ${callerAddr}`)
-                    }
-                  }
-                } catch (e: any) {
-                  console.error(`[tokenBuilder] ❌ Error extracting CALL token addresses (fallback): ${e?.message}`)
                 }
+
+                // Extract caller from input 0
+                if (tx.inputs?.length > 0) {
+                  let callerAddr = extractCallerFromSPVEnvelope(tx.inputs[0] as any)
+                  if (!callerAddr) {
+                    callerAddr = await extractCallerFromBlockchain(this.provider, tx.inputs[0] as any)
+                  }
+                  if (callerAddr) {
+                    existing.caller = callerAddr
+                    console.log(`[tokenBuilder] ✅ CALLER (RETURNED) extracted: ${callerAddr}`)
+                  }
+                }
+              } catch (e: any) {
+                console.error(`[tokenBuilder] ❌ Error extracting CALL token addresses (returned): ${e?.message}`)
               }
             }
 
