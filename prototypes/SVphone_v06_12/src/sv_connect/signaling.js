@@ -262,6 +262,58 @@ class CallSignaling {
   }
 
   /**
+   * Extract caller and callee addresses from a CALL token
+   *
+   * For tokens we initiated (in callTokens), use stored addresses.
+   * For response tokens, match to pending call to retrieve original caller/callee.
+   * For new incoming calls, extract from token metadata if available.
+   *
+   * CRITICAL: caller/callee MUST match the original token creation addresses
+   * because restrictions field contains hash(caller) + hash(callee) from genesis.
+   *
+   * @param {Object} token - Token with currentTxId, tokenRules, etc.
+   * @returns {Object|null} {caller, callee} or null if cannot determine
+   * @private
+   */
+  extractCallerCalleeFromToken(token) {
+    // CASE 1: Check if this is a token we created and stored locally
+    const storedToken = this.callTokens.get(token.tokenId)
+    if (storedToken && storedToken.caller && storedToken.callee) {
+      console.debug('[CallSignaling] ✓ Found stored token - using caller/callee from local storage', {
+        caller: storedToken.caller?.slice(0, 20),
+        callee: storedToken.callee?.slice(0, 20),
+        tokenId: token.tokenId?.slice(0, 20)
+      })
+      return {
+        caller: storedToken.caller,
+        callee: storedToken.callee
+      }
+    }
+
+    // CASE 2: Token already has caller/callee set (from tokenBuilder)
+    if (token.caller && token.callee) {
+      console.debug('[CallSignaling] ✓ Token has caller/callee metadata', {
+        caller: token.caller?.slice(0, 20),
+        callee: token.callee?.slice(0, 20),
+        tokenId: token.tokenId?.slice(0, 20)
+      })
+      return {
+        caller: token.caller,
+        callee: token.callee
+      }
+    }
+
+    // CASE 3: Could not extract caller/callee
+    console.warn('[CallSignaling] ⚠️ Could not extract caller/callee from token:', {
+      hasTokenId: !!token.tokenId,
+      storedInCallTokens: !!storedToken,
+      hasCallerCallee: !!(token.caller && token.callee),
+      tokenId: token.tokenId?.slice(0, 20)
+    })
+    return null
+  }
+
+  /**
    * Validate caller and callee addresses against tokenRules restrictions hash
    * Restrictions field contains: callerHash (8 hex) + calleeHash (8 hex) = 16 hex chars total
    * @private
@@ -468,25 +520,33 @@ class CallSignaling {
             hasSdp: !!attributes.sdpOffer || !!attributes.sdpAnswer
           })
 
-          // Caller and callee addresses come from transaction metadata, not tokenAttributes
-          // (tokenAttributes only contains connection info: IP, port, key, codec, quality, SDP)
-          const tokenCaller = token.caller
-          const tokenCallee = token.callee
+          // Extract caller and callee addresses (CRITICAL: must happen before validation)
+          // Addresses are stored in token metadata or in callTokens if we created the token
+          // These MUST be the original caller/callee from token creation, not transaction sender/recipient
+          const addressPair = this.extractCallerCalleeFromToken(token)
+          if (!addressPair) {
+            console.debug(`[CallSignaling] ❌ Skip token: cannot determine caller/callee addresses`)
+            continue
+          }
+
+          // Populate token with extracted addresses (needed for validateCallAddresses)
+          token.caller = addressPair.caller
+          token.callee = addressPair.callee
 
           // Check if this is an incoming call token (we are the callee)
-          const isIncomingCall = tokenCallee === this.myAddress
+          const isIncomingCall = token.callee === this.myAddress
 
           // Check if this is a response token (we initiated the call)
-          const isResponseToken = tokenCaller === this.myAddress
+          const isResponseToken = token.caller === this.myAddress
 
           console.debug(`[CallSignaling] Token role check: isIncomingCall=${isIncomingCall}, isResponseToken=${isResponseToken}`, {
-            tokenCaller: tokenCaller?.slice(0,20),
-            tokenCallee: tokenCallee?.slice(0,20),
-            myAddress: this.myAddress?.slice(0,20)
+            tokenCaller: token.caller?.slice(0, 20),
+            tokenCallee: token.callee?.slice(0, 20),
+            myAddress: this.myAddress?.slice(0, 20)
           })
 
           if (!isIncomingCall && !isResponseToken) {
-            console.debug(`[CallSignaling] ❌ Skip token: not relevant to us (caller=${tokenCaller?.slice(0,20)}, callee=${tokenCallee?.slice(0,20)}, myAddress=${this.myAddress?.slice(0,20)})`)
+            console.debug(`[CallSignaling] ❌ Skip token: not relevant to us (caller=${token.caller?.slice(0, 20)}, callee=${token.callee?.slice(0, 20)}, myAddress=${this.myAddress?.slice(0, 20)})`)
             continue
           }
 
