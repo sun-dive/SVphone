@@ -1480,7 +1480,7 @@
                             }
 
                             // Filter for call tokens where this address is the recipient
-                            // tokenAttributes is hex-encoded JSON, need to parse it to check callee
+                            // tokenAttributes is binary-encoded protocol data (not JSON), parsed by signaling.parseTokenAttributes()
                             appInstance.log(`[RECV] 🔎 Filtering ${tokens.length} tokens for incoming calls...`, 'debug')
                             console.debug(`[RECV] Starting filter with ${tokens.length} tokens`)
 
@@ -1842,19 +1842,9 @@
                 }
             }
 
-            encodeCallAttributes(attrs) {
-                // Encode call attributes as hex string for tokenAttributes field
-                // Format: caller|callee|ip|port|sessionKey|codec|quality|mediaTypes
-                try {
-                    const data = JSON.stringify(attrs)
-                    return Array.from(new TextEncoder().encode(data))
-                        .map(b => b.toString(16).padStart(2, '0'))
-                        .join('')
-                } catch (error) {
-                    console.warn('Failed to encode call attributes:', error)
-                    return '00'
-                }
-            }
+            // NOTE: tokenAttributes encoding is handled by signaling.encodeTokenAttributes()
+            // This method has been removed to prevent duplicate/incorrect JSON encoding
+            // Use: signaling.encodeTokenAttributes(attributes) for proper binary encoding
 
             encodeCallState(state) {
                 // Encode call state as hex string for stateData field
