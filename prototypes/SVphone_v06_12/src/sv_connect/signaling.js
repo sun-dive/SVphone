@@ -321,9 +321,24 @@ class CallSignaling {
     // CASE 1: Check if this is a token we created and stored locally
     const storedToken = this.callTokens.get(token.tokenId)
     if (storedToken && storedToken.caller && storedToken.callee) {
-      console.debug('[CallSignaling] ✓ Found stored token - using caller/callee from local storage', {
+      // Check if this is a return-to-sender (UTXO location changed)
+      // If UTXO location is the same, it's the token we just transferred - skip it
+      if (storedToken.currentTxId === token.currentTxId &&
+          storedToken.currentOutputIndex === token.currentOutputIndex) {
+        console.debug('[CallSignaling] ℹ️ Stored token has same UTXO location - not a return-to-sender (skip)', {
+          storedTxId: storedToken.currentTxId?.slice(0, 20),
+          incomingTxId: token.currentTxId?.slice(0, 20),
+          tokenId: token.tokenId?.slice(0, 20)
+        })
+        return null  // Skip - same UTXO, not actually returned yet
+      }
+
+      // UTXO location changed - this is a return-to-sender! Preserve original addresses
+      console.debug('[CallSignaling] ✓ Return-to-sender detected - using original caller/callee from storage', {
         caller: storedToken.caller?.slice(0, 20),
         callee: storedToken.callee?.slice(0, 20),
+        oldTxId: storedToken.currentTxId?.slice(0, 20),
+        newTxId: token.currentTxId?.slice(0, 20),
         tokenId: token.tokenId?.slice(0, 20)
       })
       return {
