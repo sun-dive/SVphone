@@ -54,7 +54,7 @@ class CallSignaling {
    * [IPType(1-bit)+IP(4|16)] [Port(2)] [KeyLen(1)] [Key(var)]
    * [Codec(1)] [Quality(1)] [MediaTypes(1)]
    *
-   * Typical size: ~100-150 bytes (vs 500+ bytes for JSON)
+   * Typical size: ~100-150 bytes
    *
    * @param {Object} attributes - Call attributes {caller, callee, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
    * @returns {string} Hex-encoded binary data
@@ -133,8 +133,7 @@ class CallSignaling {
   }
 
   /**
-   * Parse tokenAttributes from binary or legacy JSON format
-   * Automatically detects format version and decodes accordingly
+   * Parse tokenAttributes from binary format
    * @private
    */
   parseTokenAttributes(tokenAttributesHex) {
@@ -149,16 +148,8 @@ class CallSignaling {
 
       if (bytes.length === 0) return {}
 
-      // Check version marker
-      const version = bytes[0]
-
-      if (version === 0x01) {
-        // Binary format v1
-        return this.decodeBinaryAttributes(bytes)
-      } else {
-        // Legacy JSON format (backward compatibility)
-        return this.decodeLegacyJsonAttributes(tokenAttributesHex)
-      }
+      // Decode binary format v1
+      return this.decodeBinaryAttributes(bytes)
     } catch (error) {
       console.error('[CallSignaling] Failed to parse tokenAttributes:', error)
       return {}
@@ -226,24 +217,6 @@ class CallSignaling {
       codec,
       quality,
       mediaTypes
-    }
-  }
-
-  /**
-   * Decode legacy JSON format (backward compatibility)
-   * @private
-   */
-  decodeLegacyJsonAttributes(tokenAttributesHex) {
-    try {
-      let attributesJson = ''
-      for (let i = 0; i < tokenAttributesHex.length; i += 2) {
-        const hex = tokenAttributesHex.substr(i, 2)
-        attributesJson += String.fromCharCode(parseInt(hex, 16))
-      }
-      return JSON.parse(attributesJson)
-    } catch (error) {
-      console.error('[CallSignaling] Failed to decode legacy JSON:', error)
-      return {}
     }
   }
 
