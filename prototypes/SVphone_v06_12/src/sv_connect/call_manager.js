@@ -58,7 +58,7 @@ class CallManager {
       try {
         console.debug('[CallManager] Creating SDP offer before token broadcast...')
         mediaOffer = await this.peerConnection.createOffer(calleeAddress)
-        callToken.mediaOffer = mediaOffer  // Store offer in call token for callee to retrieve
+        callToken.sdpOffer = mediaOffer  // Store offer in call token for encoding into tokenAttributes
         console.debug('[CallManager] ✓ SDP offer created and stored in callToken')
       } catch (error) {
         console.warn('[CallManager] Failed to create media offer before broadcast:', error)
@@ -166,13 +166,37 @@ class CallManager {
 
       // Create WebRTC answer
       const callToken = this.signaling.getCallToken(callTokenId)
-      if (callToken?.mediaOffer) {
+      if (callToken?.sdpOffer) {
         try {
           const answer = await this.peerConnection.createAnswer(
             callToken.caller,
-            callToken.mediaOffer.sdp
+            callToken.sdpOffer.sdp
           )
           session.mediaAnswer = answer
+          console.debug('[CallManager] ✓ SDP answer created and stored in session')
+
+          // **IMPORTANT: Broadcast answer token back to caller BEFORE connecting**
+          // This ensures the caller can retrieve the answer when accepting the call
+          try {
+            console.debug('[CallManager] Broadcasting SDP answer to caller...')
+            await this.signaling.broadcastCallAnswer(
+              callTokenId,
+              callToken.caller,  // Send answer back to caller
+              {
+                sdpAnswer: answer.sdp,
+                senderIp: this.signaling.myIp,
+                senderPort: this.signaling.myPort,
+                sessionKey: answerToken.answererSessionKey,
+                codec: callToken.codec,
+                quality: callToken.quality,
+                mediaTypes: callToken.mediaTypes
+              },
+              options.broadcastAnswerFn  // Optional function to broadcast (for testing)
+            )
+            console.debug('[CallManager] ✓ SDP answer broadcasted to caller')
+          } catch (error) {
+            console.warn('[CallManager] Failed to broadcast media answer:', error)
+          }
         } catch (error) {
           console.warn('[CallManager] Failed to create media answer:', error)
         }

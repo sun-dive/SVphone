@@ -30,13 +30,15 @@ class CallTokenManager {
   /**
    * Encode call attributes into byte-efficient binary format for blockchain storage
    *
-   * Format: [Version(1)] [CallerLen(1)] [Caller(var)] [CalleeLen(1)] [Callee(var)]
+   * Format: [Version(1)]
    *         [IPType+IP(4-16)] [Port(2)] [KeyLen(1)] [Key(var)]
    *         [Codec(1)] [Quality(1)] [MediaTypes(1)]
+   *         [SDPLen(2)] [SDP(var)]
    *
-   * Size: ~100-150 bytes (vs 500+ for JSON)
+   * Note: Caller and callee addresses are in the transaction, not encoded here
+   * Size: ~50-100 bytes + SDP size
    *
-   * @param {Object} callToken - Call token with connection info
+   * @param {Object} callToken - Call token with connection info and sdpOffer
    * @returns {string} Hex-encoded binary data
    */
   encodeCallAttributes(callToken) {
@@ -45,16 +47,6 @@ class CallTokenManager {
 
       // Version marker (0x01 = binary format v1)
       bytes.push(0x01)
-
-      // Caller address (variable-length)
-      const callerBuf = new TextEncoder().encode(callToken.caller)
-      bytes.push(callerBuf.length)
-      bytes.push(...callerBuf)
-
-      // Callee address (variable-length)
-      const calleeBuf = new TextEncoder().encode(callToken.callee)
-      bytes.push(calleeBuf.length)
-      bytes.push(...calleeBuf)
 
       // IP address and port
       const ip = callToken.senderIp
@@ -104,6 +96,14 @@ class CallTokenManager {
       if (callToken.mediaTypes?.includes('video')) mediaBitmask |= 0x02
       bytes.push(mediaBitmask)
 
+      // SDP Offer or Answer (variable-length, 2-byte length prefix)
+      // Supports both outgoing offer (callToken.sdpOffer) and response answer (callToken.sdpAnswer)
+      const sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
+      const sdpBuf = new TextEncoder().encode(sdpData)
+      bytes.push((sdpBuf.length >> 8) & 0xFF)  // Length high byte
+      bytes.push(sdpBuf.length & 0xFF)          // Length low byte
+      bytes.push(...sdpBuf)
+
       // Convert to hex string
       return bytes.map(b => ('0' + b.toString(16)).slice(-2)).join('')
     } catch (error) {
@@ -146,6 +146,50 @@ class CallTokenManager {
     } catch (error) {
       console.error(`[CallToken] Failed to hash address:`, error)
       return '00000000'  // Fallback if hashing fails
+    }
+  }
+
+  /**
+   * Broadcast a call answer response token back to caller
+   *
+   * Answer tokens are transfers (not genesis) and include SDP Answer in tokenAttributes.
+   * Used when callee accepts call and needs to send media negotiation data back to caller.
+   *
+   * @param {string} tokenId - Existing call token ID to transfer back
+   * @param {string} callerAddress - Caller's address (recipient of answer token)
+   * @param {Object} answerData - Answer data {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
+   * @returns {Promise<Object>} {txId, tokenId}
+   */
+  async broadcastCallAnswer(tokenId, callerAddress, answerData) {
+    console.debug(`[CallToken] Broadcasting call answer to ${callerAddress}`)
+
+    try {
+      // Encode answer data into tokenAttributes (same format as offer, just different SDP content)
+      const encodedAttributes = this.encodeCallAttributes({
+        sdpAnswer: answerData.sdpAnswer,  // Answer goes into same SDP field as offer
+        senderIp: answerData.senderIp,
+        senderPort: answerData.senderPort,
+        sessionKey: answerData.sessionKey,
+        codec: answerData.codec,
+        quality: answerData.quality,
+        mediaTypes: answerData.mediaTypes
+      })
+      console.debug(`[CallToken] Encoded answer attributes: ${encodedAttributes.length / 2} bytes`)
+
+      // Transfer token back to caller with answer data
+      const transferResult = await this.tokenBuilder.createTransfer(tokenId, callerAddress, {
+        tokenAttributes: encodedAttributes
+      })
+
+      console.debug(`[CallToken] ✅ Answer token transferred: ${transferResult.txId}`)
+      this.log(`✓ Answer token sent: ${transferResult.txId}`, 'success')
+      this.log(`View on blockchain: https://whatsonchain.com/tx/${transferResult.txId}`, 'info')
+
+      return { txId: transferResult.txId, tokenId: tokenId }
+    } catch (err) {
+      console.error(`[CallToken] ❌ Answer broadcast failed:`, err)
+      this.log(`Answer broadcast failed: ${err.message}`, 'error')
+      throw err
     }
   }
 

@@ -19,7 +19,9 @@
  * - tokenName: "svphone-call-v1" (UTF-8)
  * - tokenScript: "" (empty, standard P2PKH)
  * - tokenRules: supply=1, divisibility=0, restrictions=0x0001 (one-time-use, defined in CallTokenManager)
- * - tokenAttributes: contains call metadata (caller, callee, IP, port, session key)
+ * - tokenAttributes (binary v1): [IP][Port][SessionKey][Codec][Quality][MediaTypes][SDPLen][SDP]
+ *   * SDP contains offer (genesis) or answer (transfer response)
+ *   * Caller/callee addresses already in transaction metadata, not encoded here
  * - stateData: call state (status="ringing", duration=0, quality="hd")
  * - proofChain: [] (empty until confirmed)
  *
@@ -163,18 +165,6 @@ class CallSignaling {
   decodeBinaryAttributes(bytes) {
     let offset = 1 // Skip version byte
 
-    // Caller address
-    const callerLen = bytes[offset++]
-    const callerBuf = bytes.slice(offset, offset + callerLen)
-    const caller = new TextDecoder().decode(new Uint8Array(callerBuf))
-    offset += callerLen
-
-    // Callee address
-    const calleeLen = bytes[offset++]
-    const calleeBuf = bytes.slice(offset, offset + calleeLen)
-    const callee = new TextDecoder().decode(new Uint8Array(calleeBuf))
-    offset += calleeLen
-
     // IP address (4 or 16 bytes based on version bit)
     const ipTypeByte = bytes[offset++]
     const isIPv6 = (ipTypeByte >> 7) & 1
@@ -208,15 +198,21 @@ class CallSignaling {
     if (mediaTypeBitmask & 0x01) mediaTypes.push('audio')
     if (mediaTypeBitmask & 0x02) mediaTypes.push('video')
 
+    // SDP Offer (variable-length, 2-byte length prefix)
+    const sdpLen = (bytes[offset] << 8) | bytes[offset + 1]
+    offset += 2
+    const sdpBuf = bytes.slice(offset, offset + sdpLen)
+    const sdpOffer = new TextDecoder().decode(new Uint8Array(sdpBuf))
+    offset += sdpLen
+
     return {
-      caller,
-      callee,
       senderIp,
       senderPort,
       sessionKey,
       codec,
       quality,
-      mediaTypes
+      mediaTypes,
+      sdpOffer
     }
   }
 
@@ -431,14 +427,14 @@ class CallSignaling {
             if (isIncomingCall) {
               console.log(`[CallSignaling] Token verified! Processing incoming call`)
               // Merge parsed attributes back into token for handleIncomingCall
-              token.caller = attributes.caller
-              token.callee = attributes.callee
+              // Note: caller and callee come from transaction metadata, not attributes
               token.senderIp = attributes.senderIp
               token.senderPort = attributes.senderPort
               token.sessionKey = attributes.sessionKey
               token.codec = attributes.codec
               token.quality = attributes.quality
               token.mediaTypes = attributes.mediaTypes || ['audio', 'video']
+              token.sdpOffer = attributes.sdpOffer
 
               this.handleIncomingCall(token)
             } else if (isResponseToken) {
@@ -520,114 +516,44 @@ class CallSignaling {
   handleCallResponse(token, attributes) {
     console.debug('[CallSignaling] 🔄 Processing call response token')
     console.debug('[CallSignaling] Token ID:', token.tokenId?.slice(0,20))
-    console.debug('[CallSignaling] StateData length:', token.stateData?.length || 0)
+    console.debug('[CallSignaling] Has attributes:', !!attributes)
 
-    // Parse stateData to extract callee's connection information (binary format)
-    let responseData = {}
-    if (token.stateData) {
-      try {
-        console.debug('[CallSignaling] ✓ Token has stateData, decoding binary format...')
-
-        // Convert hex to bytes
-        const bytes = []
-        for (let i = 0; i < token.stateData.length; i += 2) {
-          const hex = token.stateData.substr(i, 2)
-          bytes.push(parseInt(hex, 16))
-        }
-
-        console.debug('[CallSignaling] StateData bytes (first 10):', bytes.slice(0, 10).map(b => '0x' + b.toString(16).padStart(2, '0')).join(', '))
-
-        // Binary format: [Version(1)] [Status(1)] [RecipientAddressLen(1)] [RecipientAddress(var)]
-        //               [IPType+IP(4-16)] [Port(2)] [KeyLen(1)] [Key(var)]
-        let offset = 0
-
-        // Version (1 byte)
-        const version = bytes[offset++]
-        console.debug('[CallSignaling] StateData version:', '0x' + version.toString(16))
-
-        // Status (1 byte): 0x01 = answered, 0x02 = rejected, etc.
-        const statusCode = bytes[offset++]
-        const statusMap = { 0x01: 'answered', 0x02: 'rejected', 0x03: 'ended' }
-        responseData.status = statusMap[statusCode] || 'unknown'
-
-        // Recipient address (variable-length)
-        const addressLen = bytes[offset++]
-        const addressBytes = bytes.slice(offset, offset + addressLen)
-        responseData.recipientAddress = String.fromCharCode(...addressBytes)
-        offset += addressLen
-
-        // IP address (4 or 16 bytes for IPv4/IPv6)
-        const ipByte = bytes[offset++]
-        const isIPv6 = (ipByte & 0x80) !== 0
-        const ip1 = ipByte & 0x7F
-
-        if (!isIPv6) {
-          // IPv4: 4 bytes
-          const ip2 = bytes[offset++]
-          const ip3 = bytes[offset++]
-          const ip4 = bytes[offset++]
-          responseData.recipientIp = `${ip1}.${ip2}.${ip3}.${ip4}`
-        } else {
-          // IPv6: 16 bytes (simplified)
-          const ipv6Bytes = [ip1, ...bytes.slice(offset, offset + 15)]
-          offset += 15
-          responseData.recipientIp = ipv6Bytes.slice(0, 8).map((b, i) => {
-            const nextB = ipv6Bytes[i + 8] || 0
-            return ((b << 8) | nextB).toString(16)
-          }).join(':')
-        }
-
-        // Port (2 bytes, big-endian)
-        const port = (bytes[offset++] << 8) | bytes[offset++]
-        responseData.recipientPort = port
-
-        // Session key (variable-length)
-        const keyLen = bytes[offset++]
-        const keyBytes = bytes.slice(offset, offset + keyLen)
-        responseData.recipientSessionKey = String.fromCharCode(...keyBytes)
-
-        console.debug('[CallSignaling] ✓ Parsed response data:',  {
-          status: responseData.status,
-          recipientAddress: responseData.recipientAddress?.slice(0,20),
-          recipientIp: responseData.recipientIp,
-          recipientPort: responseData.recipientPort,
-          hasKey: !!responseData.recipientSessionKey
-        })
-      } catch (err) {
-        console.warn('[CallSignaling] Failed to parse response stateData:', err.message)
-        console.warn('[CallSignaling] StateData hex (first 100):', token.stateData.substring(0, 100))
-        return
-      }
-    }
-
-    // Check if this is actually a response (status = answered)
-    if (responseData.status !== 'answered') {
-      console.debug('[CallSignaling] ❌ Token is not a call response (status=' + (responseData.status || 'none') + ')')
+    // Attributes already decoded by decodeBinaryAttributes() in polling
+    // For answer tokens, attributes contain: senderIp, senderPort, sessionKey, codec, quality, mediaTypes, sdpAnswer
+    if (!attributes || !attributes.sdpAnswer) {
+      console.debug('[CallSignaling] ❌ No SDP Answer found in response token')
       return
     }
 
-    console.debug('[CallSignaling] ✓ Status is "answered", emitting call:answered event...')
+    console.debug('[CallSignaling] ✓ SDP Answer found, processing response...')
 
-    // Emit call:answered event with callee's connection data
+    // Emit call:answered event with callee's connection data and SDP Answer
     const eventData = {
       callTokenId: token.tokenId,
-      callee: responseData.recipientAddress,
-      calleeIp: responseData.recipientIp,
-      calleePort: responseData.recipientPort,
-      calleeSessionKey: responseData.recipientSessionKey,
-      audioOnly: responseData.audioOnly || false,
+      caller: token.caller,  // The person we called (now responding)
+      callee: token.callee,  // Us (the original caller)
+      calleeIp: attributes.senderIp,
+      calleePort: attributes.senderPort,
+      calleeSessionKey: attributes.sessionKey,
+      sdpAnswer: attributes.sdpAnswer,  // The callee's SDP answer for media negotiation
+      codec: attributes.codec,
+      quality: attributes.quality,
+      mediaTypes: attributes.mediaTypes,
       timestamp: Date.now()
     }
-    console.debug('[CallSignaling] Emitting event with data:', {
+
+    console.debug('[CallSignaling] ✓ Parsed answer response:',  {
       callTokenId: eventData.callTokenId?.slice(0,20),
-      callee: eventData.callee?.slice(0,20),
+      caller: eventData.caller?.slice(0,20),
       calleeIp: eventData.calleeIp,
-      calleePort: eventData.calleePort
+      calleePort: eventData.calleePort,
+      hasAnswer: !!eventData.sdpAnswer
     })
 
+    console.debug('[CallSignaling] ✓ Emitting call:answered event with SDP Answer...')
     this.emit('call:answered', eventData)
 
-    console.log('[CallSignaling] ✅ Call response received from:', responseData.recipientAddress?.slice(0,20))
+    console.log('[CallSignaling] ✅ Call answer received with SDP negotiation data')
   }
 
   /**
@@ -677,6 +603,39 @@ class CallSignaling {
     console.log('[CallSignaling] Accepted call:', callTokenId)
 
     return answerToken
+  }
+
+  /**
+   * Broadcast call answer token back to caller
+   * @param {string} callTokenId - Call token ID to transfer back
+   * @param {string} callerAddress - Caller's address (recipient)
+   * @param {Object} answerData - Answer data {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
+   * @param {Function} broadcastFn - Optional function to broadcast (e.g., from CallTokenManager)
+   */
+  async broadcastCallAnswer(callTokenId, callerAddress, answerData, broadcastFn) {
+    try {
+      console.debug('[CallSignaling] 📤 Broadcasting call answer to caller:', callerAddress?.slice(0,20))
+
+      if (broadcastFn) {
+        // Use provided broadcast function (typically CallTokenManager.broadcastCallAnswer)
+        const result = await broadcastFn(callTokenId, callerAddress, answerData)
+
+        this.emit('call:answer-broadcasted', {
+          callTokenId: callTokenId,
+          txId: result.txId,
+          timestamp: Date.now()
+        })
+
+        console.log('[CallSignaling] ✅ Answer broadcasted:', result.txId)
+        return result
+      } else {
+        console.warn('[CallSignaling] ⚠️ No broadcast function provided, answer not sent to blockchain')
+        return { callTokenId, txId: null }
+      }
+    } catch (error) {
+      console.error('[CallSignaling] Failed to broadcast answer:', error)
+      throw error
+    }
   }
 
   /**
