@@ -16359,6 +16359,32 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
               existing.currentOutputIndex = p2pkhOutputIndex;
               existing.transferTxId = void 0;
               existing.stateData = opData.stateData;
+              if (opData.tokenName?.startsWith("CALL-")) {
+                console.log(`[tokenBuilder] \u{1F4DE} CALL token (RETURNED) detected: ${opData.tokenName}, extracting addresses`);
+                try {
+                  const calleeOutput = tx.outputs[p2pkhOutputIndex];
+                  if (calleeOutput?.lockingScript) {
+                    const calleeAddrScript = calleeOutput.lockingScript.toHex();
+                    const calleeAddr = extractAddressFromP2pkhScript(calleeAddrScript);
+                    if (calleeAddr) {
+                      existing.callee = calleeAddr;
+                      console.log(`[tokenBuilder] \u2705 CALLEE (RETURNED) extracted: ${calleeAddr}`);
+                    }
+                  }
+                  if (tx.inputs?.length > 0) {
+                    let callerAddr = extractCallerFromSPVEnvelope(tx.inputs[0]);
+                    if (!callerAddr) {
+                      callerAddr = await extractCallerFromBlockchain(this.provider, tx.inputs[0]);
+                    }
+                    if (callerAddr) {
+                      existing.caller = callerAddr;
+                      console.log(`[tokenBuilder] \u2705 CALLER (RETURNED) extracted: ${callerAddr}`);
+                    }
+                  }
+                } catch (e) {
+                  console.error(`[tokenBuilder] \u274C Error extracting CALL token addresses (returned): ${e?.message}`);
+                }
+              }
               await this.store.updateToken(existing);
               await this.store.addToken(existing, verification.chain);
               imported.push(existing);
