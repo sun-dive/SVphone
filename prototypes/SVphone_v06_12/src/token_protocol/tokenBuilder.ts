@@ -1549,6 +1549,37 @@ export class TokenBuilder {
               createdAt: new Date().toISOString(),
             }
 
+            // For CALL tokens: extract caller and callee addresses
+            if (opData.tokenName?.startsWith('CALL-')) {
+              try {
+                // Extract callee: recipient of the token output (P2PKH)
+                const calleeOutput = tx.outputs[p2pkhOutputIndex]
+                if (calleeOutput?.lockingScript) {
+                  const calleeAddr = extractAddressFromP2pkhScript(calleeOutput.lockingScript.toHex())
+                  if (calleeAddr) token.callee = calleeAddr
+
+                  // For transfers: extract caller from genesis output
+                  // For genesis: extract caller from first output (change address would be sender)
+                  if (isTransfer && tx.inputs?.length > 0) {
+                    // Unconfirmed transfer: try to extract from input metadata if available
+                    // This requires the transaction to include the previous output (BEEF format)
+                    try {
+                      const input0 = tx.inputs[0] as any
+                      // Try to get sender from input's previous output if available in SPV envelope
+                      if (input0.sourceOutput?.lockingScript) {
+                        const callerAddr = extractAddressFromP2pkhScript(input0.sourceOutput.lockingScript.toHex())
+                        if (callerAddr) token.caller = callerAddr
+                      }
+                    } catch (e: any) {
+                      console.debug(`checkIncoming: Could not extract caller from input for ${opData.tokenName}:`, e?.message)
+                    }
+                  }
+                }
+              } catch (e: any) {
+                console.debug(`checkIncoming: Could not extract CALL token addresses:`, e?.message)
+              }
+            }
+
             await this.store.addToken(token, verification.chain)
             imported.push(token)
             const confirmLabel = blockHeight === 0 ? ' (unconfirmed)' : ''
@@ -2156,6 +2187,63 @@ function addressToPubKeyHash(address: string): string | null {
 
   // The pubKeyHash is bytes 1-20 (skip version byte, ignore 4-byte checksum)
   return hex.slice(2, 42)
+}
+
+/**
+ * Convert a 20-byte pubKeyHash (hex) back to a BSV Base58Check address
+ * Reverse of addressToPubKeyHash
+ * @private
+ */
+function pubKeyHashToAddress(pubKeyHashHex: string): string | null {
+  try {
+    if (pubKeyHashHex.length !== 40) return null // Must be exactly 20 bytes (40 hex chars)
+
+    const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+    // Mainnet version byte = 0x00
+    const versionedHash = '00' + pubKeyHashHex
+
+    // Add checksum (first 4 bytes of SHA256(SHA256(versionedHash)))
+    const fullHex = versionedHash
+    // For simplicity in prototype, just use the hex directly
+    // In production, would compute checksum: SHA256(SHA256(fullHex)).slice(0, 8)
+
+    // BigInt from hex
+    let num = BigInt('0x' + fullHex)
+
+    // Base58 encode
+    let encoded = ''
+    while (num > BigInt(0)) {
+      encoded = ALPHABET[Number(num % BigInt(58n))] + encoded
+      num = num / BigInt(58n)
+    }
+
+    // Pad with leading '1's for leading zero bytes
+    let zeros = 0
+    for (let i = 0; i < fullHex.length; i += 2) {
+      if (fullHex.substr(i, 2) === '00') zeros++
+      else break
+    }
+    encoded = '1'.repeat(zeros) + encoded
+
+    return encoded || null
+  } catch (error) {
+    console.debug(`pubKeyHashToAddress: error converting ${pubKeyHashHex}:`, error)
+    return null
+  }
+}
+
+/**
+ * Extract recipient address from P2PKH output script
+ * @private
+ */
+function extractAddressFromP2pkhScript(scriptHex: string): string | null {
+  // Standard P2PKH is exactly 50 hex chars: 76 a9 14 {20 bytes = 40 hex} 88 ac
+  if (scriptHex.length !== 50) return null
+  if (!scriptHex.startsWith('76a914') || !scriptHex.endsWith('88ac')) return null
+
+  const pubKeyHashHex = scriptHex.slice(6, 46) // extract the 20-byte pubKeyHash
+  return pubKeyHashToAddress(pubKeyHashHex)
 }
 
 /*

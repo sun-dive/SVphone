@@ -34,6 +34,10 @@ export interface OwnedToken {
   // v05.27: SPV confirmation metadata (separate from ownership status)
   blockHeight?: number              // Block height where token TX was confirmed (0 = unconfirmed)
   confirmationStatus?: 'unconfirmed' | 'confirmed'  // Optional confirmation indicator
+
+  // v06.12: CALL token metadata for bidirectional verification
+  caller?: string              // BSV address of call initiator (for CALL tokens)
+  callee?: string              // BSV address of call recipient (for CALL tokens)
 }
 
 // ─── Fungible Token Types ────────────────────────────────────────────
