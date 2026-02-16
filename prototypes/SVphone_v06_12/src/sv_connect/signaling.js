@@ -304,6 +304,102 @@ class CallSignaling {
   }
 
   /**
+   * Extract caller and callee addresses from tokenAttributes hashes
+   *
+   * Decodes the immutable hashes stored at bytes 1-8 of tokenAttributes:
+   * - Bytes 1-4: callerHash (4 bytes = 8 hex chars, SHA256 truncated to 32 bits)
+   * - Bytes 5-8: calleeHash (4 bytes = 8 hex chars)
+   *
+   * CRITICAL: Addresses are identified by matching hash(address) against stored hashes.
+   * For a token to be valid, either:
+   * - caller matches callerHash (token originated from us), OR
+   * - callee matches calleeHash (token is addressed to us)
+   *
+   * @param {Object} token - Token with tokenAttributes and tokenId
+   * @returns {Promise<Object|null>} {caller, callee, callerHash, calleeHash} or null
+   * @private
+   */
+  async extractAddressesFromTokenAttributes(token) {
+    try {
+      if (!token.tokenAttributes) {
+        console.warn('[CallSignaling] ⚠️ Token missing tokenAttributes for hash extraction')
+        return null
+      }
+
+      const attrHex = token.tokenAttributes
+      if (attrHex.length < 18) {  // 1 + 4 + 4 = 9 bytes = 18 hex chars minimum
+        console.warn('[CallSignaling] ⚠️ Token attributes too short (need 18 hex chars, got', attrHex.length, ')')
+        return null
+      }
+
+      // Extract hashes from tokenAttributes
+      // Format: [01] [XXXXXXXX] [YYYYYYYY] ...
+      // Hex:    [0-2] [2-10]    [10-18]
+      const callerHashHex = attrHex.substring(2, 10).padStart(8, '0')
+      const calleeHashHex = attrHex.substring(10, 18).padStart(8, '0')
+
+      console.debug('[CallSignaling] Extracted hashes from tokenAttributes:', {
+        callerHash: callerHashHex,
+        calleeHash: calleeHashHex,
+        attrsFirst20: attrHex.substring(0, 20)
+      })
+
+      // Compute hash of myAddress to determine our role
+      const myAddressHash = await this.hashAddress(this.myAddress)
+      console.debug('[CallSignaling] MyAddress hash:', myAddressHash)
+
+      // Determine role: are we the caller or callee?
+      const amCaller = myAddressHash === callerHashHex
+      const amCallee = myAddressHash === calleeHashHex
+
+      if (!amCaller && !amCallee) {
+        console.warn('[CallSignaling] ⚠️ Token not addressed to us (myHash=' + myAddressHash + ', callerHash=' + callerHashHex + ', calleeHash=' + calleeHashHex + ')')
+        return null
+      }
+
+      // For addresses, we need the actual caller/callee from storage
+      // If token is in our callTokens, use stored addresses
+      const storedToken = this.callTokens.get(token.tokenId)
+      if (storedToken && storedToken.caller && storedToken.callee) {
+        console.debug('[CallSignaling] ✓ Using stored caller/callee from callTokens:', {
+          caller: storedToken.caller?.slice(0, 20),
+          callee: storedToken.callee?.slice(0, 20)
+        })
+        return {
+          caller: storedToken.caller,
+          callee: storedToken.callee,
+          callerHash: callerHashHex,
+          calleeHash: calleeHashHex,
+          amCaller,
+          amCallee
+        }
+      }
+
+      // If token doesn't have metadata yet, we need tokenBuilder to have extracted it
+      if (token.caller && token.callee) {
+        console.debug('[CallSignaling] ✓ Using caller/callee from token metadata:', {
+          caller: token.caller?.slice(0, 20),
+          callee: token.callee?.slice(0, 20)
+        })
+        return {
+          caller: token.caller,
+          callee: token.callee,
+          callerHash: callerHashHex,
+          calleeHash: calleeHashHex,
+          amCaller,
+          amCallee
+        }
+      }
+
+      console.warn('[CallSignaling] ⚠️ Could not extract caller/callee addresses (token not in storage, tokenBuilder did not extract metadata)')
+      return null
+    } catch (error) {
+      console.error('[CallSignaling] Error extracting addresses from attributes:', error)
+      return null
+    }
+  }
+
+  /**
    * Extract caller and callee addresses from a CALL token
    *
    * For tokens we initiated (in callTokens), use stored addresses.
@@ -311,7 +407,7 @@ class CallSignaling {
    * For new incoming calls, extract from token metadata if available.
    *
    * CRITICAL: caller/callee MUST match the original token creation addresses
-   * because restrictions field contains hash(caller) + hash(callee) from genesis.
+   * because the hashes in tokenAttributes are computed from these exact addresses.
    *
    * @param {Object} token - Token with currentTxId, tokenRules, etc.
    * @returns {Object|null} {caller, callee} or null if cannot determine
@@ -627,10 +723,17 @@ class CallSignaling {
           // Extract caller and callee addresses (CRITICAL: must happen before validation)
           // Addresses are stored in token metadata or in callTokens if we created the token
           // These MUST be the original caller/callee from token creation, not transaction sender/recipient
-          const addressPair = this.extractCallerCalleeFromToken(token)
+          let addressPair = this.extractCallerCalleeFromToken(token)
+
+          // Fallback: if primary extraction fails, try hash-based extraction from tokenAttributes
           if (!addressPair) {
-            console.debug(`[CallSignaling] ❌ Skip token: cannot determine caller/callee addresses`)
-            continue
+            console.debug(`[CallSignaling] Primary extraction failed, trying hash-based extraction from tokenAttributes`)
+            addressPair = await this.extractAddressesFromTokenAttributes(token)
+
+            if (!addressPair) {
+              console.debug(`[CallSignaling] ❌ Skip token: cannot determine caller/callee addresses (tried both methods)`)
+              continue
+            }
           }
 
           // Populate token with extracted addresses (needed for validateCallAddresses)
