@@ -357,42 +357,52 @@ class CallSignaling {
         return null
       }
 
-      // For addresses, we need the actual caller/callee from storage
-      // If token is in our callTokens, use stored addresses
+      // For addresses, we prefer actual addresses from storage or token metadata
+      let caller = token.caller
+      let callee = token.callee
+
+      // Check storage for addresses if not already in token
       const storedToken = this.callTokens.get(token.tokenId)
-      if (storedToken && storedToken.caller && storedToken.callee) {
-        console.debug('[CallSignaling] ✓ Using stored caller/callee from callTokens:', {
-          caller: storedToken.caller?.slice(0, 20),
-          callee: storedToken.callee?.slice(0, 20)
-        })
-        return {
-          caller: storedToken.caller,
-          callee: storedToken.callee,
-          callerHash: callerHashHex,
-          calleeHash: calleeHashHex,
-          amCaller,
-          amCallee
+      if (!caller || !callee) {
+        if (storedToken && storedToken.caller && storedToken.callee) {
+          caller = storedToken.caller
+          callee = storedToken.callee
+          console.debug('[CallSignaling] Using stored caller/callee from callTokens')
         }
       }
 
-      // If token doesn't have metadata yet, we need tokenBuilder to have extracted it
-      if (token.caller && token.callee) {
-        console.debug('[CallSignaling] ✓ Using caller/callee from token metadata:', {
-          caller: token.caller?.slice(0, 20),
-          callee: token.callee?.slice(0, 20)
+      // If we still don't have addresses, we can at least confirm the token is for us
+      if (!caller || !callee) {
+        console.warn('[CallSignaling] ⚠️ Could not extract full caller/callee addresses (will use hash-based verification only)', {
+          hasStoredToken: !!storedToken,
+          amCaller,
+          amCallee,
+          hashes: { callerHash: callerHashHex, calleeHash: calleeHashHex }
         })
+        // Return partial data - at least we know we're involved in this call
         return {
-          caller: token.caller,
-          callee: token.callee,
+          caller: caller || 'unknown-' + callerHashHex,
+          callee: callee || 'unknown-' + calleeHashHex,
           callerHash: callerHashHex,
           calleeHash: calleeHashHex,
           amCaller,
-          amCallee
+          amCallee,
+          isHashOnly: true
         }
       }
 
-      console.warn('[CallSignaling] ⚠️ Could not extract caller/callee addresses (token not in storage, tokenBuilder did not extract metadata)')
-      return null
+      console.debug('[CallSignaling] ✓ Using caller/callee:', {
+        caller: caller?.slice(0, 20),
+        callee: callee?.slice(0, 20)
+      })
+      return {
+        caller,
+        callee,
+        callerHash: callerHashHex,
+        calleeHash: calleeHashHex,
+        amCaller,
+        amCallee
+      }
     } catch (error) {
       console.error('[CallSignaling] Error extracting addresses from attributes:', error)
       return null
