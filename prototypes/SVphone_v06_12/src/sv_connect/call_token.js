@@ -28,31 +28,6 @@ class CallTokenManager {
   }
 
   /**
-   * Encode call token restrictions field (tokenRules.restrictions) with caller/callee address hashes
-   *
-   * Format: [CallerHash(8 hex chars)] [CalleeHash(8 hex chars)]
-   * Total: 16 hex characters representing the two 32-bit hashes
-   *
-   * These hashes are stored immutably in tokenRules.restrictions for SPV validation.
-   * signaling.js extracts and validates these hashes to verify caller/callee.
-   *
-   * @param {string} callerHash - 8-char hex string (first 32 bits of SHA256)
-   * @param {string} calleeHash - 8-char hex string (first 32 bits of SHA256)
-   * @returns {string} 16-char hex string for restrictions field
-   */
-  encodeCallRules(callerHash, calleeHash) {
-    try {
-      // Concatenate the two hashes (8 chars each = 16 chars total)
-      const restrictions = `${callerHash}${calleeHash}`
-      console.debug(`[CallToken] Encoded restrictions: ${restrictions} (caller=${callerHash}, callee=${calleeHash})`)
-      return restrictions
-    } catch (error) {
-      console.error(`[CallToken] Failed to encode restrictions:`, error)
-      return '0000000000000000'  // Fallback to zeros if encoding fails
-    }
-  }
-
-  /**
    * Encode call attributes into byte-efficient binary format for blockchain storage
    *
    * Format: [Version(1)]
@@ -60,22 +35,37 @@ class CallTokenManager {
    *         [Codec(1)] [Quality(1)] [MediaTypes(1)]
    *         [SDPLen(2)] [SDP(var)]
    *
-   * Note: Caller and callee address hashes are stored in tokenRules.restrictions (immutable),
-   * NOT in tokenAttributes. This keeps attributes focused on connection data (IP, port, session key, SDP).
+   * Note: Caller and callee addresses are in the transaction, not encoded here
    * Size: ~50-100 bytes + SDP size
    *
    * @param {Object} callToken - Call token with connection info and sdpOffer
    * @returns {string} Hex-encoded binary data
    */
-  encodeCallAttributes(callToken) {
+  encodeCallAttributes(callToken, callerHash, calleeHash) {
     try {
       const bytes = []
 
       // Version marker (0x01 = binary format v1)
       bytes.push(0x01)
 
-      // NOTE: Caller and callee address hashes are NOT encoded here
-      // They are stored in tokenRules.restrictions field for immutable SPV validation
+      // Address verification hashes (caller + callee, 8 hex chars each = 4 bytes each = 8 bytes total)
+      // These are used by signaling.js to validate call addresses
+      if (callerHash && calleeHash) {
+        // Convert hex string hashes to bytes
+        const callerHashBytes = []
+        for (let i = 0; i < callerHash.length; i += 2) {
+          callerHashBytes.push(parseInt(callerHash.substr(i, 2), 16))
+        }
+        const calleeHashBytes = []
+        for (let i = 0; i < calleeHash.length; i += 2) {
+          calleeHashBytes.push(parseInt(calleeHash.substr(i, 2), 16))
+        }
+        bytes.push(...callerHashBytes)  // First 4 bytes
+        bytes.push(...calleeHashBytes)  // Next 4 bytes
+      } else {
+        // No hashes provided (for answer tokens, just push 8 zero bytes)
+        bytes.push(0, 0, 0, 0, 0, 0, 0, 0)
+      }
 
       // IP address and port
       const ip = callToken.senderIp
@@ -194,8 +184,7 @@ class CallTokenManager {
 
     try {
       // Encode answer data into tokenAttributes (same format as offer, just different SDP content)
-      // For answer tokens, we don't re-encode caller/callee hashes (they remain from genesis)
-      // restrictions field carries forward immutably from genesis token
+      // For answer tokens, we don't re-encode caller/callee hashes (they stay from genesis)
       const encodedAttributes = this.encodeCallAttributes({
         sdpAnswer: answerData.sdpAnswer,  // Answer goes into same SDP field as offer
         senderIp: answerData.senderIp,
@@ -204,7 +193,7 @@ class CallTokenManager {
         codec: answerData.codec,
         quality: answerData.quality,
         mediaTypes: answerData.mediaTypes
-      })
+      }, null, null)  // No address hashes for answer tokens (keep genesis hashes)
       console.debug(`[CallToken] Encoded answer attributes: ${encodedAttributes.length / 2} bytes`)
 
       // Transfer token back to caller with answer data
@@ -264,21 +253,18 @@ class CallTokenManager {
       const calleeHash = await this.hashAddress(callToken.callee)
       console.debug(`[CallToken] Address hashes: caller=${callerHash}, callee=${calleeHash}`)
 
-      // Encode restrictions field with caller/callee hashes (stored immutably in tokenRules)
-      const encodedRestrictions = this.encodeCallRules(callerHash, calleeHash)
-
-      // Encode call connection information into tokenAttributes (IP, port, session key, codec, quality, media types, SDP)
-      const encodedAttributes = this.encodeCallAttributes(callToken)
+      // Encode call connection information into tokenAttributes (includes address hashes for validation)
+      const encodedAttributes = this.encodeCallAttributes(callToken, callerHash, calleeHash)
       console.debug(`[CallToken] Encoded attributes: ${encodedAttributes.length / 2} bytes`)
 
       // Create P token for call signaling with encoded connection info
       const result = await this.tokenBuilder.createGenesis({
         tokenName: `CALL-${callerIdent}`,
         tokenScript: '',  // No consensus rules needed
-        attributes: encodedAttributes,  // Connection info: IP, port, session key, codec, quality, media types, SDP
+        attributes: encodedAttributes,  // Encoded call connection info (includes address hashes, IP, port, session key, etc.)
         supply: CALL_TOKEN_RULES.supply,
         divisibility: CALL_TOKEN_RULES.divisibility,
-        restrictions: encodedRestrictions,  // Caller/callee hashes for SPV validation (immutable)
+        restrictions: 0,  // No restrictions (address validation via tokenAttributes hashes instead)
         rulesVersion: CALL_TOKEN_RULES.version,
         stateData: '00'  // Empty (state tracked in signaling layer)
       })
