@@ -375,49 +375,44 @@ class CallSignaling {
   }
 
   /**
-   * Validate caller and callee addresses against tokenRules restrictions hash
+   * Validate caller and callee addresses against tokenRules restrictions field
    * Restrictions field contains: callerHash (8 hex) + calleeHash (8 hex) = 16 hex chars total
    * @private
    */
   async validateCallAddresses(token) {
     try {
-      // Extract address hashes from tokenAttributes (first 8 bytes after version)
-      // Format: [Version(1)][CallerHash(4)][CalleeHash(4)][...rest of attributes]
+      // Extract address hashes from tokenRules.restrictions (immutable, set at genesis)
+      // Format: XXXXXXXX YYYYYYYY (caller hash + callee hash, 8 hex chars each = 16 chars total)
       console.log('[CallSignaling] 🔍 VALIDATE: Full token dump:', {
         tokenId: token.tokenId?.slice(0, 20),
         tokenName: token.tokenName,
         caller: token.caller,
         callee: token.callee,
-        tokenAttributesLen: token.tokenAttributes?.length || 0,
-        tokenAttributesFirst40: token.tokenAttributes?.substring(0, 40)
+        tokenRulesRestrictions: token.tokenRules?.restrictions || 'undefined'
       })
 
-      if (!token.tokenAttributes) {
-        console.warn('[CallSignaling] ⚠️ Token missing tokenAttributes for address validation')
+      if (!token.tokenRules?.restrictions) {
+        console.warn('[CallSignaling] ⚠️ Token missing tokenRules.restrictions for address validation')
         return false
       }
 
-      const attrHex = token.tokenAttributes
-      if (attrHex.length < 18) {  // 1 + 4 + 4 = 9 bytes = 18 hex chars minimum
-        console.warn('[CallSignaling] ⚠️ Token attributes too short for address hashes (need 18 hex chars, got', attrHex.length, ')')
+      const restrictionsHex = token.tokenRules.restrictions
+      if (restrictionsHex.length !== 16) {  // Must be exactly 16 hex chars (8+8)
+        console.warn('[CallSignaling] ⚠️ Token restrictions invalid length (need 16 hex chars, got', restrictionsHex.length, ')')
         return false
       }
 
-      // Extract 4-byte hashes from hex string (skip version byte at 0-2)
-      // Format: 01abcd1234wxyz5678...
-      const callerHashHex = attrHex.substring(2, 10)  // 4 bytes = 8 hex chars
-      const calleeHashHex = attrHex.substring(10, 18)  // 4 bytes = 8 hex chars
-      console.log('[CallSignaling] 🔍 VALIDATE: Extracted hashes from attributes:', {
-        first20chars: attrHex.substring(0, 20),
-        callerHashHex_substring_2_10: callerHashHex,
-        calleeHashHex_substring_10_18: calleeHashHex
+      // Extract caller and callee hashes (8 hex chars each)
+      // Format: XXXXXXXX YYYYYYYY
+      const storedCallerHash = restrictionsHex.substring(0, 8)  // First 8 hex chars
+      const storedCalleeHash = restrictionsHex.substring(8, 16)  // Next 8 hex chars
+      console.log('[CallSignaling] 🔍 VALIDATE: Extracted hashes from restrictions:', {
+        restrictionsHex: restrictionsHex,
+        callerHash: storedCallerHash,
+        calleeHash: storedCalleeHash
       })
 
-      // These are already 8-char hex strings from being encoded as 4-byte values
-      const storedCallerHash = callerHashHex.padStart(8, '0')
-      const storedCalleeHash = calleeHashHex.padStart(8, '0')
-
-      console.debug('[CallSignaling] 📋 Address hashes extracted from tokenAttributes', {
+      console.debug('[CallSignaling] 📋 Address hashes extracted from tokenRules.restrictions', {
         callerHash: storedCallerHash,
         calleeHash: storedCalleeHash
       })
