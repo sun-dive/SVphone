@@ -183,6 +183,11 @@ class CallSignaling {
     console.debug(`[CallSignaling] decodeBinaryAttributes: Starting decode of ${bytes.length} bytes`)
     let offset = 1 // Skip version byte
 
+    // Skip address verification hashes (caller + callee, 4 bytes each = 8 bytes total)
+    // These are encoded at the beginning for validation but not used in attributes parsing
+    offset += 8
+    console.debug(`[CallSignaling] decodeBinaryAttributes: Skipped 8-byte address hashes, offset now=${offset}`)
+
     // IP address (4 or 16 bytes based on version bit)
     console.debug(`[CallSignaling] decodeBinaryAttributes: offset=${offset}, decoding IP...`)
     const ipTypeByte = bytes[offset++]
