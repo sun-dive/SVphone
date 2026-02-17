@@ -30,6 +30,9 @@ class WalletUI {
       // Populate address
       this.populateAddress();
 
+      // Populate keys
+      this.populateKeys();
+
       // Populate balance
       await this.populateBalance();
 
@@ -75,6 +78,28 @@ class WalletUI {
     } catch (err) {
       this.balanceElement.textContent = 'Error loading balance';
       console.error('[WalletUI] Error getting balance:', err);
+    }
+  }
+
+  /**
+   * Populate public and private key display
+   */
+  populateKeys() {
+    try {
+      const pubkeyEl = document.getElementById('pubkey');
+      const privkeyEl = document.getElementById('privkey');
+
+      if (pubkeyEl && window.myPublicKey) {
+        pubkeyEl.textContent = window.myPublicKey;
+        console.log('[WalletUI] Public key populated');
+      }
+
+      if (privkeyEl && window.myWif) {
+        privkeyEl.textContent = window.myWif;
+        console.log('[WalletUI] Private key populated');
+      }
+    } catch (err) {
+      console.error('[WalletUI] Error populating keys:', err);
     }
   }
 

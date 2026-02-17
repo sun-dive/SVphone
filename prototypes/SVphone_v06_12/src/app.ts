@@ -20,6 +20,7 @@ let provider: WalletProvider
 let builder: TokenBuilder
 let store: TokenStore
 let fileCache: FileCache
+let myKey: PrivateKey | null = null
 
 const WIF_KEY = 'p:wallet:wif'
 
@@ -41,6 +42,7 @@ function init() {
   }
 
   const address = key.toAddress()
+  myKey = key
   provider = new WalletProvider(address)
   const storage = new LocalStorageBackend('p:data:')
   store = new TokenStore(storage)
@@ -65,6 +67,9 @@ declare global {
     tokenStore?: TokenStore  // Alias for phone_interface.html
     provider?: WalletProvider
     fileCache?: FileCache
+    myAddress?: string
+    myPublicKey?: string
+    myWif?: string
     initWallet?: typeof init
     decodeTokenRules?: typeof decodeTokenRules
     bitcoin?: {
@@ -94,6 +99,13 @@ function initAndExpose() {
   window.tokenStore = store  // Alias for phone_interface.html
   window.provider = provider
   window.fileCache = fileCache
+
+  // Expose wallet key details for UI display
+  if (myKey) {
+    window.myAddress = myKey.toAddress()
+    window.myPublicKey = myKey.toPublicKey().toString()
+    window.myWif = myKey.toWif()
+  }
 }
 
 // Auto-initialize on load

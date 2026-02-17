@@ -17232,6 +17232,7 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
   var builder;
   var store;
   var fileCache;
+  var myKey = null;
   var WIF_KEY = "p:wallet:wif";
   function init() {
     let wif = localStorage.getItem(WIF_KEY);
@@ -17249,6 +17250,7 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
       localStorage.setItem(WIF_KEY, wif);
     }
     const address = key.toAddress();
+    myKey = key;
     provider = new WalletProvider(address);
     const storage = new LocalStorageBackend("p:data:");
     store = new TokenStore(storage);
@@ -17275,6 +17277,11 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
     window.tokenStore = store;
     window.provider = provider;
     window.fileCache = fileCache;
+    if (myKey) {
+      window.myAddress = myKey.toAddress();
+      window.myPublicKey = myKey.toPublicKey().toString();
+      window.myWif = myKey.toWif();
+    }
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initAndExpose);
