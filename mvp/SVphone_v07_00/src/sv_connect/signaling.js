@@ -511,55 +511,48 @@ class CallSignaling {
             hasSdp: !!attributes.sdpOffer || !!attributes.sdpAnswer
           })
 
-          // Extract caller and callee addresses from storage (for return-to-sender detection)
-          // Addresses are stored in callTokens if we created the token
-          let addressPair = this.extractCallerCalleeFromToken(token)
-
-          // If we have stored addresses, use them
+          // Try to extract stored addresses (for return-to-sender detection)
+          // Addresses may come from callTokens storage or transaction metadata
+          const addressPair = this.extractCallerCalleeFromToken(token)
           if (addressPair) {
             token.caller = addressPair.caller
             token.callee = addressPair.callee
           }
 
-          // Check if this is an incoming call token (we are the callee)
-          const isIncomingCall = token.callee === this.myAddress
+          // Accept token immediately regardless of address determination
+          // Caller/callee addresses are determined best-effort, not a blocking gate
+          console.log(`[CallSignaling] ✓ Accepting CALL token immediately (pure SPV principle)`)
 
-          // Check if this is a response token (we initiated the call)
+          // Merge parsed attributes back into token for processing
+          token.senderIp = attributes.senderIp
+          token.senderPort = attributes.senderPort
+          token.sessionKey = attributes.sessionKey
+          token.codec = attributes.codec
+          token.quality = attributes.quality
+          token.mediaTypes = attributes.mediaTypes || ['audio', 'video']
+          token.sdpOffer = attributes.sdpOffer
+
+          // Determine role if addresses are available
+          const isIncomingCall = token.callee === this.myAddress
           const isResponseToken = token.caller === this.myAddress
 
-          console.debug(`[CallSignaling] Token role check: isIncomingCall=${isIncomingCall}, isResponseToken=${isResponseToken}`, {
+          console.debug(`[CallSignaling] Token role (if addresses available): isIncomingCall=${isIncomingCall}, isResponseToken=${isResponseToken}`, {
             tokenCaller: token.caller?.slice(0, 20),
             tokenCallee: token.callee?.slice(0, 20),
             myAddress: this.myAddress?.slice(0, 20)
           })
 
-          if (!isIncomingCall && !isResponseToken) {
-            console.debug(`[CallSignaling] ❌ Skip token: not relevant to us (caller=${token.caller?.slice(0, 20)}, callee=${token.callee?.slice(0, 20)}, myAddress=${this.myAddress?.slice(0, 20)})`)
-            continue
-          }
-
-          // Accept token immediately for instant messaging UX (pure SPV principle)
-          // Token ID is cryptographically valid on receipt - no verification gate needed
-          const tokenType = isIncomingCall ? 'incoming call' : 'call response'
-          console.log(`[CallSignaling] ✓ Accepting ${tokenType} immediately`)
-
+          // Route to appropriate handler based on role (if determined)
           if (isIncomingCall) {
             console.log(`[CallSignaling] Processing incoming call`)
-            // Merge parsed attributes back into token for handleIncomingCall
-            // Note: caller and callee come from transaction metadata, not attributes
-            token.senderIp = attributes.senderIp
-            token.senderPort = attributes.senderPort
-            token.sessionKey = attributes.sessionKey
-            token.codec = attributes.codec
-            token.quality = attributes.quality
-            token.mediaTypes = attributes.mediaTypes || ['audio', 'video']
-            token.sdpOffer = attributes.sdpOffer
-
             this.handleIncomingCall(token)
           } else if (isResponseToken) {
             console.log(`[CallSignaling] Processing call response`)
-            // Parse stateData to extract callee's response (connection data)
             this.handleCallResponse(token, attributes)
+          } else {
+            // If role cannot be determined, emit as generic call token
+            console.log(`[CallSignaling] Processing call token (role undetermined, may need manual routing)`)
+            this.emit('call:token-received', { token, attributes })
           }
 
           // Run SPV verification in background (non-blocking, optional)
