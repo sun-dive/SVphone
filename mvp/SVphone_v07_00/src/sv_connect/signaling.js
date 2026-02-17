@@ -283,11 +283,6 @@ class CallSignaling {
   }
 
   /**
-   * Helper: Compute 32-bit truncated SHA256 hash of an address
-   * Returns first 8 hex characters (32 bits) for compact identification
-   * @private
-   */
-  /**
    * Extract caller and callee addresses from a CALL token
    *
    * For tokens we initiated (in callTokens), use stored addresses.
@@ -295,7 +290,7 @@ class CallSignaling {
    * For new incoming calls, extract from token metadata if available.
    *
    * CRITICAL: caller/callee MUST match the original token creation addresses
-   * because the hashes in tokenAttributes are computed from these exact addresses.
+   * because the hashes in tokenRules.restrictions are computed from these exact addresses.
    *
    * @param {Object} token - Token with currentTxId, tokenRules, etc.
    * @returns {Object|null} {caller, callee} or null if cannot determine
