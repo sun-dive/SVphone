@@ -44,13 +44,17 @@ class PhoneController {
         // UDP port for direct P2P communication
         this.assignedUdpPort = null
 
+        // Available CALL tokens for quick reuse
+        this.availableCallTokens = []
+        this.selectedCallToken = null
+
         this.init()
     }
 
     /**
      * Initialize application on startup
      */
-    init() {
+    async init() {
         try {
             console.log('[SVphone] Initializing controller...')
 
@@ -122,6 +126,13 @@ class PhoneController {
                 console.error('[DIAG] calleeAddress field NOT FOUND in DOM!')
             }
 
+            // Fetch available CALL tokens for quick reuse
+            try {
+                await this.loadAvailableCallTokens()
+            } catch (e) {
+                this.ui.log(`⚠️  Could not load available tokens: ${e.message}`, 'warning')
+            }
+
             // Start background polling for incoming calls
             try {
                 this.startBackgroundPolling()
@@ -133,6 +144,36 @@ class PhoneController {
         } catch (error) {
             this.ui.log(`❌ Initialization failed: ${error.message}`, 'error')
             console.error('[SVphone] Init error:', error)
+        }
+    }
+
+    /**
+     * Load available CALL tokens from token store
+     */
+    async loadAvailableCallTokens() {
+        const tokenStore = window.tokenStore
+        if (!tokenStore) {
+            this.ui.log('⚠️  Token store not available for loading tokens', 'warning')
+            return
+        }
+
+        try {
+            const tokens = await tokenStore.listTokens()
+
+            // Filter for CALL tokens
+            this.availableCallTokens = tokens.filter(t =>
+                t.tokenName && t.tokenName.startsWith('CALL-')
+            )
+
+            if (this.availableCallTokens.length > 0) {
+                this.ui.log(`✓ Found ${this.availableCallTokens.length} available CALL token(s)`, 'success')
+                this.ui.populateTokenSelector(this.availableCallTokens)
+            } else {
+                this.ui.log('No CALL tokens available. You can mint new ones or quick dial an existing contact.', 'info')
+                this.ui.showTokensSection(false)
+            }
+        } catch (error) {
+            this.ui.log(`Error loading tokens: ${error.message}`, 'error')
         }
     }
 

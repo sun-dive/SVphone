@@ -57,6 +57,27 @@ class CallHandlers {
             // Note: Polling is already running from startBackgroundPolling()
             // No need to start polling again here
 
+            // ============ CHECK FOR SELECTED TOKEN ============
+            const selectedTokenId = this.ui.getSelectedToken()
+            if (selectedTokenId) {
+                // Use existing selected token - no minting needed!
+                this.ui.log(`✓ Using existing token: ${selectedTokenId.slice(0, 10)}...`, 'success')
+                this.ui.updateCallButtonStatus('confirmed')
+                this.ui.log(`📞 Initiating call to ${calleeAddress} (using existing token)...`, 'info')
+
+                const quality = document.getElementById('quality').value
+                const session = await this.app.callManager.initiateCall(calleeAddress, {
+                    audio: true,
+                    video: true,
+                    quality: quality
+                })
+
+                this.app.currentCallToken = session.callTokenId
+                console.debug(`[SEND] ✅ Call initiated with session ID: ${session.callTokenId}`)
+                this.ui.log('✓ Call initiated successfully (with existing token)', 'success')
+                return
+            }
+
             // ============ CHECK FOR CALL TOKENS ============
             if (this.app.isMintPending) {
                 this.ui.log('⏳ Mint already in progress. Please wait...', 'warning')

@@ -812,6 +812,15 @@
                     </select>
                 </div>
 
+                <!-- Available CALL Tokens Section -->
+                <div id="availableTokensSection" class="form-group" style="display:none;">
+                    <label for="callTokenSelector">Available Call Tokens (<span id="availableTokenCount">0</span>)</label>
+                    <select id="callTokenSelector" style="width: 100%; padding: 10px 12px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px; background: rgba(30, 60, 114, 0.6); color: #fff; font-size: 0.95em; font-weight: 500; display: block; box-sizing: border-box; margin-bottom: 8px;">
+                        <option value="">-- Use existing token (optional) --</option>
+                    </select>
+                    <small style="color: #8b949e; display: block; margin-top: 4px;">Select a token to reuse instead of minting new ones</small>
+                </div>
+
                 <button class="btn-primary" id="initiateCallBtn" onclick="app.initializeCall()">☎️ Make a Call</button>
                 <button class="btn-primary" onclick="app.toggleMediaStream()" id="mediaBtn">🎤 Start Media</button>
 

@@ -45,6 +45,12 @@ class PhoneUI {
             debugConsole: document.getElementById('debugConsole'),
         }
 
+        this.tokenElements = {
+            tokenSelector: document.getElementById('callTokenSelector'),
+            tokenSection: document.getElementById('availableTokensSection'),
+            tokenCount: document.getElementById('availableTokenCount'),
+        }
+
         this.mediaElements = {
             localVideo: document.getElementById('localVideo'),
             remoteVideo: document.getElementById('remoteVideo'),
@@ -305,6 +311,75 @@ class PhoneUI {
      */
     clearConsole() {
         this.displayElements.debugConsole.innerHTML = ''
+    }
+
+    /**
+     * Populate available CALL tokens dropdown
+     */
+    populateTokenSelector(tokens) {
+        const selector = this.tokenElements.tokenSelector
+        if (!selector) return
+
+        // Clear existing options (keep default)
+        while (selector.options.length > 1) {
+            selector.remove(1)
+        }
+
+        if (!tokens || tokens.length === 0) {
+            // No tokens available
+            this.tokenElements.tokenCount.textContent = '0'
+            if (this.tokenElements.tokenSection) {
+                this.tokenElements.tokenSection.style.display = 'none'
+            }
+            return
+        }
+
+        // Add token options
+        tokens.forEach((token) => {
+            const option = document.createElement('option')
+            option.value = token.tokenId
+            option.textContent = `${token.tokenName} (${token.tokenId.slice(0, 10)}...)`
+            option.dataset.tokenId = token.tokenId
+            selector.appendChild(option)
+        })
+
+        // Update token count
+        this.tokenElements.tokenCount.textContent = tokens.length
+
+        // Show token section
+        if (this.tokenElements.tokenSection) {
+            this.tokenElements.tokenSection.style.display = 'block'
+        }
+    }
+
+    /**
+     * Get currently selected token ID
+     */
+    getSelectedToken() {
+        const selector = this.tokenElements.tokenSelector
+        if (!selector || selector.value === '') {
+            return null
+        }
+        return selector.value
+    }
+
+    /**
+     * Clear token selection
+     */
+    clearTokenSelection() {
+        const selector = this.tokenElements.tokenSelector
+        if (selector) {
+            selector.value = ''
+        }
+    }
+
+    /**
+     * Show/hide available tokens section
+     */
+    showTokensSection(show) {
+        if (this.tokenElements.tokenSection) {
+            this.tokenElements.tokenSection.style.display = show ? 'block' : 'none'
+        }
     }
 }
 
