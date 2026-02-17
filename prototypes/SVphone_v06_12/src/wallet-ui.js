@@ -293,6 +293,78 @@ class WalletUI {
       btnVerify.onclick = () => handlers.verifyProofChain();
     }
 
+    // ─── Mint Mode Buttons ──────────────────────────────────────────────
+
+    // Mint Mode toggle (Fungible ↔ NFT)
+    const btnMintMode = document.getElementById('btn-mint-mode');
+    if (btnMintMode) {
+      btnMintMode.onclick = () => window.toggleMintMode();
+    }
+
+    // Field Mode toggles (Text ↔ Hex)
+    const btnNameMode = document.getElementById('btn-name-mode');
+    if (btnNameMode) {
+      btnNameMode.onclick = () => window.toggleFieldMode('name');
+    }
+
+    const btnAttrsMode = document.getElementById('btn-attrs-mode');
+    if (btnAttrsMode) {
+      btnAttrsMode.onclick = () => window.toggleFieldMode('attrs');
+    }
+
+    const btnStateMode = document.getElementById('btn-state-mode');
+    if (btnStateMode) {
+      btnStateMode.onclick = () => window.toggleFieldMode('state');
+    }
+
+    // ─── File Management Buttons ────────────────────────────────────────
+
+    // Clear Token File button
+    const tokenFileInput = document.getElementById('token-file');
+    const btnClearFile = document.getElementById('btn-clear-file');
+    if (tokenFileInput && btnClearFile) {
+      tokenFileInput.addEventListener('change', () => {
+        const file = tokenFileInput.files?.[0];
+        if (file) {
+          const fileInfo = document.getElementById('file-info');
+          if (fileInfo) {
+            fileInfo.textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            fileInfo.style.display = '';
+          }
+          btnClearFile.style.display = '';
+        }
+      });
+      btnClearFile.onclick = () => {
+        tokenFileInput.value = '';
+        const fileInfo = document.getElementById('file-info');
+        if (fileInfo) fileInfo.style.display = 'none';
+        btnClearFile.style.display = 'none';
+      };
+    }
+
+    // Clear Transfer File button
+    const transferFileInput = document.getElementById('transfer-file');
+    const btnClearTransferFile = document.getElementById('btn-clear-transfer-file');
+    if (transferFileInput && btnClearTransferFile) {
+      transferFileInput.addEventListener('change', () => {
+        const file = transferFileInput.files?.[0];
+        if (file) {
+          const fileInfo = document.getElementById('transfer-file-info');
+          if (fileInfo) {
+            fileInfo.textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            fileInfo.style.display = '';
+          }
+          btnClearTransferFile.style.display = '';
+        }
+      });
+      btnClearTransferFile.onclick = () => {
+        transferFileInput.value = '';
+        const fileInfo = document.getElementById('transfer-file-info');
+        if (fileInfo) fileInfo.style.display = 'none';
+        btnClearTransferFile.style.display = 'none';
+      };
+    }
+
     console.log('[WalletUI] Button handlers wired up');
   }
 
