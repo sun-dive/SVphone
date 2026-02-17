@@ -22,6 +22,9 @@
 !prototypes/SVphone_v06_11/**
 !prototypes/SVphone_v06_12/
 !prototypes/SVphone_v06_12/**
+!mvp/
+!mvp/SVphone_v07_00/
+!mvp/SVphone_v07_00/**
 !workflows/
 !workflows/**
 !archive/
