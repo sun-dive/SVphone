@@ -505,7 +505,13 @@ function renderFungibleCard(ft) {
         ${ft.createdAt ? `<div class="token-field"><span class="label">Created:</span> ${formatDate(ft.createdAt)}</div>` : ''}
         <div class="token-actions" style="flex-direction:column;align-items:stretch;margin-top:12px;">
           <div class="row" style="gap:6px;">
+            <button onclick="window._selectForTransfer('${ft.tokenId}')">Select for Transfer</button>
+            <button onclick="window._verifyToken('${ft.tokenId}')">Verify</button>
+            <button onclick="window._openFlushDialog('${ft.tokenId}')" style="background:#da3633;">Flush Token</button>
+          </div>
+          <div class="row" style="gap:6px;margin-top:6px;">
             <a href="https://whatsonchain.com/tx/${ft.genesisTxId}" target="_blank" rel="noopener">View Genesis TX</a>
+            ${ft.currentTxId ? `<a href="https://whatsonchain.com/tx/${ft.currentTxId}" target="_blank" rel="noopener">View Current TX</a>` : ''}
           </div>
         </div>
         ${messagesHtml}
