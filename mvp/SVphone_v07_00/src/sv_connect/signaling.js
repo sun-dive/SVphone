@@ -4,33 +4,23 @@
  * Implements call initiation, acceptance, and termination using blockchain-based
  * P tokens for signaling and WebRTC for peer-to-peer media.
  *
- * Flow:
- * 1. Caller creates call initiation token with connection info (IP, port, session key)
- * 2. Token broadcast to BSV blockchain mempool
- * 3. Recipient polls blockchain for incoming call tokens
- * 4. Recipient verifies token via SPV (ancestor proof + genesis header)
- * 5. Direct RTP/RTCP P2P connection established between peers
- */
-
-/**
- * Call token format (P protocol):
- * - Prefix: 0x50 (P)
- * - Version: 0x03
- * - tokenName: "CALL-XXXXX" (UTF-8)
- * - tokenScript: "" (empty, standard P2PKH)
- * - tokenRules: supply=1, divisibility=0, restrictions=caller_hash+callee_hash (8 hex chars each for 32-bit SHA256)
- * - tokenAttributes (binary v1): [Version(1)][IP(4-16)][Port(2)][KeyLen(1)][Key(var)][Codec(1)][Quality(1)][MediaTypes(1)][SDPLen(2)][SDP(var)]
- *   * SDP contains offer (genesis) or answer (transfer response)
- *   * Caller/callee addresses are in transaction metadata, verified via 32-bit SHA256 hashes in tokenRules.restrictions
- * - stateData: call state (status="ringing", duration=0, quality="hd")
- * - proofChain: [] (empty until confirmed)
+ * Call flow: Caller broadcasts token → Recipient polls/verifies → P2P connection established
  *
- * Verification:
- * - Callee verifies CALLER by checking hash(token.caller) in tokenRules.restrictions
- * - Caller verifies CALLEE by checking hash(token.callee) in tokenRules.restrictions (when token returned)
+ * Call token format (P protocol, v1):
+ * - tokenName: "CALL-XXXXX"
+ * - tokenAttributes: [Version][IP][Port][SessionKey][Codec][Quality][MediaTypes][SDP]
+ * - tokenRules.restrictions: caller_hash || callee_hash (32-bit SHA256 for address verification)
  */
 
 class CallSignaling {
+  // Codec enumeration
+  static CODECS = { opus: 0, pcm: 1, aac: 2 }
+  static CODEC_IDS = ['opus', 'pcm', 'aac']
+
+  // Quality enumeration
+  static QUALITIES = { sd: 0, hd: 1, vhd: 2 }
+  static QUALITY_IDS = ['sd', 'hd', 'vhd']
+
   constructor(options = {}) {
     this.callTokens = new Map() // Map<callTokenId, CallToken>
     this.activeCalls = new Map() // Map<peerId, ActiveCall>
@@ -51,17 +41,9 @@ class CallSignaling {
   }
 
   /**
-   * Encode call attributes into byte-efficient binary format
-   *
-   * Format (optimized for blockchain storage):
-   * [Version(1)] [CallerLen(1)] [Caller(var)] [CalleeLen(1)] [Callee(var)]
-   * [IPType(1-bit)+IP(4|16)] [Port(2)] [KeyLen(1)] [Key(var)]
-   * [Codec(1)] [Quality(1)] [MediaTypes(1)]
-   *
-   * Typical size: ~100-150 bytes
-   *
-   * @param {Object} attributes - Call attributes {caller, callee, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
-   * @returns {string} Hex-encoded binary data
+   * Encode call attributes into binary format for blockchain storage (~100-150 bytes)
+   * @param {Object} attributes - {senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
+   * @returns {string} Hex-encoded binary
    */
   encodeTokenAttributes(attributes) {
     try {
@@ -109,12 +91,10 @@ class CallSignaling {
       bytes.push(...keyBuf)
 
       // Codec (1 byte enum: 0=opus, 1=pcm, 2=aac)
-      const codecMap = { 'opus': 0, 'pcm': 1, 'aac': 2 }
-      bytes.push(codecMap[attributes.codec] || 0)
+      bytes.push(CallSignaling.CODECS[attributes.codec] ?? 0)
 
       // Quality (1 byte enum: 0=sd, 1=hd, 2=vhd)
-      const qualityMap = { 'sd': 0, 'hd': 1, 'vhd': 2 }
-      bytes.push(qualityMap[attributes.quality] || 1)
+      bytes.push(CallSignaling.QUALITIES[attributes.quality] ?? 1)
 
       // Media types (1 byte bitmask: bit0=audio, bit1=video)
       let mediaBitmask = 0
@@ -135,12 +115,7 @@ class CallSignaling {
    * @private
    */
   parseTokenAttributes(tokenAttributesHex) {
-    if (!tokenAttributesHex) {
-      console.debug('[CallSignaling] parseTokenAttributes: tokenAttributesHex is empty/null')
-      return {}
-    }
-
-    console.debug(`[CallSignaling] parseTokenAttributes: HEX length=${tokenAttributesHex.length}, first 40 chars: ${tokenAttributesHex.substring(0, 40)}`)
+    if (!tokenAttributesHex) return {}
 
     try {
       // Convert hex to bytes
@@ -149,28 +124,15 @@ class CallSignaling {
         bytes.push(parseInt(tokenAttributesHex.substr(i, 2), 16))
       }
 
-      console.debug(`[CallSignaling] parseTokenAttributes: Converted to ${bytes.length} bytes, first 10 bytes: [${bytes.slice(0, 10).map(b => '0x' + b.toString(16).padStart(2, '0')).join(', ')}]`)
-
       if (bytes.length === 0) {
-        console.warn('[CallSignaling] parseTokenAttributes: bytes array is empty after conversion')
+        console.warn('[CallSignaling] parseTokenAttributes: empty bytes array')
         return {}
       }
 
       // Decode binary format v1
-      const decoded = this.decodeBinaryAttributes(bytes)
-      console.debug('[CallSignaling] parseTokenAttributes: Decoded successfully', {
-        hasIp: !!decoded.senderIp,
-        hasPort: !!decoded.senderPort,
-        hasKey: !!decoded.sessionKey,
-        codec: decoded.codec,
-        quality: decoded.quality,
-        mediaTypes: decoded.mediaTypes,
-        sdpLen: decoded.sdpOffer?.length || 0
-      })
-      return decoded
+      return this.decodeBinaryAttributes(bytes)
     } catch (error) {
       console.error('[CallSignaling] Failed to parse tokenAttributes:', error)
-      console.error('[CallSignaling] tokenAttributesHex was:', tokenAttributesHex?.substring(0, 100))
       return {}
     }
   }
@@ -180,14 +142,9 @@ class CallSignaling {
    * @private
    */
   decodeBinaryAttributes(bytes) {
-    console.debug(`[CallSignaling] decodeBinaryAttributes: Starting decode of ${bytes.length} bytes`)
     let offset = 1 // Skip version byte
 
-    // Note: Address verification hashes are in tokenRules.restrictions (immutable)
-    // tokenAttributes only contains connection data starting after version byte
-
     // IP address (4 or 16 bytes based on version bit)
-    console.debug(`[CallSignaling] decodeBinaryAttributes: offset=${offset}, decoding IP...`)
     const ipTypeByte = bytes[offset++]
     const isIPv6 = (ipTypeByte >> 7) & 1
     const ipBytes = [ipTypeByte & 0x7F, ...bytes.slice(offset, offset + (isIPv6 ? 15 : 3))]
@@ -195,51 +152,34 @@ class CallSignaling {
       ? this.bytesToIPv6(ipBytes)
       : `${ipBytes[0]}.${bytes[offset+1]}.${bytes[offset+2]}.${bytes[offset+3]}`
     offset += isIPv6 ? 15 : 3
-    console.debug(`[CallSignaling] decodeBinaryAttributes: ✓ IP decoded=${senderIp}, isIPv6=${isIPv6}, offset now=${offset}`)
 
     // Port (2 bytes)
-    console.debug(`[CallSignaling] decodeBinaryAttributes: offset=${offset}, decoding Port...`)
     const senderPort = (bytes[offset] << 8) | bytes[offset + 1]
     offset += 2
-    console.debug(`[CallSignaling] decodeBinaryAttributes: ✓ Port decoded=${senderPort}, offset now=${offset}`)
 
     // Session key
-    console.debug(`[CallSignaling] decodeBinaryAttributes: offset=${offset}, decoding Session Key...`)
     const keyLen = bytes[offset++]
-    console.debug(`[CallSignaling] decodeBinaryAttributes: keyLen=${keyLen}`)
     const keyBuf = bytes.slice(offset, offset + keyLen)
     const sessionKey = new TextDecoder().decode(new Uint8Array(keyBuf))
     offset += keyLen
-    console.debug(`[CallSignaling] decodeBinaryAttributes: ✓ Key decoded, length=${keyLen}, offset now=${offset}`)
 
     // Codec
-    console.debug(`[CallSignaling] decodeBinaryAttributes: offset=${offset}, decoding Codec...`)
-    const codecIds = ['opus', 'pcm', 'aac']
-    const codec = codecIds[bytes[offset++]] || 'opus'
-    console.debug(`[CallSignaling] decodeBinaryAttributes: ✓ Codec decoded=${codec}, offset now=${offset}`)
+    const codec = CallSignaling.CODEC_IDS[bytes[offset++]] || 'opus'
 
     // Quality
-    console.debug(`[CallSignaling] decodeBinaryAttributes: offset=${offset}, decoding Quality...`)
-    const qualityIds = ['sd', 'hd', 'vhd']
-    const quality = qualityIds[bytes[offset++]] || 'hd'
-    console.debug(`[CallSignaling] decodeBinaryAttributes: ✓ Quality decoded=${quality}, offset now=${offset}`)
+    const quality = CallSignaling.QUALITY_IDS[bytes[offset++]] || 'hd'
 
-    // Media types
-    console.debug(`[CallSignaling] decodeBinaryAttributes: offset=${offset}, decoding MediaTypes...`)
+    // Media types (bitmask: bit0=audio, bit1=video)
     const mediaTypeBitmask = bytes[offset++]
     const mediaTypes = []
     if (mediaTypeBitmask & 0x01) mediaTypes.push('audio')
     if (mediaTypeBitmask & 0x02) mediaTypes.push('video')
-    console.debug(`[CallSignaling] decodeBinaryAttributes: ✓ MediaTypes decoded=${mediaTypes.join(',')}, offset now=${offset}`)
 
     // SDP Offer (variable-length, 2-byte length prefix)
-    console.debug(`[CallSignaling] decodeBinaryAttributes: offset=${offset}, decoding SDP length...`)
     const sdpLen = (bytes[offset] << 8) | bytes[offset + 1]
     offset += 2
-    console.debug(`[CallSignaling] decodeBinaryAttributes: sdpLen=${sdpLen}, offset now=${offset}`)
     const sdpBuf = bytes.slice(offset, offset + sdpLen)
     const sdpOffer = new TextDecoder().decode(new Uint8Array(sdpBuf))
-    offset += sdpLen
 
     return {
       senderIp,
@@ -284,72 +224,28 @@ class CallSignaling {
 
   /**
    * Extract caller and callee addresses from a CALL token
-   *
-   * For tokens we initiated (in callTokens), use stored addresses.
-   * For response tokens, match to pending call to retrieve original caller/callee.
-   * For new incoming calls, extract from token metadata if available.
-   *
-   * CRITICAL: caller/callee MUST match the original token creation addresses
-   * because the hashes in tokenRules.restrictions are computed from these exact addresses.
-   *
-   * @param {Object} token - Token with currentTxId, tokenRules, etc.
-   * @returns {Object|null} {caller, callee} or null if cannot determine
+   * Tries stored tokens first, then token metadata.
    * @private
    */
   extractCallerCalleeFromToken(token) {
-    // CASE 1: Check if this is a token we created and stored locally
     const storedToken = this.callTokens.get(token.tokenId)
-    if (storedToken && storedToken.caller && storedToken.callee) {
-      // Check if this is a return-to-sender (UTXO location changed)
-      // If UTXO location is the same, it's the token we just transferred - skip it
+
+    // Check stored token (our own initiated calls or previous responses)
+    if (storedToken?.caller && storedToken?.callee) {
+      // Skip if same UTXO location (not returned yet)
       if (storedToken.currentTxId === token.currentTxId &&
           storedToken.currentOutputIndex === token.currentOutputIndex) {
-        console.debug('[CallSignaling] ℹ️ Stored token has same UTXO location - not a return-to-sender (skip)', {
-          storedTxId: storedToken.currentTxId?.slice(0, 20),
-          incomingTxId: token.currentTxId?.slice(0, 20),
-          tokenId: token.tokenId?.slice(0, 20)
-        })
-        return null  // Skip - same UTXO, not actually returned yet
+        return null
       }
-
-      // UTXO location changed - this is a return-to-sender! Preserve original addresses
-      console.debug('[CallSignaling] ✓ Return-to-sender detected - using original caller/callee from storage', {
-        caller: storedToken.caller?.slice(0, 20),
-        callee: storedToken.callee?.slice(0, 20),
-        oldTxId: storedToken.currentTxId?.slice(0, 20),
-        newTxId: token.currentTxId?.slice(0, 20),
-        tokenId: token.tokenId?.slice(0, 20)
-      })
-      return {
-        caller: storedToken.caller,
-        callee: storedToken.callee
-      }
+      // Return-to-sender: use original addresses
+      return { caller: storedToken.caller, callee: storedToken.callee }
     }
 
-    // CASE 2: Token already has caller/callee set (from tokenBuilder)
+    // Use addresses from token metadata (from tokenBuilder)
     if (token.caller && token.callee) {
-      console.debug('[CallSignaling] ✓ Token has caller/callee metadata', {
-        caller: token.caller?.slice(0, 20),
-        callee: token.callee?.slice(0, 20),
-        tokenId: token.tokenId?.slice(0, 20)
-      })
-      return {
-        caller: token.caller,
-        callee: token.callee
-      }
+      return { caller: token.caller, callee: token.callee }
     }
 
-    // CASE 3: Could not extract caller/callee
-    console.warn('[CallSignaling] ⚠️ Case 3: Cannot extract caller/callee from token', {
-      hasTokenId: !!token.tokenId,
-      storedInCallTokens: !!storedToken,
-      tokenCaller: token.caller || 'undefined',
-      tokenCallee: token.callee || 'undefined',
-      hasCallerCallee: !!(token.caller && token.callee),
-      tokenId: token.tokenId?.slice(0, 20),
-      tokenName: token.tokenName,
-      reason: 'Caller/callee not in callTokens or token metadata. Check if tokenBuilder extracted from transaction.'
-    })
     return null
   }
 
@@ -369,11 +265,10 @@ class CallSignaling {
   }
 
   /**
-   * Create a call initiation token
-   *
-   * @param {string} calleeAddress - Recipient's BSV address
-   * @param {string} sessionKey - Base64-encoded ephemeral DH key
-   * @param {Object} options - Call options (codec, quality, etc.)
+   * Create call initiation token with connection info
+   * @param {string} calleeAddress - Recipient BSV address
+   * @param {string} sessionKey - Ephemeral DH key (base64)
+   * @param {Object} options - {codec, quality, mediaTypes}
    * @returns {Object} Call token ready to broadcast
    */
   createCallToken(calleeAddress, sessionKey, options = {}) {
@@ -410,12 +305,9 @@ class CallSignaling {
   }
 
   /**
-   * Broadcast call token to blockchain
-   * Either mints new token or uses existing token
-   *
-   * @param {Object} callToken - Call token to broadcast
-   * @param {Function} mintTokenFn - Function to mint token (optional): (token) => Promise<{txId, tokenId}>
-   *                                 If not provided, uses first existing call token
+   * Broadcast call token to blockchain (mint new or use existing)
+   * @param {Object} callToken - Token to broadcast
+   * @param {Function} mintTokenFn - Optional: (token) => Promise<{txId, tokenId}>
    * @returns {Object} {txId, tokenId, callTokenId}
    */
   async broadcastCallToken(callToken, mintTokenFn) {
@@ -482,97 +374,51 @@ class CallSignaling {
 
     const pollOnce = async () => {
       try {
-        console.debug(`[CallSignaling] 🔍 Poll cycle started for address: ${this.myAddress?.slice(0,20)}...`)
         const incomingTokens = await checkIncomingTokensFn(this.myAddress)
-        console.debug(`[CallSignaling] Poll cycle found ${incomingTokens.length} incoming tokens`)
-
-        if (incomingTokens.length === 0) {
-          console.debug(`[CallSignaling] No tokens in this poll cycle, will retry in ${this.pollingInterval}ms`)
-        }
 
         for (const token of incomingTokens) {
-          console.debug(`[CallSignaling] Processing token: id=${token.tokenId?.slice(0,20)}..., name=${token.tokenName}`)
+          // Check if it's a call initiation token (format: CALL-XXXXX)
+          if (!token.tokenName?.startsWith('CALL-')) continue
 
-          // Check if it's a call initiation token
-          // Format: CALL-XXXXX (where XXXXX is caller identifier)
-          if (!token.tokenName || (!token.tokenName.startsWith('CALL-'))) {
-            console.debug(`[CallSignaling] ❌ Skip token: not a call token (name=${token.tokenName})`)
-            continue
-          }
-
-          console.debug(`[CallSignaling] ✓ Token is a CALL token, parsing attributes...`)
-
-          // Parse tokenAttributes to extract call metadata (connection info, SDP, etc.)
+          // Parse tokenAttributes to extract call metadata
           const attributes = this.parseTokenAttributes(token.tokenAttributes)
-          console.debug(`[CallSignaling] ✓ Token attributes parsed:`, {
-            hasSenderIp: !!attributes.senderIp,
-            hasSenderPort: !!attributes.senderPort,
-            hasCodec: !!attributes.codec,
-            hasSdp: !!attributes.sdpOffer || !!attributes.sdpAnswer
-          })
 
-          // Try to extract stored addresses (for return-to-sender detection)
-          // Addresses may come from callTokens storage or transaction metadata
+          // Extract caller/callee addresses (best-effort, not blocking)
           const addressPair = this.extractCallerCalleeFromToken(token)
           if (addressPair) {
             token.caller = addressPair.caller
             token.callee = addressPair.callee
           }
 
-          // Accept token immediately regardless of address determination
-          // Caller/callee addresses are determined best-effort, not a blocking gate
-          console.log(`[CallSignaling] ✓ Accepting CALL token immediately (pure SPV principle)`)
+          // Merge parsed attributes into token
+          Object.assign(token, attributes)
 
-          // Merge parsed attributes back into token for processing
-          token.senderIp = attributes.senderIp
-          token.senderPort = attributes.senderPort
-          token.sessionKey = attributes.sessionKey
-          token.codec = attributes.codec
-          token.quality = attributes.quality
-          token.mediaTypes = attributes.mediaTypes || ['audio', 'video']
-          token.sdpOffer = attributes.sdpOffer
-
-          // Determine role if addresses are available
+          // Route to appropriate handler based on caller/callee
           const isIncomingCall = token.callee === this.myAddress
           const isResponseToken = token.caller === this.myAddress
 
-          console.debug(`[CallSignaling] Token role (if addresses available): isIncomingCall=${isIncomingCall}, isResponseToken=${isResponseToken}`, {
-            tokenCaller: token.caller?.slice(0, 20),
-            tokenCallee: token.callee?.slice(0, 20),
-            myAddress: this.myAddress?.slice(0, 20)
-          })
-
-          // Route to appropriate handler based on role (if determined)
           if (isIncomingCall) {
-            console.log(`[CallSignaling] Processing incoming call`)
             this.handleIncomingCall(token)
           } else if (isResponseToken) {
-            console.log(`[CallSignaling] Processing call response`)
             this.handleCallResponse(token, attributes)
           } else {
-            // If role cannot be determined, emit as generic call token
-            console.log(`[CallSignaling] Processing call token (role undetermined, may need manual routing)`)
             this.emit('call:token-received', { token, attributes })
           }
 
-          // Run SPV verification in background (non-blocking, optional)
+          // Run SPV verification in background (non-blocking)
           verifyTokenFn(token).then(verification => {
-            console.log(`[CallSignaling] Background SPV verification complete for ${token.tokenId?.slice(0, 10)}:`, {
-              valid: verification.valid,
-              reason: verification.reason
-            })
             if (!verification.valid) {
-              console.warn(`[CallSignaling] ⚠️ SPV verification failed after acceptance`, {
-                tokenId: token.tokenId,
+              console.warn(`[CallSignaling] SPV verification failed:`, {
+                tokenId: token.tokenId?.slice(0, 10),
                 reason: verification.reason
               })
             }
           }).catch(error => {
-            console.error(`[CallSignaling] Background SPV verification error for ${token.tokenId?.slice(0, 10)}:`, error)
+            console.error(`[CallSignaling] SPV verification error:`, error.message)
           })
         }
       } catch (error) {
-        console.error('[CallSignaling] Error during polling:', error)
+        console.error('[CallSignaling] Polling error:', error.message)
       }
 
       if (this.isPolling) {
@@ -636,46 +482,24 @@ class CallSignaling {
    * @private
    */
   handleCallResponse(token, attributes) {
-    console.debug('[CallSignaling] 🔄 Processing call response token')
-    console.debug('[CallSignaling] Token ID:', token.tokenId?.slice(0,20))
-    console.debug('[CallSignaling] Has attributes:', !!attributes)
+    if (!attributes?.sdpAnswer) return
 
-    // Attributes already decoded by decodeBinaryAttributes() in polling
-    // For answer tokens, attributes contain: senderIp, senderPort, sessionKey, codec, quality, mediaTypes, sdpAnswer
-    if (!attributes || !attributes.sdpAnswer) {
-      console.debug('[CallSignaling] ❌ No SDP Answer found in response token')
-      return
-    }
-
-    console.debug('[CallSignaling] ✓ SDP Answer found, processing response...')
-
-    // Emit call:answered event with callee's connection data and SDP Answer
     const eventData = {
       callTokenId: token.tokenId,
-      caller: token.caller,  // The person we called (now responding)
-      callee: token.callee,  // Us (the original caller)
+      caller: token.caller,
+      callee: token.callee,
       calleeIp: attributes.senderIp,
       calleePort: attributes.senderPort,
       calleeSessionKey: attributes.sessionKey,
-      sdpAnswer: attributes.sdpAnswer,  // The callee's SDP answer for media negotiation
+      sdpAnswer: attributes.sdpAnswer,
       codec: attributes.codec,
       quality: attributes.quality,
       mediaTypes: attributes.mediaTypes,
       timestamp: Date.now()
     }
 
-    console.debug('[CallSignaling] ✓ Parsed answer response:',  {
-      callTokenId: eventData.callTokenId?.slice(0,20),
-      caller: eventData.caller?.slice(0,20),
-      calleeIp: eventData.calleeIp,
-      calleePort: eventData.calleePort,
-      hasAnswer: !!eventData.sdpAnswer
-    })
-
-    console.debug('[CallSignaling] ✓ Emitting call:answered event with SDP Answer...')
     this.emit('call:answered', eventData)
-
-    console.log('[CallSignaling] ✅ Call answer received with SDP negotiation data')
+    console.log('[CallSignaling] Call answer received from', token.caller?.slice(0, 20))
   }
 
   /**
@@ -685,10 +509,7 @@ class CallSignaling {
    * @returns {Object} Answer token to send back
    */
   acceptCall(callTokenId, options = {}) {
-    const callToken = this.callTokens.get(callTokenId)
-    if (!callToken) {
-      throw new Error(`Call token not found: ${callTokenId}`)
-    }
+    const callToken = this._validateCallToken(callTokenId)
 
     callToken.status = 'answered'
     callToken.answeredAt = Date.now()
@@ -729,33 +550,30 @@ class CallSignaling {
 
   /**
    * Broadcast call answer token back to caller
-   * @param {string} callTokenId - Call token ID to transfer back
+   * @param {string} callTokenId - Call token ID
    * @param {string} callerAddress - Caller's address (recipient)
-   * @param {Object} answerData - Answer data {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
-   * @param {Function} broadcastFn - Optional function to broadcast (e.g., from CallTokenManager)
+   * @param {Object} answerData - {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
+   * @param {Function} broadcastFn - Optional broadcast function
    */
   async broadcastCallAnswer(callTokenId, callerAddress, answerData, broadcastFn) {
+    if (!broadcastFn) {
+      console.warn('[CallSignaling] No broadcast function provided')
+      return { callTokenId, txId: null }
+    }
+
     try {
-      console.debug('[CallSignaling] 📤 Broadcasting call answer to caller:', callerAddress?.slice(0,20))
+      const result = await broadcastFn(callTokenId, callerAddress, answerData)
 
-      if (broadcastFn) {
-        // Use provided broadcast function (typically CallTokenManager.broadcastCallAnswer)
-        const result = await broadcastFn(callTokenId, callerAddress, answerData)
+      this.emit('call:answer-broadcasted', {
+        callTokenId: callTokenId,
+        txId: result.txId,
+        timestamp: Date.now()
+      })
 
-        this.emit('call:answer-broadcasted', {
-          callTokenId: callTokenId,
-          txId: result.txId,
-          timestamp: Date.now()
-        })
-
-        console.log('[CallSignaling] ✅ Answer broadcasted:', result.txId)
-        return result
-      } else {
-        console.warn('[CallSignaling] ⚠️ No broadcast function provided, answer not sent to blockchain')
-        return { callTokenId, txId: null }
-      }
+      console.log('[CallSignaling] Answer broadcasted:', result.txId)
+      return result
     } catch (error) {
-      console.error('[CallSignaling] Failed to broadcast answer:', error)
+      console.error('[CallSignaling] Failed to broadcast answer:', error.message)
       throw error
     }
   }
@@ -766,10 +584,7 @@ class CallSignaling {
    * @param {string} reason - Rejection reason
    */
   rejectCall(callTokenId, reason = 'user-declined') {
-    const callToken = this.callTokens.get(callTokenId)
-    if (!callToken) {
-      throw new Error(`Call token not found: ${callTokenId}`)
-    }
+    const callToken = this._validateCallToken(callTokenId)
 
     callToken.status = 'rejected'
     callToken.rejectedAt = Date.now()
@@ -791,10 +606,7 @@ class CallSignaling {
    * @param {Object} metadata - Additional metadata to store
    */
   updateCallState(callTokenId, status, metadata = {}) {
-    const callToken = this.callTokens.get(callTokenId)
-    if (!callToken) {
-      throw new Error(`Call token not found: ${callTokenId}`)
-    }
+    const callToken = this._validateCallToken(callTokenId)
 
     callToken.status = status
     Object.assign(callToken, metadata)
@@ -815,10 +627,7 @@ class CallSignaling {
    * @param {Object} stats - Call statistics
    */
   endCall(callTokenId, stats = {}) {
-    const callToken = this.callTokens.get(callTokenId)
-    if (!callToken) {
-      throw new Error(`Call token not found: ${callTokenId}`)
-    }
+    const callToken = this._validateCallToken(callTokenId)
 
     const duration = callToken.connectedAt
       ? Date.now() - callToken.connectedAt
@@ -847,6 +656,18 @@ class CallSignaling {
    */
   getCallToken(callTokenId) {
     return this.callTokens.get(callTokenId)
+  }
+
+  /**
+   * Validate call token exists (helper)
+   * @private
+   */
+  _validateCallToken(callTokenId) {
+    const callToken = this.callTokens.get(callTokenId)
+    if (!callToken) {
+      throw new Error(`Call token not found: ${callTokenId}`)
+    }
+    return callToken
   }
 
   /**
