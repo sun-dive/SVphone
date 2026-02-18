@@ -1,25 +1,27 @@
 /**
  * Call Token Manager (v06.08) - PPV (Proof Payment Verification) Implementation
  *
- * Orchestrates the full lifecycle of SVphone call tokens with instant transfer UX:
+ * Orchestrates full lifecycle of SVphone call tokens with instant transfer UX:
  * - Creates genesis token with CALL_TOKEN_RULES
- * - Waits for genesis confirmation (BLOCKING - ~10 minutes, required before transfer)
- * - Transfers token to recipient (INSTANT - no wait after genesis confirmed)
+ * - Waits for genesis confirmation (~10 min, required before transfer)
+ * - Transfers token to recipient (instant after genesis confirmed)
  * - Continues Merkle proof verification in background (optional)
  *
  * PPV Model: Genesis MUST be confirmed before transfer. Subsequent transfers are instant.
- * This ensures only valid tokens initiate connections while providing instant transfer UX.
- *
- * Provides user-facing logging on top of tokenBuilder infrastructure
  */
 
-// CALL token rules (immutable, defined once here)
+// Shared enum constants (same as CallSignaling)
+const CODECS = { opus: 0, pcm: 1, aac: 2 }
+const CODEC_IDS = ['opus', 'pcm', 'aac']
+const QUALITIES = { sd: 0, hd: 1, vhd: 2 }
+const QUALITY_IDS = ['sd', 'hd', 'vhd']
+
+// CALL token rules
 const CALL_TOKEN_RULES = {
-  supply: 1,              // Single NFT per call
-  divisibility: 0,        // Never divisible
-  restrictions: 'dynamic',  // Set per token to caller + callee address hashes (immutable after genesis)
-  version: 1              // Rules version
-  // restrictions format: callerHash (8 hex) + calleeHash (8 hex) = 16 hex = 64 bits
+  supply: 1,
+  divisibility: 0,
+  restrictions: 'dynamic',
+  version: 1
 }
 
 class CallTokenManager {
@@ -29,18 +31,9 @@ class CallTokenManager {
   }
 
   /**
-   * Encode call attributes into byte-efficient binary format for blockchain storage
-   *
-   * Format: [Version(1)]
-   *         [IPType+IP(4-16)] [Port(2)] [KeyLen(1)] [Key(var)]
-   *         [Codec(1)] [Quality(1)] [MediaTypes(1)]
-   *         [SDPLen(2)] [SDP(var)]
-   *
-   * Note: Caller and callee addresses are in the transaction, not encoded here
-   * Size: ~50-100 bytes + SDP size
-   *
-   * @param {Object} callToken - Call token with connection info and sdpOffer
-   * @returns {string} Hex-encoded binary data
+   * Encode call attributes into binary format (~50-100 bytes + SDP)
+   * @param {Object} callToken - Token with connection info and SDP
+   * @returns {string} Hex-encoded binary
    */
   encodeCallAttributes(callToken) {
     try {
@@ -86,13 +79,9 @@ class CallTokenManager {
       bytes.push(keyBuf.length)
       bytes.push(...keyBuf)
 
-      // Codec (1 byte enum)
-      const codecMap = { 'opus': 0, 'pcm': 1, 'aac': 2 }
-      bytes.push(codecMap[callToken.codec] || 0)
-
-      // Quality (1 byte enum)
-      const qualityMap = { 'sd': 0, 'hd': 1, 'vhd': 2 }
-      bytes.push(qualityMap[callToken.quality] || 1)
+      // Codec and Quality (1 byte enums)
+      bytes.push(CODECS[callToken.codec] ?? 0)
+      bytes.push(QUALITIES[callToken.quality] ?? 1)
 
       // Media types (1 byte bitmask)
       let mediaBitmask = 0
@@ -166,241 +155,127 @@ class CallTokenManager {
     try {
       const restrictions = token.tokenRules?.restrictions || token.restrictions
       if (!restrictions || restrictions.length < 16) {
-        return {
-          valid: false,
-          message: 'Invalid restrictions format (expected 16 hex chars)',
-          myHashPosition: 'none'
-        }
+        return { valid: false, message: 'Invalid restrictions format', myHashPosition: 'none' }
       }
 
-      // Parse restrictions: positions 0-7 and 8-15 contain the two address hashes
       const hash1 = restrictions.substring(0, 8)
       const hash2 = restrictions.substring(8, 16)
-      console.debug(`[CallToken] Token restrictions hashes: hash1=${hash1}, hash2=${hash2}`)
-
-      // Compute my address hash
       const myHash = await this.hashAddress(myAddress)
-      console.debug(`[CallToken] My address hash: ${myHash}`)
 
-      // Check if my hash is in either position
       if (myHash === hash1) {
-        console.debug(`[CallToken] ✓ My hash found in position 1 (first hash)`)
-        return {
-          valid: true,
-          message: '✓ Token is for me (hash verified in restrictions)',
-          myHashPosition: 'first'
-        }
+        return { valid: true, message: 'Token is for me (hash verified)', myHashPosition: 'first' }
       } else if (myHash === hash2) {
-        console.debug(`[CallToken] ✓ My hash found in position 2 (second hash)`)
-        return {
-          valid: true,
-          message: '✓ Token is for me (hash verified in restrictions)',
-          myHashPosition: 'second'
-        }
+        return { valid: true, message: 'Token is for me (hash verified)', myHashPosition: 'second' }
       } else {
-        console.debug(`[CallToken] ✗ My hash NOT found in restrictions`)
-        return {
-          valid: false,
-          message: '✗ Token is NOT for me (hash not in restrictions)',
-          myHashPosition: 'none'
-        }
+        return { valid: false, message: 'Token is NOT for me', myHashPosition: 'none' }
       }
     } catch (error) {
-      console.error(`[CallToken] Verification error:`, error)
-      return {
-        valid: false,
-        message: `Verification error: ${error.message}`,
-        myHashPosition: 'none'
-      }
+      console.error(`[CallToken] Verification error:`, error.message)
+      return { valid: false, message: `Error: ${error.message}`, myHashPosition: 'none' }
     }
   }
 
   /**
-   * Broadcast a call answer response token back to caller
-   *
-   * Answer tokens are transfers (not genesis) with SDP Answer encoded in tokenAttributes.
-   * Used when callee accepts call and needs to send media negotiation data back to caller.
-   *
-   * IMPORTANT: tokenRules (including caller/callee addresses) remain immutable from genesis.
-   * Only tokenAttributes is written for the answer data in this transfer.
-   *
-   * @param {string} tokenId - Existing call token ID to transfer back
-   * @param {string} callerAddress - Caller's address (recipient of answer token)
-   * @param {Object} answerData - Answer data {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
+   * Broadcast call answer response token back to caller
+   * Transfer with SDP Answer in tokenAttributes (tokenRules remain immutable)
+   * @param {string} tokenId - Call token ID to transfer
+   * @param {string} callerAddress - Caller's address (recipient)
+   * @param {Object} answerData - {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
    * @returns {Promise<Object>} {txId, tokenId}
    */
   async broadcastCallAnswer(tokenId, callerAddress, answerData) {
-    console.debug(`[CallToken] Broadcasting call answer to ${callerAddress}`)
-
     try {
-      // Encode answer data into tokenAttributes for transfer
-      // Format: same as genesis offer, but with sdpAnswer instead of sdpOffer
-      // Caller/callee hashes from genesis tokenRules are NOT re-encoded (they remain immutable)
       const answerAttributes = this.encodeCallAttributes({
-        sdpAnswer: answerData.sdpAnswer,  // Answer goes into same SDP field as offer
+        sdpAnswer: answerData.sdpAnswer,
         senderIp: answerData.senderIp,
         senderPort: answerData.senderPort,
         sessionKey: answerData.sessionKey,
         codec: answerData.codec,
         quality: answerData.quality,
         mediaTypes: answerData.mediaTypes
-      }, null, null)  // No address hashes for answer (keep genesis hashes immutable in tokenRules)
-      console.debug(`[CallToken] Encoded answer attributes: ${answerAttributes.length / 2} bytes`)
+      })
 
-      // Transfer token back to caller with answer data in tokenAttributes
-      // tokenRules remain unchanged (immutable after genesis)
       const transferResult = await this.tokenBuilder.createTransfer(tokenId, callerAddress, {
         tokenAttributes: answerAttributes
       })
 
-      console.debug(`[CallToken] ✅ Answer token transferred: ${transferResult.txId}`)
       this.log(`✓ Answer token sent: ${transferResult.txId}`, 'success')
-      this.log(`View on blockchain: https://whatsonchain.com/tx/${transferResult.txId}`, 'info')
-
+      this.log(`https://whatsonchain.com/tx/${transferResult.txId}`, 'info')
       return { txId: transferResult.txId, tokenId: tokenId }
     } catch (err) {
-      console.error(`[CallToken] ❌ Answer broadcast failed:`, err)
+      console.error(`[CallToken] Answer broadcast failed:`, err.message)
       this.log(`Answer broadcast failed: ${err.message}`, 'error')
       throw err
     }
   }
 
   /**
-   * Create and broadcast a call token to the blockchain
-   *
-   * PPV (Proof Payment Verification) flow:
-   * 1. Creates genesis token (tokenBuilder.createGenesis, instant in mempool)
-   * 2. Waits for genesis confirmation (tokenBuilder.pollForProof, ~10 minutes, BLOCKING)
-   * 3. Transfers to recipient (tokenBuilder.createTransfer, INSTANT after genesis confirmed)
-   * 4. Returns immediately (instant UX after genesis confirmed)
-   * 5. Continues background Merkle proof polling (optional, non-blocking)
-   *
-   * Note: Genesis MUST be confirmed before transfer can occur.
-   * After genesis confirmation, transfer is instant (no wait).
-   *
-   * @param {Object} callToken - Call token object from signaling (must have caller, callee)
+   * Create and broadcast call token to blockchain
+   * PPV flow: Genesis → Wait for confirmation → Transfer (instant after confirmed)
+   * @param {Object} callToken - {caller, callee, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
    * @returns {Promise<Object>} {tokenId, txId, tokenIds}
    */
   async createAndBroadcastCallToken(callToken) {
-    console.debug(`[CallToken] Creating and broadcasting call token for ${callToken.callee}`)
-    console.debug(`[CallToken] Full token object:`, {
-      caller: callToken.caller,
-      callee: callToken.callee,
-      senderIp: callToken.senderIp,
-      senderPort: callToken.senderPort,
-      sessionKey: callToken.sessionKey?.slice?.(0, 20) + '...',
-      codec: callToken.codec,
-      quality: callToken.quality,
-      mediaTypes: callToken.mediaTypes
-    })
-
     const callerIdent = callToken.caller?.slice(0, 5) || 'unkn'
-
     this.log(`Creating call token for ${callToken.callee}`, 'info')
 
     try {
-      // Compute address hashes for validation (caller + callee identification)
-      // SHA256 truncated to 32 bits (8 hex chars) per address
+      // Compute address hashes (immutable in tokenRules.restrictions)
       const callerHash = await this.hashAddress(callToken.caller)
       const calleeHash = await this.hashAddress(callToken.callee)
-      console.debug(`[CallToken] Address hashes: caller=${callerHash}, callee=${calleeHash}`)
-
-      // Encode call connection information into tokenAttributes (IP, port, key, codec, quality, SDP)
-      // Address hashes are stored in tokenRules.restrictions (immutable after genesis)
-      const encodedAttributes = this.encodeCallAttributes(callToken)
-      console.debug(`[CallToken] Encoded attributes: ${encodedAttributes.length / 2} bytes`)
-
-      // Create P token for call signaling with encoded connection info
-      // Combine caller and callee address hashes into tokenRules.restrictions (immutable)
-      // Format: callerHash (8 hex chars) + calleeHash (8 hex chars) = 16 hex chars = 64 bits
       const restrictionsValue = callerHash + calleeHash
-      console.debug(`[CallToken] Restrictions (address hashes): ${restrictionsValue}`)
 
+      // Encode connection info into tokenAttributes
+      const encodedAttributes = this.encodeCallAttributes(callToken)
+
+      // Create genesis token
       const result = await this.tokenBuilder.createGenesis({
         tokenName: `CALL-${callerIdent}`,
-        tokenScript: '',  // No consensus rules needed
-        attributes: encodedAttributes,  // Encoded call connection info (IP, port, session key, SDP, etc.)
+        tokenScript: '',
+        attributes: encodedAttributes,
         supply: CALL_TOKEN_RULES.supply,
         divisibility: CALL_TOKEN_RULES.divisibility,
-        restrictions: restrictionsValue,  // Address validation hashes: caller + callee (immutable after genesis)
+        restrictions: restrictionsValue,
         rulesVersion: CALL_TOKEN_RULES.version,
-        stateData: '00'  // Empty (state tracked in signaling layer)
+        stateData: '00'
       })
 
       const tokenId = result.tokenIds?.[0] || result.tokenId
       const genesisTx = result.txId
 
-      console.debug(`[CallToken] ✅ Token created: ${tokenId}`)
-      console.debug(`[CallToken] Genesis TX: ${genesisTx}`)
-
       this.log(`✓ Token created: ${tokenId}`, 'success')
-      this.log(`Genesis TX: ${genesisTx}`, 'success')
-      this.log(`View on blockchain: https://whatsonchain.com/tx/${genesisTx}`, 'info')
+      this.log(`https://whatsonchain.com/tx/${genesisTx}`, 'info')
+      this.log('⏳ Waiting for genesis confirmation (~10 min)...', 'info')
 
-      // PPV Model: Wait for genesis confirmation (BLOCKING - required before transfer)
-      console.debug(`[CallToken] ⏳ Waiting for genesis confirmation before transfer - polling every 5s`)
-      this.log('⏳ Waiting for genesis confirmation (~60 minutes) - polling every 15s...', 'info')
-
+      // Wait for genesis confirmation
       try {
-        const genesisConfirmed = await this.tokenBuilder.pollForProof(tokenId, result.txId, () => {
-          // Suppress individual polling messages to keep debug console clean
-          // See one "polling started" message above instead of hundreds of updates
-        })
+        const genesisConfirmed = await this.tokenBuilder.pollForProof(tokenId, result.txId, () => {})
 
-        if (genesisConfirmed) {
-          console.debug(`[CallToken] ✅ Genesis confirmed!`)
-          this.log('✓ Genesis confirmed - transferring token (instant)...', 'success')
-        } else {
-          console.warn(`[CallToken] ⚠️ Genesis confirmation timed out`)
-          this.log('⚠️ Genesis confirmation timed out. Cannot transfer.', 'warning')
+        if (!genesisConfirmed) {
           throw new Error('Genesis confirmation timed out')
         }
+        this.log('✓ Genesis confirmed - transferring (instant)...', 'success')
       } catch (err) {
-        console.error(`[CallToken] Error waiting for genesis confirmation:`, err)
-        this.log(`Error waiting for genesis confirmation: ${err.message}`, 'error')
+        this.log(`Genesis confirmation error: ${err.message}`, 'error')
         throw err
       }
 
-      // Transfer token to recipient (INSTANT after genesis confirmed)
-      console.debug(`[CallToken] 📤 Transferring confirmed token to recipient: ${callToken.callee}`)
-      console.debug(`[CallToken] Transfer parameters: tokenId=${tokenId}, calleeAddress=${callToken.callee}`)
-      this.log(`📤 Transferring token to recipient (instant)...`, 'info')
-
-      let transferResult
+      // Transfer to recipient (instant after genesis confirmed)
       try {
-        console.debug(`[CallToken] Calling tokenBuilder.createTransfer(${tokenId}, ${callToken.callee})`)
-        transferResult = await this.tokenBuilder.createTransfer(tokenId, callToken.callee)
-        console.debug(`[CallToken] ✅ Token transferred instantly!`)
-        console.debug(`[CallToken] Transfer result:`, transferResult)
-        console.debug(`[CallToken] Transfer TX: ${transferResult.txId}`)
-        this.log(`✓ Token transferred instantly: ${transferResult.txId}`, 'success')
-        this.log(`View transfer on blockchain: https://whatsonchain.com/tx/${transferResult.txId}`, 'info')
+        const transferResult = await this.tokenBuilder.createTransfer(tokenId, callToken.callee)
+        this.log(`✓ Token transferred: ${transferResult.txId}`, 'success')
+        this.log(`https://whatsonchain.com/tx/${transferResult.txId}`, 'info')
+
+        // Background proof polling (non-blocking)
+        this.tokenBuilder.pollForProof(tokenId, transferResult.txId, () => {}).catch(() => {})
+
+        return { tokenId, txId: result.txId, tokenIds: result.tokenIds }
       } catch (err) {
-        console.error(`[CallToken] ❌ Token transfer failed:`, err)
-        console.error(`[CallToken] Transfer error details:`, {
-          message: err.message,
-          stack: err.stack,
-          name: err.name
-        })
-        this.log(`⚠️ Token transfer failed: ${err.message}`, 'warning')
+        this.log(`Token transfer failed: ${err.message}`, 'warning')
         throw err
       }
-
-      // Start background Merkle proof polling (OPTIONAL - non-blocking)
-      console.debug(`[CallToken] Starting background Merkle proof polling (transfer confirmation)`)
-      this.tokenBuilder.pollForProof(tokenId, transferResult.txId, () => {
-        // Suppress individual polling updates - background polling only logs on completion
-      }).then((found) => {
-        if (found) {
-          console.debug(`[CallToken] ✅ Transfer Merkle proof confirmed (background)`)
-        }
-      }).catch((err) => {
-        console.debug(`[CallToken] Transfer proof polling (background, non-critical):`, err.message)
-      })
-
-      return { tokenId, txId: result.txId, tokenIds: result.tokenIds }
     } catch (err) {
-      console.error(`[CallToken] ❌ Token creation failed:`, err)
+      console.error(`[CallToken] Creation failed:`, err.message)
       this.log(`Token creation failed: ${err.message}`, 'error')
       throw err
     }
