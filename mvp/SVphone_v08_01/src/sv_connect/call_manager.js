@@ -218,6 +218,18 @@ class CallManager extends EventEmitter {
           session.mediaAnswer = answer
           console.debug('[CallManager] ✓ SDP answer created and stored in session')
 
+          // Inject caller's public IP as srflx candidates so ICE can traverse NAT
+          // without STUN — works on full-cone / address-restricted NAT (typical home broadband).
+          if (callToken.senderIp) {
+            const pubCandidates = this.peerConnection._buildPublicIpCandidates(
+              callToken.sdpOffer.sdp, callToken.senderIp
+            )
+            for (const c of pubCandidates) {
+              this.peerConnection.addIceCandidate(callToken.caller, c)
+                .catch(e => console.warn('[CallManager] Public IP candidate rejected:', e.message))
+            }
+          }
+
           // **IMPORTANT: Broadcast answer token back to caller BEFORE connecting**
           // This ensures the caller can retrieve the answer when accepting the call
           try {

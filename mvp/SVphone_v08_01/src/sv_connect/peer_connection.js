@@ -372,6 +372,56 @@ class PeerConnection extends EventEmitter {
   }
 
   /**
+   * Build server-reflexive ICE candidates by pairing a known public IP with
+   * the host candidate ports found in a remote SDP.
+   *
+   * Works without STUN/TURN on full-cone and address-restricted NAT (typical
+   * home broadband) because the NAT preserves the internal port in its mapping.
+   * The remote peer's public IP comes from the blockchain inscription; the ports
+   * come from the 'typ host' candidates in the offer/answer SDP.
+   *
+   * @param {string} sdp - Remote SDP (offer or answer)
+   * @param {string} publicIp - Remote peer's public IP from inscription
+   * @returns {Array<{candidate, sdpMid, sdpMLineIndex}>}
+   */
+  _buildPublicIpCandidates(sdp, publicIp) {
+    if (!sdp || !publicIp) return []
+
+    const candidates = []
+    const lines = sdp.split(/\r?\n/)
+    let sdpMid = null
+    let sdpMLineIndex = -1
+
+    for (const line of lines) {
+      if (line.startsWith('m=')) {
+        sdpMLineIndex++
+        sdpMid = null
+      } else if (line.startsWith('a=mid:')) {
+        sdpMid = line.slice(6).trim()
+      } else if (line.startsWith('a=candidate:') && line.includes('typ host')) {
+        if (!line.toLowerCase().includes(' udp ')) continue
+
+        // candidate:<foundation> <component> <transport> <priority> <ip> <port> typ host ...
+        const parts = line.slice('a=candidate:'.length).split(' ')
+        if (parts.length < 6) continue
+        const component = parts[1]
+        const port = parseInt(parts[5])
+        const localIp = parts[4]
+        if (isNaN(port) || !localIp) continue
+
+        candidates.push({
+          candidate: `candidate:pub${port} ${component} UDP 1677729535 ${publicIp} ${port} typ srflx raddr ${localIp} rport ${port}`,
+          sdpMid: sdpMid ?? String(Math.max(0, sdpMLineIndex)),
+          sdpMLineIndex: Math.max(0, sdpMLineIndex)
+        })
+      }
+    }
+
+    console.log(`[PeerConnection] Built ${candidates.length} public-IP candidates for ${publicIp}`)
+    return candidates
+  }
+
+  /**
    * Add ICE candidate
    *
    * @param {string} peerId - Peer identifier

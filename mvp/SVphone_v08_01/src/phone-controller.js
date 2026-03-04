@@ -290,7 +290,19 @@ class PhoneController {
                 // that would discard the existing connection and the SDP exchange would fail.
                 console.debug(`[RECV] Setting remote description (answer SDP) for ${remoteAddress}`)
                 this.peerConnection.setRemoteDescription(remoteAddress, { type: 'answer', sdp: session.sdpAnswer })
-                    .then(() => this.ui.log('✓ WebRTC handshake complete, ICE connecting...', 'success'))
+                    .then(() => {
+                        this.ui.log('✓ WebRTC handshake complete, ICE connecting...', 'success')
+                        // Inject callee's public IP as srflx candidates (NAT traversal without STUN)
+                        if (session.calleeIp) {
+                            const pubCandidates = this.peerConnection._buildPublicIpCandidates(
+                                session.sdpAnswer, session.calleeIp
+                            )
+                            for (const c of pubCandidates) {
+                                this.peerConnection.addIceCandidate(remoteAddress, c)
+                                    .catch(e => console.warn('[Phone] Public IP candidate rejected:', e.message))
+                            }
+                        }
+                    })
                     .catch(err => this.ui.log(`⚠️ WebRTC answer error: ${err.message}`, 'error'))
             } else {
                 // Callee: this fires locally from signaling.acceptCall().
