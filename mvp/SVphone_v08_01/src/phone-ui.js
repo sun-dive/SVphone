@@ -229,6 +229,8 @@ class PhoneUI {
      */
     log(message, type = 'info') {
         const consoleDom = this.displayElements.debugConsole
+        console.log(`[${type.toUpperCase()}] ${message}`)
+        if (!consoleDom) return
         const timestamp = new Date().toLocaleTimeString()
 
         if (message.includes('\n')) {
@@ -252,7 +254,6 @@ class PhoneUI {
         }
 
         consoleDom.scrollTop = consoleDom.scrollHeight
-        console.log(`[${type.toUpperCase()}] ${message}`)
     }
 
     /**
