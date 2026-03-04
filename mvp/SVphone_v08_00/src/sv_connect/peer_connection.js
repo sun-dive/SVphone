@@ -449,6 +449,38 @@ class PeerConnection {
   }
 
   /**
+   * Wait for ICE gathering to finish for a peer connection.
+   * Resolves with the final localDescription (SDP with all candidates).
+   * Times out after 5 seconds so inscriptions aren't delayed indefinitely.
+   *
+   * @param {string} peerId - Peer identifier
+   * @returns {Promise<RTCSessionDescription>}
+   */
+  async waitForIceGathering(peerId) {
+    const pc = this.peerConnections.get(peerId)
+    if (!pc) throw new Error(`Peer connection not found: ${peerId}`)
+    if (pc.iceGatheringState === 'complete') return pc.localDescription
+
+    return new Promise((resolve) => {
+      const onStateChange = () => {
+        if (pc.iceGatheringState === 'complete') {
+          pc.removeEventListener('icegatheringstatechange', onStateChange)
+          clearTimeout(timer)
+          console.log('[PeerConnection] ICE gathering complete for', peerId)
+          resolve(pc.localDescription)
+        }
+      }
+      // 5-second timeout — LAN host candidates gather in <1s in practice
+      const timer = setTimeout(() => {
+        pc.removeEventListener('icegatheringstatechange', onStateChange)
+        console.warn('[PeerConnection] ICE gathering timeout for', peerId, '— using partial SDP')
+        resolve(pc.localDescription)
+      }, 5000)
+      pc.addEventListener('icegatheringstatechange', onStateChange)
+    })
+  }
+
+  /**
    * Get peer connection
    */
   getPeerConnection(peerId) {

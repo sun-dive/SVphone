@@ -52,7 +52,7 @@ class CallTokenManager {
       this.log(`✓ Call inscription sent: ${result.txId}`, 'success')
       this.log(`https://whatsonchain.com/tx/${result.txId}`, 'info')
 
-      return { txId: result.txId }
+      return { txId: result.txId, tokenId: result.txId }
     } catch (err) {
       this.log(`Call inscription failed: ${err.message}`, 'error')
       throw err

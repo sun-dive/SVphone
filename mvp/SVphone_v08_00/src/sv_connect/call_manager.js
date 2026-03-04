@@ -52,14 +52,17 @@ class CallManager {
         mediaTypes: options.mediaTypes || ['audio', 'video']
       })
 
-      // **IMPORTANT: Create WebRTC offer BEFORE broadcasting the token**
-      // This ensures the callee can retrieve the offer when accepting the call
+      // Create WebRTC offer and wait for ICE gathering to complete so all candidates
+      // are in the SDP before it gets inscribed on-chain.
       let mediaOffer = null
       try {
-        console.debug('[CallManager] Creating SDP offer before token broadcast...')
-        mediaOffer = await this.peerConnection.createOffer(calleeAddress)
-        callToken.sdpOffer = mediaOffer  // Store offer in call token for encoding into tokenAttributes
-        console.debug('[CallManager] ✓ SDP offer created and stored in callToken')
+        console.debug('[CallManager] Creating SDP offer...')
+        await this.peerConnection.createOffer(calleeAddress)
+        // Wait for ICE gathering — localDescription.sdp will include all candidates
+        const finalOffer = await this.peerConnection.waitForIceGathering(calleeAddress)
+        mediaOffer = finalOffer  // RTCSessionDescription with complete SDP
+        callToken.sdpOffer = mediaOffer
+        console.debug('[CallManager] ✓ SDP offer ready (ICE gathered)')
       } catch (error) {
         console.warn('[CallManager] Failed to create media offer before broadcast:', error)
       }
@@ -178,12 +181,15 @@ class CallManager {
           // **IMPORTANT: Broadcast answer token back to caller BEFORE connecting**
           // This ensures the caller can retrieve the answer when accepting the call
           try {
-            console.debug('[CallManager] Broadcasting SDP answer to caller...')
+            // Wait for callee's ICE gathering so all candidates are in the answer SDP
+            const finalAnswer = await this.peerConnection.waitForIceGathering(callToken.caller)
+            const answerSdp = finalAnswer?.sdp || answer.sdp
+            console.debug('[CallManager] Broadcasting SDP answer to caller (ICE gathered)...')
             await this.signaling.broadcastCallAnswer(
               callTokenId,
               callToken.caller,  // Send answer back to caller
               {
-                sdpAnswer: answer.sdp,
+                sdpAnswer: answerSdp,
                 senderIp: this.signaling.myIp,
                 senderPort: this.signaling.myPort,
                 sessionKey: answerToken.answererSessionKey,
@@ -239,7 +245,19 @@ class CallManager {
    * @private
    */
   onCallAnswered(data) {
-    const session = this.activeCallSessions.get(data.callTokenId)
+    let session = this.activeCallSessions.get(data.callTokenId)
+
+    // Fallback: answer inscription txId ≠ call inscription txId. If direct lookup
+    // misses (e.g., session stored under call txId), find caller session by callee address.
+    if (!session && data.callee) {
+      for (const [, s] of this.activeCallSessions) {
+        if (s.role === 'caller' && s.calleeAddress === data.callee) {
+          session = s
+          break
+        }
+      }
+    }
+
     if (session) {
       session.status = 'answered'
       this.emit('call:answered-session', data)

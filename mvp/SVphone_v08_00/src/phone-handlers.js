@@ -195,163 +195,56 @@ class CallHandlers {
                 return
             }
 
-            // Get recipient's connection data
-            const recipientAddress = document.getElementById('myAddress').value
-            const recipientIp = document.getElementById('myIp').value
-            const recipientPort = parseInt(document.getElementById('myPort').value)
+            const callTokenId = this.app.currentCallToken
 
-            if (!recipientAddress || !recipientIp || !recipientPort) {
-                this.ui.log('⚠️  Missing connection data (address, IP, or port)', 'error')
-                return
-            }
+            // Ensure signaling has callee's IP/port — signaling.initialize() is only called
+            // on the caller side (initializeCall), so callee must set these before accepting.
+            const myIp = document.getElementById('myIp')?.value
+            const myPort = parseInt(document.getElementById('myPort')?.value, 10) || null
+            if (myIp) this.app.signaling.myIp = myIp
+            if (myPort) this.app.signaling.myPort = myPort
 
-            // Get the received call token from store
-            const tokenStore = window.tokenStore
-            if (!tokenStore) {
-                this.ui.log('Error: Token store not available', 'error')
-                return
-            }
-
-            const receivedToken = await tokenStore.getToken(this.app.currentCallToken)
-            if (!receivedToken) {
-                this.ui.log('Error: Call token not found in store', 'error')
-                return
-            }
-
-            // Prepare response data to send back to caller
-            const keyBytes = new Uint8Array(32)
-            crypto.getRandomValues(keyBytes)
-            const responseData = {
-                status: 'answered',
-                recipientAddress: recipientAddress,
-                recipientIp: recipientIp,
-                recipientPort: recipientPort,
-                recipientSessionKey: btoa(String.fromCharCode(...keyBytes)),
-                answeredAt: Date.now()
-            }
-            const responseStateHex = this.app.encodeCallState(responseData)
-
-            // Accept call in call manager
-            await this.app.callManager.acceptCall(this.app.currentCallToken, {
-                audio: true,
-                video: true
-            })
-
-            // Parse caller's connection data from token
-            const callerAttrs = this.app.signaling.parseTokenAttributes(receivedToken.tokenAttributes)
-
-            // Send token back to caller
-            const tokenBuilder = window.tokenBuilder
-            if (tokenBuilder) {
-                try {
-                    const callerAddress = receivedToken.caller || callerAttrs.caller
-                    if (callerAddress) {
-                        this.ui.log(`📤 Sending token back to caller...`, 'info')
-                        const transferResult = await tokenBuilder.createTransfer(
-                            this.app.currentCallToken,
-                            callerAddress,
-                            responseStateHex
-                        )
-                        this.ui.log(`✓ Token sent: ${transferResult.txId}`, 'success')
-                    }
-                } catch (transferError) {
-                    this.ui.log(`⚠️  Could not send token: ${transferError.message}`, 'warning')
+            // broadcastAnswerFn: send answer inscription back to caller
+            const broadcastAnswerFn = async (_callTokenId, callerAddress, answerData) => {
+                this.ui.log(`📤 Sending answer inscription to caller...`, 'info')
+                const answerCallData = {
+                    v: 1,
+                    proto: 'svphone',
+                    type: 'answer',
+                    caller: callerAddress,
+                    callee: this.app.signaling.myAddress,
+                    ip: answerData.senderIp,
+                    port: answerData.senderPort,
+                    key: answerData.sessionKey,
+                    codec: answerData.codec,
+                    quality: answerData.quality,
+                    media: answerData.mediaTypes,
+                    sdp: answerData.sdpAnswer,
                 }
+                const result = await window.inscriptionBuilder.buildAndBroadcast(
+                    answerCallData,
+                    callerAddress,
+                    window.provider,
+                    window.myKey,
+                )
+                this.ui.log(`✓ Answer sent: ${result.txId}`, 'success')
+                return result
             }
 
-            // Initiate P2P connection to caller
-            if (callerAttrs.caller && callerAttrs.senderIp && callerAttrs.senderPort) {
-                this.app.initiateP2PConnection(this.app.currentCallToken, callerAttrs.caller, callerAttrs.senderIp, callerAttrs.senderPort)
-            }
+            await this.app.callManager.acceptCall(callTokenId, {
+                audio: true,
+                video: true,
+                broadcastAnswerFn,
+            })
 
             document.getElementById('incomingCall').style.display = 'none'
             document.getElementById('acceptBtn').style.display = 'none'
             document.getElementById('rejectBtn').style.display = 'none'
             document.getElementById('endCallBtn').style.display = 'inline-block'
 
-            this.ui.log('✓ Call accepted and token sent back to caller', 'success')
+            this.ui.log('✓ Call accepted', 'success')
         } catch (error) {
-            const errorMsg = error.message || error.toString()
-
-            // Handle specific media permission errors
-            if (errorMsg.includes('Permission denied') || errorMsg.includes('Permission')) {
-                this.ui.log(`⚠️  ${errorMsg}`, 'error')
-            } else if (errorMsg.includes('Requested device not found')) {
-                this.ui.log('⚠️  No microphone or camera found. Attempting audio-only call...', 'warning')
-                // Retry with audio only
-                try {
-                    // Get recipient's connection data
-                    const recipientAddress = document.getElementById('myAddress').value
-                    const recipientIp = document.getElementById('myIp').value
-                    const recipientPort = parseInt(document.getElementById('myPort').value)
-
-                    if (recipientAddress && recipientIp && recipientPort) {
-                        // Prepare recipient's response data for audio-only call
-                        const keyBytes = new Uint8Array(32)
-                        crypto.getRandomValues(keyBytes)
-                        const recipientSessionKey = btoa(String.fromCharCode(...keyBytes))
-                        const responseData = {
-                            status: 'answered',
-                            recipientAddress: recipientAddress,
-                            recipientIp: recipientIp,
-                            recipientPort: recipientPort,
-                            recipientSessionKey: recipientSessionKey,
-                            answeredAt: Date.now(),
-                            audioOnly: true
-                        }
-                        // Encode response as binary format (byte-efficient, NO JSON)
-                        const responseStateHex = this.app.encodeCallState(responseData)
-                        console.debug(`[SEND-AUDIO] ✅ Response encoded to ${responseStateHex.length / 2} bytes`)
-
-                        await this.app.callManager.acceptCall(this.app.currentCallToken, {
-                            audio: true,
-                            video: false
-                        })
-
-                        // Send the token back to the caller
-                        const tokenBuilder = window.tokenBuilder
-                        const tokenStore = window.tokenStore
-                        if (tokenBuilder && tokenStore) {
-                            const receivedToken = await tokenStore.getToken(this.app.currentCallToken)
-                            if (receivedToken) {
-                                // Parse token attributes using signaling layer (handles binary v1 and legacy JSON)
-                                const callerAttrsAudio = this.app.signaling.parseTokenAttributes(receivedToken.tokenAttributes)
-                                const callerAddress = receivedToken.caller || callerAttrsAudio.caller
-                                if (callerAddress) {
-                                    try {
-                                        const transferResult = await tokenBuilder.createTransfer(
-                                            this.app.currentCallToken,
-                                            callerAddress,
-                                            responseStateHex  // Pass response data as stateData
-                                        )
-                                        this.ui.log(`✓ Token sent back to caller: ${transferResult.txId}`, 'success')
-                                        console.debug(`[SEND] ✅ Audio-only response token transferred: ${transferResult.txId}`)
-                                    } catch (transferError) {
-                                        this.ui.log(`⚠️  Could not send token back: ${transferError.message}`, 'warning')
-                                    }
-                                }
-                            }
-                        }
-
-                        // Initiate P2P connection using caller attributes (already parsed above)
-                        if (callerAttrsAudio && callerAttrsAudio.caller && callerAttrsAudio.senderIp && callerAttrsAudio.senderPort) {
-                            console.debug(`[P2P] 🔗 Initiating P2P connection back to caller (audio-only): ${callerAttrsAudio.caller}`)
-                            this.app.initiateP2PConnection(this.app.currentCallToken, callerAttrsAudio.caller, callerAttrsAudio.senderIp, callerAttrsAudio.senderPort)
-                        }
-
-                        document.getElementById('incomingCall').style.display = 'none'
-                        document.getElementById('acceptBtn').style.display = 'none'
-                        document.getElementById('rejectBtn').style.display = 'none'
-                        document.getElementById('endCallBtn').style.display = 'inline-block'
-                        this.ui.log('✓ Audio-only call accepted and token sent back', 'success')
-                    }
-                } catch (audioError) {
-                    const audioErrorMsg = audioError.message || audioError.toString()
-                    this.ui.log(`Error accepting call: ${audioErrorMsg}`, 'error')
-                }
-            } else {
-                this.ui.log(`Error accepting call: ${errorMsg}`, 'error')
-            }
+            this.ui.log(`Error accepting call: ${error.message}`, 'error')
         }
     }
 

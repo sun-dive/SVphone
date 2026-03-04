@@ -248,6 +248,28 @@ class PhoneController {
         }
     }
 
+    // ─── Public proxy methods for inline onclick handlers in HTML ────────
+
+    toggleMicTest()        { this.micHandlers.toggleMicTest() }
+    startMicTest()         { return this.micHandlers.startMicTest() }
+    stopMicTest()          { this.micHandlers.stopMicTest() }
+    startRecording()       { return this.micHandlers.startRecording() }
+    stopRecording()        { this.micHandlers.stopRecording() }
+    playRecording()        { this.micHandlers.playRecording() }
+
+    toggleCameraTest()     { this.cameraHandlers.toggleCameraTest() }
+    startCameraTest()      { return this.cameraHandlers.startCameraTest() }
+    stopCameraTest()       { this.cameraHandlers.stopCameraTest() }
+    toggleCameraSize()     { this.cameraHandlers.toggleCameraSize() }
+    enterCameraFullscreen(){ return this.cameraHandlers.enterCameraFullscreen() }
+
+    initializeCall()       { return this.callHandlers.initializeCall() }
+    toggleMediaStream()    { return this.callHandlers.toggleMediaStream() }
+    acceptCall()           { return this.callHandlers.acceptCall() }
+    rejectCall()           { this.callHandlers.rejectCall() }
+    endCall()              { return this.callHandlers.endCall() }
+    clearConsole()         { this.ui.clearConsole() }
+
     /**
      * Quick dial using last called address
      */
@@ -524,20 +546,31 @@ class PhoneController {
         })
 
         this.callManager.on('call:answered-session', (session) => {
-            console.debug(`[RECV] ✅ CALL ANSWERED by ${session.callee || session.answerer}`)
-            this.ui.log(`📞 Call answered by ${session.callee || session.answerer}`, 'success')
+            const remoteAddress = session.callee || session.calleeAddress
+            const remoteParty = remoteAddress || session.answerer
+            console.debug(`[RECV] ✅ CALL ANSWERED by ${remoteParty}`)
+            this.ui.log(`📞 Call answered by ${remoteParty}`, 'success')
             this.ui.updateCallStatus('answered', 'Call answered - connecting...')
-            // Extract callee's connection data if available
-            if (session.calleeIp && session.calleePort) {
-                console.debug(`[RECV] Callee connection: ${session.calleeIp}:${session.calleePort}`)
+
+            if (session.sdpAnswer && remoteAddress) {
+                // Caller received answer inscription: complete WebRTC handshake by setting
+                // the remote description on the existing peer connection (the one that has
+                // the offer as local description).  Do NOT call createPeerConnection() here —
+                // that would discard the existing connection and the SDP exchange would fail.
+                console.debug(`[RECV] Setting remote description (answer SDP) for ${remoteAddress}`)
+                this.peerConnection.setRemoteDescription(remoteAddress, { type: 'answer', sdp: session.sdpAnswer })
+                    .then(() => this.ui.log('✓ WebRTC handshake complete, ICE connecting...', 'success'))
+                    .catch(err => this.ui.log(`⚠️ WebRTC answer error: ${err.message}`, 'error'))
+            } else {
+                // Callee: this fires locally from signaling.acceptCall().
+                // createAnswer() already set both local and remote descriptions — ICE is running.
+                console.debug(`[RECV] Callee ICE running after acceptCall`)
                 this.calleeConnectionData = {
-                    address: session.calleeAddress,
+                    address: remoteAddress,
                     ip: session.calleeIp,
                     port: session.calleePort,
                     sessionKey: session.calleeSessionKey
                 }
-                // Initiate direct P2P connection to callee using their connection data
-                this.initiateP2PConnection(session.callTokenId, session.calleeAddress, session.calleeIp, session.calleePort)
             }
         })
 
@@ -588,13 +621,8 @@ class PhoneController {
             this.ui.updateEncryption('DTLS v1.2')
         })
 
-        // ========== HTML Button Event Listeners ==========
-        document.getElementById('initiateCallBtn')?.addEventListener('click', () => this.callHandlers.initializeCall())
-        document.getElementById('acceptBtn')?.addEventListener('click', () => this.callHandlers.acceptCall())
-        document.getElementById('rejectBtn')?.addEventListener('click', () => this.callHandlers.rejectCall())
-        document.getElementById('endCallBtn')?.addEventListener('click', () => this.callHandlers.endCall())
-        document.getElementById('mediaBtn')?.addEventListener('click', () => this.callHandlers.toggleMediaStream())
-        document.getElementById('lastCalledBtn')?.addEventListener('click', () => this.quickDial())
+
+
 
         // ========== Microphone Test UI ==========
         document.getElementById('micTestToggle')?.addEventListener('click', () => this.micHandlers.toggleMicTest())
@@ -618,7 +646,7 @@ class PhoneController {
     /**
      * Start background polling for incoming calls
      */
-    startBackgroundPolling() {
+    async startBackgroundPolling() {
         // Start listening for incoming call inscriptions in background
         // This runs continuously so recipient can receive calls anytime
         const myAddress = document.getElementById('myAddress')?.value
@@ -635,28 +663,40 @@ class PhoneController {
         }
 
         try {
-            const controller = this
             const seenTxIds = new Set()
+
+            // Pre-seed seenTxIds with the current address history so that TXs already
+            // on-chain when polling starts are ignored.  Only inscriptions that arrive
+            // AFTER this point (new calls/answers) will be processed.
+            try {
+                const initialHistory = await window.provider.getAddressHistory()
+                for (const { txId } of initialHistory) seenTxIds.add(txId)
+                console.log(`[Poll] Pre-seeded ${seenTxIds.size} existing txIds — will only process new inscriptions`)
+            } catch (e) {
+                console.warn('[Poll] Could not pre-seed seenTxIds:', e.message)
+            }
 
             // Scan address history for SVphone call/answer inscriptions
             const scanInscriptionsFn = async (address) => {
                 if (!address) return []
 
                 const history = await window.provider.getAddressHistory()
+                console.log(`[Poll] address=${address.slice(0,12)}… history=${history.length} txs`)
                 const results = []
 
                 for (const { txId } of history) {
                     if (seenTxIds.has(txId)) continue
-                    seenTxIds.add(txId)
 
                     try {
                         const tx = await window.provider.getSourceTransaction(txId)
+                        seenTxIds.add(txId) // Only mark seen after successful fetch
                         const inscription = window.inscriptionBuilder.scanTxForCallInscription(tx, address)
+                        console.log(`[Poll] ${txId.slice(0,12)}… inscription=${inscription ? JSON.stringify(inscription).slice(0,80) : 'null'}`)
                         if (inscription) {
                             results.push({ txId, inscription })
                         }
                     } catch (e) {
-                        // Silently skip TXs that fail to fetch
+                        console.warn(`[Poll] fetch failed for ${txId.slice(0,12)}…:`, e.message)
                     }
                 }
 
@@ -666,29 +706,8 @@ class PhoneController {
             // Start polling (5 second interval)
             this.signaling.startPolling(scanInscriptionsFn)
             this.ui.log('📞 Background polling for incoming calls started', 'success')
-
-            // Listen for incoming call events from signaling layer
-            this.signaling.on('call:incoming', (data) => {
-                console.debug(`[RECV] ✅ call:incoming event received:`, data)
-                this.ui.log(`[RECV] 🔔 Signaling layer detected incoming call`, 'info')
-                this.showIncomingCall(data.caller, data.callTokenId)
-            })
-
-            // Listen for call response events (callee accepted the call)
-            this.signaling.on('call:answered', (data) => {
-                console.debug(`[SEND] ✅ call:answered event received:`, data)
-                this.ui.log(`[SEND] 🔔 Call answered! Recipient accepted the call`, 'success')
-
-                // Recipient's connection info is in the event data
-                if (data.calleeIp && data.calleePort) {
-                    this.ui.log(`📍 Connecting to recipient at ${data.calleeIp}:${data.calleePort}`, 'info')
-                    // Initiate P2P connection to the callee
-                    this.initiateP2PConnection(data.callTokenId, data.callee, data.calleeIp, data.calleePort)
-                } else {
-                    console.warn(`[SEND] Missing callee connection info:`, data)
-                    this.ui.log(`⚠️ Missing callee connection info`, 'warning')
-                }
-            })
+            // call:incoming and call:answered are forwarded by CallManager via
+            // call:incoming-session and call:answered-session — handled in bindEvents()
         } catch (error) {
             this.ui.log('[BgPolling] Failed to start: ' + error.message, 'error')
         }
@@ -699,6 +718,7 @@ class PhoneController {
      */
     showIncomingCall(caller, callTokenId) {
         console.debug(`[RECV] ✅ INCOMING CALL DETECTED! Caller: ${caller}`)
+        this.currentCallToken = callTokenId
         this.ui.showIncomingCall(caller)
     }
 
@@ -758,6 +778,8 @@ function initPhoneApp() {
     try {
         console.log('[SVphone] Initializing phone application...')
         phoneApp = new PhoneController()
+        window.app = phoneApp
+        window.phoneApp = phoneApp
         console.log('[SVphone] Phone application initialized successfully')
     } catch (error) {
         console.error('[SVphone] Initialization error:', error)
@@ -775,4 +797,3 @@ if (document.readyState === 'loading') {
 
 // Export for external access
 window.PhoneController = PhoneController
-window.phoneApp = phoneApp
