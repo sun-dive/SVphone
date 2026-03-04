@@ -3,6 +3,7 @@
 
 # But not these files
 !.gitignore
+!.cpanel.yml
 !docs/
 !docs/SVphone_fundamental_design_principles.md
 !docs/SVphone_structure_and_function.md

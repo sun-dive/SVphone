@@ -1,0 +1,7 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=$HOME/public_html
+    - /bin/cp mvp/SVphone_v08_01/phone_interface.html $DEPLOYPATH/phone_interface.html
+    - /bin/cp mvp/SVphone_v08_01/wallet.html $DEPLOYPATH/wallet.html
+    - /bin/cp mvp/SVphone_v08_01/bundle.js $DEPLOYPATH/bundle.js
