@@ -37,15 +37,18 @@ export interface WalletBlockHeader extends SpvBlockHeader {
 
 // ─── Rate Limiter (serializing queue) ────────────────────────────────
 
-// Increased from 350ms to 600ms to respect WhatsOnChain's rate limit (~1.7 req/sec)
-// With 96+ transactions in history, 350ms was causing 429 (Too Many Requests) errors
+// Normal delay between requests. WoC free tier is ~3 req/sec; 600ms keeps us under 1.7 req/sec.
 const MIN_REQUEST_DELAY = 600
+// When WoC returns 429, back off for this long before the next request (5× normal delay).
+const RATE_LIMIT_BACKOFF = 3000
 
 /**
  * Serializing fetch queue. All API calls go through this single queue
  * so that concurrent async paths (balance refresh, incoming scan, auto-import)
  * cannot burst past the rate limit. Each request waits for the previous
- * one to complete + the minimum delay (350ms) before starting.
+ * one to complete + the minimum delay before starting.
+ * On 429, waits RATE_LIMIT_BACKOFF (3s) instead of MIN_REQUEST_DELAY so WoC's
+ * rate-limit window has time to reset before the next queued request fires.
  * NOTE: This relies on global fetchQueue state; do not instantiate multiple providers.
  */
 let fetchQueue: Promise<void> = Promise.resolve()
@@ -53,14 +56,18 @@ let fetchQueue: Promise<void> = Promise.resolve()
 function queuedFetch(url: string, init?: RequestInit): Promise<Response> {
   return new Promise<Response>((resolve, reject) => {
     fetchQueue = fetchQueue.then(async () => {
+      let delay = MIN_REQUEST_DELAY
       try {
         const resp = await fetch(url, init)
+        if (resp.status === 429) {
+          console.warn(`[queuedFetch] 429 rate limit hit — backing off ${RATE_LIMIT_BACKOFF}ms`)
+          delay = RATE_LIMIT_BACKOFF
+        }
         resolve(resp)
       } catch (err) {
         reject(err)
       }
-      // Enforce delay AFTER the request completes (or fails)
-      await new Promise(r => setTimeout(r, MIN_REQUEST_DELAY))
+      await new Promise(r => setTimeout(r, delay))
     })
   })
 }
