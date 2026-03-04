@@ -375,6 +375,15 @@ class CameraTestHandlers {
         this.ui = ui
     }
 
+    _toggleTestSection(contentId, toggleId) {
+        const content = document.getElementById(contentId)
+        const icon = document.getElementById(toggleId)
+        const collapsed = content.classList.contains('collapsed')
+        content.classList.toggle('collapsed', !collapsed)
+        icon.classList.toggle('collapsed', !collapsed)
+        icon.textContent = collapsed ? '▼' : '▶'
+    }
+
     toggleCameraTest() { this._toggleTestSection('cameraTestContent', 'cameraTestToggle') }
 
     /**
