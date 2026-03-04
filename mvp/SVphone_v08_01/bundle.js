@@ -1,3 +1,4 @@
+window.SVPHONE_BUILD="2026-03-04 23:30 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-04 23:30 UTC';});console.log('[SVphone] Build: 2026-03-04 23:30 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;

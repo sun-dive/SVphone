@@ -1,6 +1,8 @@
 import { build } from 'esbuild'
 import { readFileSync, writeFileSync, unlinkSync } from 'fs'
 
+const BUILD_TIME = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC'
+
 // Step 1: Build TypeScript/BSV SDK bundle
 await build({
   entryPoints: ['src/app.ts'],
@@ -43,6 +45,7 @@ const parts = [tsBundle]
 for (const file of [...phoneFiles, ...walletFiles]) {
   parts.push(readFileSync(file, 'utf8'))
 }
-writeFileSync('bundle.js', parts.join('\n'))
+const stamp = `window.SVPHONE_BUILD="${BUILD_TIME}";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: ${BUILD_TIME}';});console.log('[SVphone] Build: ${BUILD_TIME}');`
+writeFileSync('bundle.js', [stamp, ...parts].join('\n'))
 
 console.log('Build complete: bundle.js')
