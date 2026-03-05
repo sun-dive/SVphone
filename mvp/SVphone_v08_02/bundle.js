@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 06:16 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 06:16 UTC';});console.log('[SVphone] Build: 2026-03-05 06:16 UTC');
+window.SVPHONE_BUILD="2026-03-05 06:26 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 06:26 UTC';});console.log('[SVphone] Build: 2026-03-05 06:26 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -17317,7 +17317,7 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
      * Uses walletProvider for UTXOs and broadcast (same pattern as tokenBuilder.ts).
      * Excludes 1-sat UTXOs from funding (they may hold tokens/ordinals).
      */
-    async buildAndBroadcast(callData, recipientAddress, provider2, key) {
+    async buildAndBroadcast(callData, recipientAddress, provider2, key, feePerKb = FEE_PER_KB) {
       const jsonData = JSON.stringify(callData);
       const myAddress = key.toAddress();
       const allUtxos = await provider2.getUtxos();
@@ -17330,7 +17330,7 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
       const inscVarInt = inscriptionScriptBytes.length < 253 ? 1 : 3;
       const inscOutputSize = 8 + inscVarInt + inscriptionScriptBytes.length;
       const estimatedSize = TX_OVERHEAD2 + BYTES_PER_INPUT2 + inscOutputSize + 2 * BYTES_PER_P2PKH_OUTPUT2;
-      const fee = Math.ceil(estimatedSize * FEE_PER_KB / 1e3);
+      const fee = Math.ceil(estimatedSize * feePerKb / 1e3);
       const sorted = [...safeUtxos].sort((a, b) => a.satoshis - b.satoshis);
       const utxo = sorted.find((u) => u.satoshis >= 2 + fee);
       if (!utxo) {
@@ -21403,6 +21403,7 @@ class CallTokenManager {
         callToken.callee,
         window.provider,
         window.myKey,
+        1.1,  // call inscriptions are ephemeral — minimum viable fee rate
       )
 
       this.log(`✓ Call inscription sent: ${result.txId}`, 'success')
@@ -21445,6 +21446,7 @@ class CallTokenManager {
         callerAddress,
         window.provider,
         window.myKey,
+        1.1,  // answer inscriptions are ephemeral — minimum viable fee rate
       )
 
       this.log(`✓ Answer inscription sent: ${result.txId}`, 'success')

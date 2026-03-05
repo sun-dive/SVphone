@@ -53,6 +53,7 @@ class CallTokenManager {
         callToken.callee,
         window.provider,
         window.myKey,
+        1.1,  // call inscriptions are ephemeral — minimum viable fee rate
       )
 
       this.log(`✓ Call inscription sent: ${result.txId}`, 'success')
@@ -95,6 +96,7 @@ class CallTokenManager {
         callerAddress,
         window.provider,
         window.myKey,
+        1.1,  // answer inscriptions are ephemeral — minimum viable fee rate
       )
 
       this.log(`✓ Answer inscription sent: ${result.txId}`, 'success')

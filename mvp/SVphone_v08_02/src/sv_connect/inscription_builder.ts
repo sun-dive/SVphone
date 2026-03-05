@@ -82,6 +82,7 @@ export class InscriptionBuilder {
     recipientAddress: string,
     provider: WalletProvider,
     key: PrivateKey,
+    feePerKb: number = FEE_PER_KB,
   ): Promise<{ txId: string }> {
     const jsonData = JSON.stringify(callData)
     const myAddress = key.toAddress()
@@ -101,7 +102,7 @@ export class InscriptionBuilder {
     const inscVarInt = inscriptionScriptBytes.length < 0xfd ? 1 : 3
     const inscOutputSize = 8 + inscVarInt + inscriptionScriptBytes.length
     const estimatedSize = TX_OVERHEAD + BYTES_PER_INPUT + inscOutputSize + 2 * BYTES_PER_P2PKH_OUTPUT
-    const fee = Math.ceil(estimatedSize * FEE_PER_KB / 1000)
+    const fee = Math.ceil(estimatedSize * feePerKb / 1000)
 
     // Try smallest UTXO that covers inscription (1) + notification (1) + fee
     const sorted = [...safeUtxos].sort((a, b) => a.satoshis - b.satoshis)
