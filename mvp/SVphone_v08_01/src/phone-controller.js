@@ -340,6 +340,7 @@ class PhoneController {
             console.debug('[call:connected] Event listener fired!')
             this.ui.log('📞 Call connected! Media stream established', 'success')
             this.ui.updateCallStatus('connected', 'Call connected')
+            document.getElementById('endCallBtn').style.display = 'inline-block'
             console.debug('[call:connected] About to call showCallStats()')
             this.ui.showCallStats()
             console.debug('[call:connected] showCallStats() completed')
