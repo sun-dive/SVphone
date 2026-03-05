@@ -435,9 +435,12 @@ class PeerConnection extends EventEmitter {
         const mid = sdpMid ?? String(Math.max(0, sdpMLineIndex))
         const mIdx = Math.max(0, sdpMLineIndex)
 
-        log(`[ICE] srflx: ${localIp}:${port} → public ${publicIp}:${port}`)
+        // IPv4 gets higher priority than IPv6 — more reliable across mixed networks
+        const priority = isIpv6Host ? 1677000000 : 1677729535
+
+        log(`[ICE] srflx (${isIpv6Host ? 'IPv6' : 'IPv4'}): ${localIp}:${port} → ${publicIp}:${port}`)
         candidates.push({
-          candidate: `candidate:pub${port} ${component} UDP 1677729535 ${publicIp} ${port} typ srflx raddr ${localIp} rport ${port}`,
+          candidate: `candidate:pub${port} ${component} UDP ${priority} ${publicIp} ${port} typ srflx raddr ${localIp} rport ${port}`,
           sdpMid: mid,
           sdpMLineIndex: mIdx
         })
