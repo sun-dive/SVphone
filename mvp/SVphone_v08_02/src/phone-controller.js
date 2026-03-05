@@ -254,12 +254,13 @@ class PhoneController {
         console.log(`[SVphone] Assigned UDP port: ${randomPort} (VoIP range 3478-3497)`)
 
         // Detect both public IPv4 and IPv6 in parallel.
-        // ip4.svphone.com (A record only) forces IPv4; ip6.svphone.com (AAAA only) forces IPv6.
+        // svphone.com is IPv4-only (shared hosting) — fetching ip.php there forces IPv4.
+        // api6.ipify.org is AAAA-only — fetching it forces IPv6.
         myIpField.value = ''
         myIpField.placeholder = 'Detecting public IP...'
 
         const fetchIpv4 = async () => {
-            const urls = ['https://ip4.svphone.com/ip.php', 'https://api.ipify.org?format=json', 'https://ifconfig.me/ip']
+            const urls = ['https://svphone.com/ip.php', 'https://api.ipify.org?format=json', 'https://ifconfig.me/ip']
             for (const url of urls) {
                 try {
                     const r = await fetch(url, { signal: AbortSignal.timeout(3000) })
@@ -272,8 +273,7 @@ class PhoneController {
 
         const fetchIpv6 = async () => {
             // api6.ipify.org has AAAA-only DNS — fetching it forces an IPv6 connection
-            // ip6.svphone.com listed first in case a dedicated IPv6 endpoint is added later
-            const urls = ['https://ip6.svphone.com/ip.php', 'https://api6.ipify.org?format=json']
+            const urls = ['https://api6.ipify.org?format=json']
             for (const url of urls) {
                 try {
                     const r = await fetch(url, { signal: AbortSignal.timeout(3000) })
