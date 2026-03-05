@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 02:10 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 02:10 UTC';});console.log('[SVphone] Build: 2026-03-05 02:10 UTC');
+window.SVPHONE_BUILD="2026-03-05 02:36 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 02:36 UTC';});console.log('[SVphone] Build: 2026-03-05 02:36 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19088,11 +19088,17 @@ class CallManager extends EventEmitter {
    */
   async initiateCall(calleeAddress, options = {}) {
     try {
-      // Initialize media stream if not already done
-      if (!this.peerConnection.mediaStream) {
+      // Initialize media stream, or re-initialize if video requirement changed
+      const needsVideo = options.video !== false
+      const hasVideo   = (this.peerConnection.mediaStream?.getVideoTracks().length ?? 0) > 0
+      if (!this.peerConnection.mediaStream || needsVideo !== hasVideo) {
+        if (this.peerConnection.mediaStream) {
+          this.peerConnection.mediaStream.getTracks().forEach(t => t.stop())
+          this.peerConnection.mediaStream = null
+        }
         await this.peerConnection.initializeMediaStream({
           audio: options.audio !== false,
-          video: options.video !== false
+          video: needsVideo
         })
       }
 
@@ -19104,7 +19110,7 @@ class CallManager extends EventEmitter {
       const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
         codec: options.codec || 'opus',
         quality: options.quality || 'hd',
-        mediaTypes: options.mediaTypes || ['audio', 'video']
+        mediaTypes: options.mediaTypes || (needsVideo ? ['audio', 'video'] : ['audio'])
       })
 
       // Create WebRTC offer and wait for ICE gathering to complete so all candidates

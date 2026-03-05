@@ -73,11 +73,17 @@ class CallManager extends EventEmitter {
    */
   async initiateCall(calleeAddress, options = {}) {
     try {
-      // Initialize media stream if not already done
-      if (!this.peerConnection.mediaStream) {
+      // Initialize media stream, or re-initialize if video requirement changed
+      const needsVideo = options.video !== false
+      const hasVideo   = (this.peerConnection.mediaStream?.getVideoTracks().length ?? 0) > 0
+      if (!this.peerConnection.mediaStream || needsVideo !== hasVideo) {
+        if (this.peerConnection.mediaStream) {
+          this.peerConnection.mediaStream.getTracks().forEach(t => t.stop())
+          this.peerConnection.mediaStream = null
+        }
         await this.peerConnection.initializeMediaStream({
           audio: options.audio !== false,
-          video: options.video !== false
+          video: needsVideo
         })
       }
 
@@ -89,7 +95,7 @@ class CallManager extends EventEmitter {
       const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
         codec: options.codec || 'opus',
         quality: options.quality || 'hd',
-        mediaTypes: options.mediaTypes || ['audio', 'video']
+        mediaTypes: options.mediaTypes || (needsVideo ? ['audio', 'video'] : ['audio'])
       })
 
       // Create WebRTC offer and wait for ICE gathering to complete so all candidates
