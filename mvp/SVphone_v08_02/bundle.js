@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 14:03 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 14:03 UTC';});console.log('[SVphone] Build: 2026-03-05 14:03 UTC');
+window.SVPHONE_BUILD="2026-03-05 14:34 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 14:34 UTC';});console.log('[SVphone] Build: 2026-03-05 14:34 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19107,9 +19107,9 @@ class CallManager extends EventEmitter {
 
           // Inject caller's public IP as srflx candidates so ICE can traverse NAT
           // without STUN — works on full-cone / address-restricted NAT (typical home broadband).
+          const iceLog = (msg, type = 'info') => this.emit('call:log', { msg, type })
+          iceLog(`[ICE] Caller ip4: ${callToken.senderIp4 ?? 'none'} ip6: ${callToken.senderIp6 ?? 'none'}`)
           if (callToken.senderIp4 || callToken.senderIp6) {
-            const iceLog = (msg, type = 'info') => this.emit('call:log', { msg, type })
-            iceLog(`[ICE] Caller ip4: ${callToken.senderIp4 ?? 'none'} ip6: ${callToken.senderIp6 ?? 'none'}`)
             const pubCandidates = this.peerConnection._buildPublicIpCandidates(
               callToken.sdpOffer.sdp, callToken.senderIp4 ?? null, callToken.senderIp6 ?? null, iceLog
             )
@@ -22858,8 +22858,8 @@ class PhoneController {
                     .then(() => {
                         this.ui.log('✓ WebRTC handshake complete, ICE connecting...', 'success')
                         // Inject callee's public IP as srflx candidates (NAT traversal without STUN)
+                        this.ui.log(`[ICE] Callee ip4: ${session.calleeIp4 ?? 'none'} ip6: ${session.calleeIp6 ?? 'none'}`, 'info')
                         if (session.calleeIp4 || session.calleeIp6) {
-                            this.ui.log(`[ICE] Callee ip4: ${session.calleeIp4 ?? 'none'} ip6: ${session.calleeIp6 ?? 'none'}`, 'info')
                             const pubCandidates = this.peerConnection._buildPublicIpCandidates(
                                 session.sdpAnswer, session.calleeIp4 ?? null, session.calleeIp6 ?? null,
                                 this.ui.log.bind(this.ui)
@@ -23026,6 +23026,8 @@ class PhoneController {
                                 caller: attrs.caller,
                                 callee: attrs.callee,
                                 ip: attrs.senderIp,
+                                ip4: attrs.senderIp4 ?? null,
+                                ip6: attrs.senderIp6 ?? null,
                                 port: attrs.senderPort,
                                 key: attrs.sessionKey,
                                 codec: attrs.codec,
