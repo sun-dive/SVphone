@@ -271,11 +271,16 @@ class PhoneController {
         }
 
         const fetchIpv6 = async () => {
-            try {
-                const r = await fetch('https://ip6.svphone.com/ip.php', { signal: AbortSignal.timeout(3000) })
-                const ip = (await r.text()).trim()
-                if (ip.includes(':')) return ip
-            } catch { /* no IPv6 */ }
+            // api6.ipify.org has AAAA-only DNS — fetching it forces an IPv6 connection
+            // ip6.svphone.com listed first in case a dedicated IPv6 endpoint is added later
+            const urls = ['https://ip6.svphone.com/ip.php', 'https://api6.ipify.org?format=json']
+            for (const url of urls) {
+                try {
+                    const r = await fetch(url, { signal: AbortSignal.timeout(3000) })
+                    const ip = url.includes('ipify') ? (await r.json()).ip : (await r.text()).trim()
+                    if (ip && ip.includes(':')) return ip
+                } catch { /* try next */ }
+            }
             return null
         }
 

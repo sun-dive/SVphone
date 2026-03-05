@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 11:30 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 11:30 UTC';});console.log('[SVphone] Build: 2026-03-05 11:30 UTC');
+window.SVPHONE_BUILD="2026-03-05 11:45 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 11:45 UTC';});console.log('[SVphone] Build: 2026-03-05 11:45 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -22744,11 +22744,16 @@ class PhoneController {
         }
 
         const fetchIpv6 = async () => {
-            try {
-                const r = await fetch('https://ip6.svphone.com/ip.php', { signal: AbortSignal.timeout(3000) })
-                const ip = (await r.text()).trim()
-                if (ip.includes(':')) return ip
-            } catch { /* no IPv6 */ }
+            // api6.ipify.org has AAAA-only DNS — fetching it forces an IPv6 connection
+            // ip6.svphone.com listed first in case a dedicated IPv6 endpoint is added later
+            const urls = ['https://ip6.svphone.com/ip.php', 'https://api6.ipify.org?format=json']
+            for (const url of urls) {
+                try {
+                    const r = await fetch(url, { signal: AbortSignal.timeout(3000) })
+                    const ip = url.includes('ipify') ? (await r.json()).ip : (await r.text()).trim()
+                    if (ip && ip.includes(':')) return ip
+                } catch { /* try next */ }
+            }
             return null
         }
 
