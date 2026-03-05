@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 00:10 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 00:10 UTC';});console.log('[SVphone] Build: 2026-03-05 00:10 UTC');
+window.SVPHONE_BUILD="2026-03-05 00:15 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 00:15 UTC';});console.log('[SVphone] Build: 2026-03-05 00:15 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -21507,6 +21507,19 @@ class PhoneUI {
         this.console = {
             scrollTop: 0,
         }
+
+        // Pre-unlock Web Audio API on first user gesture so ringtone plays
+        // immediately when an incoming call arrives (browsers block audio
+        // until the user has interacted with the page).
+        this._ringtoneCtx = null
+        this._ringtonePlaying = false
+        this._ringtoneTimer = null
+        const unlock = () => {
+            if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
+            this._ringtoneCtx.resume()
+        }
+        document.addEventListener('click', unlock, { once: true })
+        document.addEventListener('touchstart', unlock, { once: true })
     }
 
     /**
@@ -21679,10 +21692,12 @@ class PhoneUI {
      * Pattern: 2s on, 4s off — repeating until stopRingtone() is called.
      */
     startRingtone() {
-        if (this._ringtoneCtx) return
-        this._ringtoneCtx = new AudioContext()
-        this._ringtonePlaying = true
-        this._ringCycle()
+        if (this._ringtonePlaying) return
+        if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
+        this._ringtoneCtx.resume().then(() => {
+            this._ringtonePlaying = true
+            this._ringCycle()
+        })
     }
 
     _ringCycle() {
@@ -21705,7 +21720,6 @@ class PhoneUI {
     stopRingtone() {
         this._ringtonePlaying = false
         if (this._ringtoneTimer) { clearTimeout(this._ringtoneTimer); this._ringtoneTimer = null }
-        if (this._ringtoneCtx) { this._ringtoneCtx.close(); this._ringtoneCtx = null }
     }
 
     /**
@@ -21930,6 +21944,7 @@ class CallHandlers {
                 broadcastAnswerFn,
             })
 
+            this.ui.stopRingtone()
             document.getElementById('incomingCall').style.display = 'none'
             document.getElementById('acceptBtn').style.display = 'none'
             document.getElementById('rejectBtn').style.display = 'none'

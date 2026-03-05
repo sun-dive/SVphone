@@ -176,6 +176,7 @@ class CallHandlers {
                 broadcastAnswerFn,
             })
 
+            this.ui.stopRingtone()
             document.getElementById('incomingCall').style.display = 'none'
             document.getElementById('acceptBtn').style.display = 'none'
             document.getElementById('rejectBtn').style.display = 'none'

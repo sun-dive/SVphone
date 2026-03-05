@@ -59,6 +59,19 @@ class PhoneUI {
         this.console = {
             scrollTop: 0,
         }
+
+        // Pre-unlock Web Audio API on first user gesture so ringtone plays
+        // immediately when an incoming call arrives (browsers block audio
+        // until the user has interacted with the page).
+        this._ringtoneCtx = null
+        this._ringtonePlaying = false
+        this._ringtoneTimer = null
+        const unlock = () => {
+            if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
+            this._ringtoneCtx.resume()
+        }
+        document.addEventListener('click', unlock, { once: true })
+        document.addEventListener('touchstart', unlock, { once: true })
     }
 
     /**
@@ -231,10 +244,12 @@ class PhoneUI {
      * Pattern: 2s on, 4s off — repeating until stopRingtone() is called.
      */
     startRingtone() {
-        if (this._ringtoneCtx) return
-        this._ringtoneCtx = new AudioContext()
-        this._ringtonePlaying = true
-        this._ringCycle()
+        if (this._ringtonePlaying) return
+        if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
+        this._ringtoneCtx.resume().then(() => {
+            this._ringtonePlaying = true
+            this._ringCycle()
+        })
     }
 
     _ringCycle() {
@@ -257,7 +272,6 @@ class PhoneUI {
     stopRingtone() {
         this._ringtonePlaying = false
         if (this._ringtoneTimer) { clearTimeout(this._ringtoneTimer); this._ringtoneTimer = null }
-        if (this._ringtoneCtx) { this._ringtoneCtx.close(); this._ringtoneCtx = null }
     }
 
     /**
