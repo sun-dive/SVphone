@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 00:15 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 00:15 UTC';});console.log('[SVphone] Build: 2026-03-05 00:15 UTC');
+window.SVPHONE_BUILD="2026-03-05 00:32 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 00:32 UTC';});console.log('[SVphone] Build: 2026-03-05 00:32 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -21648,6 +21648,7 @@ class PhoneUI {
      */
     resetCallUI() {
         this.stopRingtone()
+        this.stopOutgoingRing()
         this.statusElements.callStatus.style.display = 'none'
         this.buttonElements.acceptBtn.style.display = 'none'
         this.buttonElements.rejectBtn.style.display = 'none'
@@ -21687,21 +21688,23 @@ class PhoneUI {
         }
     }
 
+    // ── Audio tones ──────────────────────────────────────────────────
+
     /**
-     * Classic dual-tone ring (440Hz + 480Hz) using Web Audio API.
-     * Pattern: 2s on, 4s off — repeating until stopRingtone() is called.
+     * Shared ring cycle — dual-tone 440Hz+480Hz, 2s on / 4s off.
+     * key = 'incoming' or 'outgoing'; state stored as _<key>Playing/_<key>Timer.
      */
-    startRingtone() {
-        if (this._ringtonePlaying) return
+    _startRing(key) {
+        if (this[`_${key}Playing`]) return
         if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
         this._ringtoneCtx.resume().then(() => {
-            this._ringtonePlaying = true
-            this._ringCycle()
+            this[`_${key}Playing`] = true
+            this._ringCycle(key)
         })
     }
 
-    _ringCycle() {
-        if (!this._ringtonePlaying) return
+    _ringCycle(key) {
+        if (!this[`_${key}Playing`]) return
         const ctx = this._ringtoneCtx
         const gain = ctx.createGain()
         gain.gain.value = 0.25
@@ -21714,12 +21717,47 @@ class PhoneUI {
             osc.start(now)
             osc.stop(now + 2)
         })
-        this._ringtoneTimer = setTimeout(() => this._ringCycle(), 6000)
+        this[`_${key}Timer`] = setTimeout(() => this._ringCycle(key), 6000)
     }
 
-    stopRingtone() {
-        this._ringtonePlaying = false
-        if (this._ringtoneTimer) { clearTimeout(this._ringtoneTimer); this._ringtoneTimer = null }
+    _stopRing(key) {
+        this[`_${key}Playing`] = false
+        if (this[`_${key}Timer`]) { clearTimeout(this[`_${key}Timer`]); this[`_${key}Timer`] = null }
+    }
+
+    /** Incoming ring — callee hears this */
+    startRingtone()     { this._startRing('incoming') }
+    stopRingtone()      { this._stopRing('incoming') }
+
+    /** Outgoing ring tone — caller hears this while waiting for answer */
+    startOutgoingRing() { this._startRing('outgoing') }
+    stopOutgoingRing()  { this._stopRing('outgoing') }
+
+    /**
+     * Classic disconnected / reorder tone: 480Hz + 620Hz, 0.25s on / 0.25s off.
+     * Plays for durationMs then calls onDone().
+     */
+    playDisconnectedTone(durationMs, onDone) {
+        if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
+        this._ringtoneCtx.resume().then(() => {
+            const ctx = this._ringtoneCtx
+            const end = ctx.currentTime + durationMs / 1000
+            const pulse = (t) => {
+                if (t >= end) { if (onDone) onDone(); return }
+                const gain = ctx.createGain()
+                gain.gain.value = 0.3
+                gain.connect(ctx.destination)
+                ;[480, 620].forEach(freq => {
+                    const osc = ctx.createOscillator()
+                    osc.frequency.value = freq
+                    osc.connect(gain)
+                    osc.start(t)
+                    osc.stop(t + 0.25)
+                })
+                setTimeout(() => pulse(ctx.currentTime + 0.25), (t + 0.5 - ctx.currentTime) * 1000)
+            }
+            pulse(ctx.currentTime)
+        })
     }
 
     /**
@@ -21822,6 +21860,16 @@ class CallHandlers {
 
             this.app.currentCallToken = session.callTokenId
             this.ui.log('✓ Call initiated successfully', 'success')
+
+            // Start outgoing ring and 3-minute unanswered timeout
+            this.ui.startOutgoingRing()
+            this.app._unansweredTimeout = setTimeout(() => {
+                this.ui.stopOutgoingRing()
+                this.ui.log('⏱ No answer — call timed out', 'warning')
+                this.ui.updateCallStatus('ended', 'No answer')
+                this.ui.playDisconnectedTone(30000, () => this.endCall())
+            }, 3 * 60 * 1000)
+
         } catch (error) {
             const errorMsg = error.message || error.toString()
             if (errorMsg.includes('Permission denied') || errorMsg.includes('Permission')) {
@@ -21840,6 +21888,13 @@ class CallHandlers {
                     })
                     this.app.currentCallToken = session.callTokenId
                     this.ui.log('✓ Audio-only call initiated', 'success')
+                    this.ui.startOutgoingRing()
+                    this.app._unansweredTimeout = setTimeout(() => {
+                        this.ui.stopOutgoingRing()
+                        this.ui.log('⏱ No answer — call timed out', 'warning')
+                        this.ui.updateCallStatus('ended', 'No answer')
+                        this.ui.playDisconnectedTone(30000, () => this.endCall())
+                    }, 3 * 60 * 1000)
                 } catch (audioError) {
                     this.ui.log(`Error: ${audioError.message || audioError.toString()}`, 'error')
                 }
@@ -21979,6 +22034,8 @@ class CallHandlers {
      */
     async endCall() {
         try {
+            if (this.app._unansweredTimeout) { clearTimeout(this.app._unansweredTimeout); this.app._unansweredTimeout = null }
+            this.ui.stopOutgoingRing()
             if (!this.app.currentCallToken) {
                 this.ui.log('Error: No active call to end', 'error')
                 return
@@ -22534,6 +22591,9 @@ class PhoneController {
             const remoteAddress = session.callee || session.calleeAddress
             const remoteParty = remoteAddress || session.answerer
             console.debug(`[RECV] ✅ CALL ANSWERED by ${remoteParty}`)
+            // Cancel outgoing ring and unanswered timeout
+            this.ui.stopOutgoingRing()
+            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
             this.ui.log(`📞 Call answered by ${remoteParty}`, 'success')
             this.ui.updateCallStatus('answered', 'Call answered - connecting...')
 

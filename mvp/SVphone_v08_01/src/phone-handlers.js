@@ -54,6 +54,16 @@ class CallHandlers {
 
             this.app.currentCallToken = session.callTokenId
             this.ui.log('✓ Call initiated successfully', 'success')
+
+            // Start outgoing ring and 3-minute unanswered timeout
+            this.ui.startOutgoingRing()
+            this.app._unansweredTimeout = setTimeout(() => {
+                this.ui.stopOutgoingRing()
+                this.ui.log('⏱ No answer — call timed out', 'warning')
+                this.ui.updateCallStatus('ended', 'No answer')
+                this.ui.playDisconnectedTone(30000, () => this.endCall())
+            }, 3 * 60 * 1000)
+
         } catch (error) {
             const errorMsg = error.message || error.toString()
             if (errorMsg.includes('Permission denied') || errorMsg.includes('Permission')) {
@@ -72,6 +82,13 @@ class CallHandlers {
                     })
                     this.app.currentCallToken = session.callTokenId
                     this.ui.log('✓ Audio-only call initiated', 'success')
+                    this.ui.startOutgoingRing()
+                    this.app._unansweredTimeout = setTimeout(() => {
+                        this.ui.stopOutgoingRing()
+                        this.ui.log('⏱ No answer — call timed out', 'warning')
+                        this.ui.updateCallStatus('ended', 'No answer')
+                        this.ui.playDisconnectedTone(30000, () => this.endCall())
+                    }, 3 * 60 * 1000)
                 } catch (audioError) {
                     this.ui.log(`Error: ${audioError.message || audioError.toString()}`, 'error')
                 }
@@ -211,6 +228,8 @@ class CallHandlers {
      */
     async endCall() {
         try {
+            if (this.app._unansweredTimeout) { clearTimeout(this.app._unansweredTimeout); this.app._unansweredTimeout = null }
+            this.ui.stopOutgoingRing()
             if (!this.app.currentCallToken) {
                 this.ui.log('Error: No active call to end', 'error')
                 return

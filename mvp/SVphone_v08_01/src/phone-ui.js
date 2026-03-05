@@ -200,6 +200,7 @@ class PhoneUI {
      */
     resetCallUI() {
         this.stopRingtone()
+        this.stopOutgoingRing()
         this.statusElements.callStatus.style.display = 'none'
         this.buttonElements.acceptBtn.style.display = 'none'
         this.buttonElements.rejectBtn.style.display = 'none'
@@ -239,21 +240,23 @@ class PhoneUI {
         }
     }
 
+    // ── Audio tones ──────────────────────────────────────────────────
+
     /**
-     * Classic dual-tone ring (440Hz + 480Hz) using Web Audio API.
-     * Pattern: 2s on, 4s off — repeating until stopRingtone() is called.
+     * Shared ring cycle — dual-tone 440Hz+480Hz, 2s on / 4s off.
+     * key = 'incoming' or 'outgoing'; state stored as _<key>Playing/_<key>Timer.
      */
-    startRingtone() {
-        if (this._ringtonePlaying) return
+    _startRing(key) {
+        if (this[`_${key}Playing`]) return
         if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
         this._ringtoneCtx.resume().then(() => {
-            this._ringtonePlaying = true
-            this._ringCycle()
+            this[`_${key}Playing`] = true
+            this._ringCycle(key)
         })
     }
 
-    _ringCycle() {
-        if (!this._ringtonePlaying) return
+    _ringCycle(key) {
+        if (!this[`_${key}Playing`]) return
         const ctx = this._ringtoneCtx
         const gain = ctx.createGain()
         gain.gain.value = 0.25
@@ -266,12 +269,47 @@ class PhoneUI {
             osc.start(now)
             osc.stop(now + 2)
         })
-        this._ringtoneTimer = setTimeout(() => this._ringCycle(), 6000)
+        this[`_${key}Timer`] = setTimeout(() => this._ringCycle(key), 6000)
     }
 
-    stopRingtone() {
-        this._ringtonePlaying = false
-        if (this._ringtoneTimer) { clearTimeout(this._ringtoneTimer); this._ringtoneTimer = null }
+    _stopRing(key) {
+        this[`_${key}Playing`] = false
+        if (this[`_${key}Timer`]) { clearTimeout(this[`_${key}Timer`]); this[`_${key}Timer`] = null }
+    }
+
+    /** Incoming ring — callee hears this */
+    startRingtone()     { this._startRing('incoming') }
+    stopRingtone()      { this._stopRing('incoming') }
+
+    /** Outgoing ring tone — caller hears this while waiting for answer */
+    startOutgoingRing() { this._startRing('outgoing') }
+    stopOutgoingRing()  { this._stopRing('outgoing') }
+
+    /**
+     * Classic disconnected / reorder tone: 480Hz + 620Hz, 0.25s on / 0.25s off.
+     * Plays for durationMs then calls onDone().
+     */
+    playDisconnectedTone(durationMs, onDone) {
+        if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
+        this._ringtoneCtx.resume().then(() => {
+            const ctx = this._ringtoneCtx
+            const end = ctx.currentTime + durationMs / 1000
+            const pulse = (t) => {
+                if (t >= end) { if (onDone) onDone(); return }
+                const gain = ctx.createGain()
+                gain.gain.value = 0.3
+                gain.connect(ctx.destination)
+                ;[480, 620].forEach(freq => {
+                    const osc = ctx.createOscillator()
+                    osc.frequency.value = freq
+                    osc.connect(gain)
+                    osc.start(t)
+                    osc.stop(t + 0.25)
+                })
+                setTimeout(() => pulse(ctx.currentTime + 0.25), (t + 0.5 - ctx.currentTime) * 1000)
+            }
+            pulse(ctx.currentTime)
+        })
     }
 
     /**

@@ -299,6 +299,9 @@ class PhoneController {
             const remoteAddress = session.callee || session.calleeAddress
             const remoteParty = remoteAddress || session.answerer
             console.debug(`[RECV] ✅ CALL ANSWERED by ${remoteParty}`)
+            // Cancel outgoing ring and unanswered timeout
+            this.ui.stopOutgoingRing()
+            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
             this.ui.log(`📞 Call answered by ${remoteParty}`, 'success')
             this.ui.updateCallStatus('answered', 'Call answered - connecting...')
 
