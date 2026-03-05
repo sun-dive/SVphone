@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 12:08 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 12:08 UTC';});console.log('[SVphone] Build: 2026-03-05 12:08 UTC');
+window.SVPHONE_BUILD="2026-03-05 12:47 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 12:47 UTC';});console.log('[SVphone] Build: 2026-03-05 12:47 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -22768,13 +22768,15 @@ class PhoneController {
         this._detectedIp4 = myIp4
         this._detectedIp6 = myIp6
 
+        const myIp6Field = document.getElementById('myIp6')
         const displayIp = myIp4 || myIp6 || ''
         if (displayIp) {
-            myIpField.value = displayIp
-            myIpField.placeholder = ''
+            myIpField.value = myIp4 || ''
+            myIpField.placeholder = myIp4 ? '' : 'None detected'
+            if (myIp6Field) myIp6Field.value = myIp6 || ''
             // this.signaling set after autoDetectNetworkConfig returns — assigned in init()
             if (this.signaling) this.signaling.myIp = displayIp
-            const label = myIp4 && myIp6 ? ' (dual-stack)' : ''
+            const label = myIp4 && myIp6 ? ' (dual-stack)' : myIp6 ? ' (IPv6 only)' : ''
             this.ui.log(`✓ Public IP: ${displayIp}${label}`, 'success')
         } else {
             myIpField.placeholder = 'Enter your public IP'

@@ -295,13 +295,15 @@ class PhoneController {
         this._detectedIp4 = myIp4
         this._detectedIp6 = myIp6
 
+        const myIp6Field = document.getElementById('myIp6')
         const displayIp = myIp4 || myIp6 || ''
         if (displayIp) {
-            myIpField.value = displayIp
-            myIpField.placeholder = ''
+            myIpField.value = myIp4 || ''
+            myIpField.placeholder = myIp4 ? '' : 'None detected'
+            if (myIp6Field) myIp6Field.value = myIp6 || ''
             // this.signaling set after autoDetectNetworkConfig returns — assigned in init()
             if (this.signaling) this.signaling.myIp = displayIp
-            const label = myIp4 && myIp6 ? ' (dual-stack)' : ''
+            const label = myIp4 && myIp6 ? ' (dual-stack)' : myIp6 ? ' (IPv6 only)' : ''
             this.ui.log(`✓ Public IP: ${displayIp}${label}`, 'success')
         } else {
             myIpField.placeholder = 'Enter your public IP'
