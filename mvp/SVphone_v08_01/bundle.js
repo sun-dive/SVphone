@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 00:43 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 00:43 UTC';});console.log('[SVphone] Build: 2026-03-05 00:43 UTC');
+window.SVPHONE_BUILD="2026-03-05 00:49 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 00:49 UTC';});console.log('[SVphone] Build: 2026-03-05 00:49 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -21759,9 +21759,31 @@ class PhoneUI {
         if (this[`_${key}Timer`]) { clearTimeout(this[`_${key}Timer`]); this[`_${key}Timer`] = null }
     }
 
-    /** Incoming ring — callee hears this */
-    startRingtone()     { this._startRing('incoming') }
-    stopRingtone()      { this._stopRing('incoming') }
+    /**
+     * Incoming ring — tries ring.mp3 first, falls back to synthesized bell.
+     */
+    startRingtone() {
+        if (this._ringtoneAudio) return
+        const audio = new Audio('ring.mp3')
+        audio.loop = true
+        audio.volume = 0.8
+        audio.play()
+            .then(() => { this._ringtoneAudio = audio })
+            .catch(() => {
+                // ring.mp3 not found or blocked — fall back to synthesized bell
+                this._ringtoneAudio = null
+                this._startRing('incoming')
+            })
+    }
+
+    stopRingtone() {
+        if (this._ringtoneAudio) {
+            this._ringtoneAudio.pause()
+            this._ringtoneAudio.currentTime = 0
+            this._ringtoneAudio = null
+        }
+        this._stopRing('incoming')
+    }
 
     /** Outgoing ring tone — caller hears this while waiting for answer */
     startOutgoingRing() { this._startRing('outgoing') }
