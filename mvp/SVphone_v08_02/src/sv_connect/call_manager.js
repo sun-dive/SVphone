@@ -260,27 +260,95 @@ class CallManager extends EventEmitter {
               },
               options.broadcastAnswerFn
             )
-            console.debug('[CallManager] ✓ SDP answer broadcasted. Activating ICE in 12s...')
-            iceLog('[ICE] ANS sent. Starting ICE checks in 12s (waiting for caller to be ready)')
+            console.debug('[CallManager] ✓ SDP answer broadcasted. Starting ICE retry loop...')
+            iceLog('[ICE] ANS sent. Will retry ICE every 20s for up to 3 min.')
 
-            // After 12 seconds the caller should have received the ANS TX and started their
-            // ICE agent.  Now we activate checking on this side simultaneously.
-            setTimeout(() => {
-              iceLog(`[ICE] Activating deferred checks (caller ip4: ${callToken.senderIp4 ?? 'none'} ip6: ${callToken.senderIp6 ?? 'none'})`)
-              // Add caller's native candidates from the offer SDP
+            // ICE retry loop — no new TXs needed.
+            //
+            // Strategy: keep the PC in ICE "new" state (no candidate pairs) between attempts.
+            // The browser keeps its UDP ports open even in "new", so the caller's STUN probes
+            // can arrive and trigger peer-reflexive candidate discovery at any time.
+            //
+            // When we DO add candidates (every 20s), ICE transitions to "checking".
+            // If it fails (~5-30s), we close the PC, recreate it with the same offer SDP
+            // (caller's credentials are preserved), and wait again.  The DTLS fingerprint
+            // in the callee's ANS TX stays valid as long as we reuse the same PC instance;
+            // recreating is only needed if "failed" is reached and the browser has locked up.
+            const ICE_FIRST_DELAY_MS  = 10000   // wait 10s before first attempt
+            const ICE_RETRY_DELAY_MS  = 20000   // wait 20s between retries
+            const ICE_MAX_WAIT_MS     = 3 * 60 * 1000  // 3-minute ceiling
+            const iceLoopStart        = Date.now()
+            let   iceRetryTimer       = null
+            let   iceAttempt          = 0
+
+            const stopIceLoop = () => {
+              if (iceRetryTimer) { clearTimeout(iceRetryTimer); iceRetryTimer = null }
+            }
+
+            const attemptIceConnect = async () => {
+              // Abort if call ended or already connected
+              const sess = this.activeCallSessions.get(callTokenId)
+              if (!sess || sess.status === 'ended' || sess.status === 'connected') {
+                stopIceLoop(); return
+              }
+              const pc = this.peerConnection.getPeerConnection(callToken.caller)
+              if (pc) {
+                const s = pc.iceConnectionState
+                if (s === 'connected' || s === 'completed') { stopIceLoop(); return }
+              }
+              if (Date.now() - iceLoopStart > ICE_MAX_WAIT_MS) {
+                iceLog('[ICE] 3-minute timeout — no connection. Hang up and redial.', 'error')
+                stopIceLoop(); return
+              }
+
+              iceAttempt++
+              iceLog(`[ICE] Attempt ${iceAttempt} (ip4: ${callToken.senderIp4 ?? 'none'} / ip6: ${callToken.senderIp6 ?? 'none'})`)
+
+              // If previous attempt left PC in "failed", recreate it so we start fresh.
+              // Reuse the same offer SDP — caller credentials are preserved so incoming
+              // STUN probes from the caller will still be validated correctly.
+              const currentPc = this.peerConnection.getPeerConnection(callToken.caller)
+              const needsReset = currentPc && currentPc.iceConnectionState === 'failed'
+              if (needsReset) {
+                iceLog('[ICE] Previous attempt failed — resetting PC and waiting for caller probes')
+                this.peerConnection.closePeerConnection(callToken.caller)
+                try {
+                  await this.peerConnection.prepareAnswerDeferred(callToken.caller, callToken.sdpOffer.sdp)
+                  // Don't add candidates yet — let caller's STUN probes arrive first
+                } catch (e) {
+                  console.warn('[CallManager] PC reset failed:', e.message)
+                }
+                iceRetryTimer = setTimeout(attemptIceConnect, ICE_RETRY_DELAY_MS)
+                return
+              }
+
+              // Add caller's native SDP candidates → ICE transitions from "new" to "checking"
               this.peerConnection.activateDeferredChecking(callToken.caller, callerCandidates)
-                .catch(e => console.warn('[CallManager] Deferred checking error:', e.message))
-              // Also inject synthetic srflx candidates based on caller's public IP
+                .catch(e => console.warn('[CallManager] ICE candidate error:', e.message))
+
+              // Inject synthetic srflx based on caller's known public IP
               if (callToken.senderIp4 || callToken.senderIp6) {
                 const pubCandidates = this.peerConnection._buildPublicIpCandidates(
                   callToken.sdpOffer.sdp, callToken.senderIp4 ?? null, callToken.senderIp6 ?? null, iceLog
                 )
                 for (const c of pubCandidates) {
                   this.peerConnection.addIceCandidate(callToken.caller, c)
-                    .catch(e => console.warn('[CallManager] Public IP candidate rejected:', e.message))
+                    .catch(() => {})
                 }
               }
-            }, 12000)
+
+              // Schedule next attempt (will be cancelled if ICE connects before it fires)
+              iceRetryTimer = setTimeout(attemptIceConnect, ICE_RETRY_DELAY_MS)
+            }
+
+            // Stop the loop when connected or call ends
+            const onConnected    = () => stopIceLoop()
+            const onSessionEnded = () => stopIceLoop()
+            this.on('call:connected',     onConnected)
+            this.on('call:ended-session', onSessionEnded)
+
+            // First attempt: 10s gives the caller time to receive the ANS TX and start their ICE
+            iceRetryTimer = setTimeout(attemptIceConnect, ICE_FIRST_DELAY_MS)
           } catch (error) {
             console.warn('[CallManager] Failed to broadcast media answer:', error)
           }
