@@ -54,6 +54,12 @@ class CallManager extends EventEmitter {
     this.peerConnection.on('peer:connected', (data) => this.onPeerConnected(data))
     this.peerConnection.on('peer:connection-failed', (data) => this.onPeerConnectionFailed(data))
     this.peerConnection.on('media:track-received', (data) => this.onRemoteTrackReceived(data))
+    this.peerConnection.on('peer:connection-state-changed', ({ peerId, state }) => {
+      this.emit('call:log', { msg: `[WebRTC] conn: ${state}`, type: state === 'failed' ? 'error' : 'info' })
+    })
+    this.peerConnection.on('ice:state-changed', ({ peerId, state }) => {
+      this.emit('call:log', { msg: `[ICE] state: ${state}`, type: state === 'failed' ? 'error' : 'info' })
+    })
   }
 
   /**

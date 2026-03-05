@@ -253,7 +253,9 @@ class PeerConnection extends EventEmitter {
 
       // ICE connection state
       peerConnection.oniceconnectionstatechange = () => {
-        console.log('[PeerConnection] ICE connection state:', peerId, peerConnection.iceConnectionState)
+        const state = peerConnection.iceConnectionState
+        console.log('[PeerConnection] ICE connection state:', peerId, state)
+        this.emit('ice:state-changed', { peerId, state })
       }
 
       // Signaling state

@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 14:46 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 14:46 UTC';});console.log('[SVphone] Build: 2026-03-05 14:46 UTC');
+window.SVPHONE_BUILD="2026-03-05 15:03 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 15:03 UTC';});console.log('[SVphone] Build: 2026-03-05 15:03 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -18935,6 +18935,12 @@ class CallManager extends EventEmitter {
     this.peerConnection.on('peer:connected', (data) => this.onPeerConnected(data))
     this.peerConnection.on('peer:connection-failed', (data) => this.onPeerConnectionFailed(data))
     this.peerConnection.on('media:track-received', (data) => this.onRemoteTrackReceived(data))
+    this.peerConnection.on('peer:connection-state-changed', ({ peerId, state }) => {
+      this.emit('call:log', { msg: `[WebRTC] conn: ${state}`, type: state === 'failed' ? 'error' : 'info' })
+    })
+    this.peerConnection.on('ice:state-changed', ({ peerId, state }) => {
+      this.emit('call:log', { msg: `[ICE] state: ${state}`, type: state === 'failed' ? 'error' : 'info' })
+    })
   }
 
   /**
@@ -19695,7 +19701,9 @@ class PeerConnection extends EventEmitter {
 
       // ICE connection state
       peerConnection.oniceconnectionstatechange = () => {
-        console.log('[PeerConnection] ICE connection state:', peerId, peerConnection.iceConnectionState)
+        const state = peerConnection.iceConnectionState
+        console.log('[PeerConnection] ICE connection state:', peerId, state)
+        this.emit('ice:state-changed', { peerId, state })
       }
 
       // Signaling state
