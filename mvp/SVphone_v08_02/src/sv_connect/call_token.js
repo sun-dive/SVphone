@@ -45,7 +45,7 @@ class CallTokenManager {
       bytes.push(0x01)
 
       // IP address and port
-      const ip = callToken.senderIp
+      const ip = callToken.senderIp || '0.0.0.0'
       const port = callToken.senderPort
       const isIPv6 = ip.includes(':')
       const ipBits = isIPv6 ? 1 : 0

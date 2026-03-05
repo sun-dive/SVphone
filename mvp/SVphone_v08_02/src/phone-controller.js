@@ -78,6 +78,9 @@ class PhoneController {
 
             // Create all component modules
             this.signaling = new CallSignaling()
+            // Apply IPs detected before signaling was created
+            this.signaling.myIp4 = this._detectedIp4 ?? null
+            this.signaling.myIp6 = this._detectedIp6 ?? null
             this.peerConnection = new PeerConnection({
                 // Direct P2P with no centralized STUN servers
                 // Uses mDNS discovery and standard VoIP ports (3478-3497)
@@ -288,14 +291,16 @@ class PhoneController {
         const myIp4 = ip4Res.status === 'fulfilled' ? ip4Res.value : null
         const myIp6 = ip6Res.status === 'fulfilled' ? ip6Res.value : null
 
-        this.signaling.myIp4 = myIp4
-        this.signaling.myIp6 = myIp6
+        // Store on controller — signaling doesn't exist yet at this point in init()
+        this._detectedIp4 = myIp4
+        this._detectedIp6 = myIp6
 
         const displayIp = myIp4 || myIp6 || ''
         if (displayIp) {
             myIpField.value = displayIp
             myIpField.placeholder = ''
-            this.signaling.myIp = displayIp
+            // this.signaling set after autoDetectNetworkConfig returns — assigned in init()
+            if (this.signaling) this.signaling.myIp = displayIp
             const label = myIp4 && myIp6 ? ' (dual-stack)' : ''
             this.ui.log(`✓ Public IP: ${displayIp}${label}`, 'success')
         } else {

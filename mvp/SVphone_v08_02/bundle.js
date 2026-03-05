@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 11:53 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 11:53 UTC';});console.log('[SVphone] Build: 2026-03-05 11:53 UTC');
+window.SVPHONE_BUILD="2026-03-05 12:08 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 12:08 UTC';});console.log('[SVphone] Build: 2026-03-05 12:08 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -21262,7 +21262,7 @@ class CallTokenManager {
       bytes.push(0x01)
 
       // IP address and port
-      const ip = callToken.senderIp
+      const ip = callToken.senderIp || '0.0.0.0'
       const port = callToken.senderPort
       const isIPv6 = ip.includes(':')
       const ipBits = isIPv6 ? 1 : 0
@@ -22551,6 +22551,9 @@ class PhoneController {
 
             // Create all component modules
             this.signaling = new CallSignaling()
+            // Apply IPs detected before signaling was created
+            this.signaling.myIp4 = this._detectedIp4 ?? null
+            this.signaling.myIp6 = this._detectedIp6 ?? null
             this.peerConnection = new PeerConnection({
                 // Direct P2P with no centralized STUN servers
                 // Uses mDNS discovery and standard VoIP ports (3478-3497)
@@ -22761,14 +22764,16 @@ class PhoneController {
         const myIp4 = ip4Res.status === 'fulfilled' ? ip4Res.value : null
         const myIp6 = ip6Res.status === 'fulfilled' ? ip6Res.value : null
 
-        this.signaling.myIp4 = myIp4
-        this.signaling.myIp6 = myIp6
+        // Store on controller — signaling doesn't exist yet at this point in init()
+        this._detectedIp4 = myIp4
+        this._detectedIp6 = myIp6
 
         const displayIp = myIp4 || myIp6 || ''
         if (displayIp) {
             myIpField.value = displayIp
             myIpField.placeholder = ''
-            this.signaling.myIp = displayIp
+            // this.signaling set after autoDetectNetworkConfig returns — assigned in init()
+            if (this.signaling) this.signaling.myIp = displayIp
             const label = myIp4 && myIp6 ? ' (dual-stack)' : ''
             this.ui.log(`✓ Public IP: ${displayIp}${label}`, 'success')
         } else {
