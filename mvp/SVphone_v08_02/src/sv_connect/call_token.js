@@ -87,7 +87,9 @@ class CallTokenManager {
       bytes.push(mediaBitmask)
 
       // SDP offer or answer (2-byte length prefix + N bytes)
-      const sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
+      // sdpOffer/sdpAnswer may be an RTCSessionDescription object — extract the raw string
+      let sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
+      if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
       const sdpBuf = new TextEncoder().encode(sdpData)
       bytes.push((sdpBuf.length >> 8) & 0xFF)
       bytes.push(sdpBuf.length & 0xFF)

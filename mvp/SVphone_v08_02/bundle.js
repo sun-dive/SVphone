@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 08:47 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 08:47 UTC';});console.log('[SVphone] Build: 2026-03-05 08:47 UTC');
+window.SVPHONE_BUILD="2026-03-05 09:02 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 09:02 UTC';});console.log('[SVphone] Build: 2026-03-05 09:02 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -21289,7 +21289,9 @@ class CallTokenManager {
       bytes.push(mediaBitmask)
 
       // SDP offer or answer (2-byte length prefix + N bytes)
-      const sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
+      // sdpOffer/sdpAnswer may be an RTCSessionDescription object — extract the raw string
+      let sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
+      if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
       const sdpBuf = new TextEncoder().encode(sdpData)
       bytes.push((sdpBuf.length >> 8) & 0xFF)
       bytes.push(sdpBuf.length & 0xFF)
@@ -22898,7 +22900,8 @@ class PhoneController {
                                 codec: attrs.codec,
                                 quality: attrs.quality,
                                 media: attrs.mediaTypes,
-                                sdp: attrs.sdpOffer,
+                                sdp: isCall ? { type: 'offer', sdp: attrs.sdpOffer }
+                                            : { type: 'answer', sdp: attrs.sdpOffer },
                             }
                             break
                         }

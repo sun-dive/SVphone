@@ -486,7 +486,8 @@ class PhoneController {
                                 codec: attrs.codec,
                                 quality: attrs.quality,
                                 media: attrs.mediaTypes,
-                                sdp: attrs.sdpOffer,
+                                sdp: isCall ? { type: 'offer', sdp: attrs.sdpOffer }
+                                            : { type: 'answer', sdp: attrs.sdpOffer },
                             }
                             break
                         }
