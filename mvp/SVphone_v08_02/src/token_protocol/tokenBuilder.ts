@@ -1966,7 +1966,10 @@ export class TokenBuilder {
     tx.addOutput({ lockingScript: new P2PKH().lock(recipientAddress), satoshis: TOKEN_SATS })
 
     const changeAmount = utxo.satoshis - TOKEN_SATS - fee
-    tx.addOutput({ lockingScript: new P2PKH().lock(this.myAddress), satoshis: changeAmount })
+    // Only add change output if > 0 — a 0-sat output is rejected as dust
+    if (changeAmount > 0) {
+      tx.addOutput({ lockingScript: new P2PKH().lock(this.myAddress), satoshis: changeAmount })
+    }
 
     await tx.sign()
     const txId = tx.id('hex') as string

@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-05 09:24 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 09:24 UTC';});console.log('[SVphone] Build: 2026-03-05 09:24 UTC');
+window.SVPHONE_BUILD="2026-03-05 09:29 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-05 09:29 UTC';});console.log('[SVphone] Build: 2026-03-05 09:29 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -16743,7 +16743,9 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
       tx.addOutput({ lockingScript: opReturnScript, satoshis: 0 });
       tx.addOutput({ lockingScript: new P2PKH().lock(recipientAddress), satoshis: TOKEN_SATS });
       const changeAmount = utxo.satoshis - TOKEN_SATS - fee;
-      tx.addOutput({ lockingScript: new P2PKH().lock(this.myAddress), satoshis: changeAmount });
+      if (changeAmount > 0) {
+        tx.addOutput({ lockingScript: new P2PKH().lock(this.myAddress), satoshis: changeAmount });
+      }
       await tx.sign();
       const txId = tx.id("hex");
       await this.provider.broadcast(tx.toHex());
