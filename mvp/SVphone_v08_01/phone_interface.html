@@ -649,6 +649,30 @@
     </style>
 </head>
 <body>
+
+    <!-- Activation overlay — dismissed on click, also unlocks Web Audio API -->
+    <div id="activationOverlay" style="
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(10, 15, 30, 0.92);
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        cursor: pointer;
+    " onclick="document.getElementById('activationOverlay').style.display='none'">
+        <div style="font-size: 4em; margin-bottom: 20px;">📞</div>
+        <div style="
+            font-size: 1.4em; font-weight: 700; color: #fff;
+            margin-bottom: 12px; text-align: center;
+        ">Click to allow incoming calls</div>
+        <div style="font-size: 0.9em; color: #8b949e; text-align: center; max-width: 300px;">
+            Enables ringtone audio and activates the phone
+        </div>
+        <div style="
+            margin-top: 28px; padding: 14px 36px;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            border-radius: 50px; font-weight: 700; font-size: 1.1em; color: #000;
+        ">Activate</div>
+    </div>
+
     <div class="container">
         <header style="display:flex; justify-content:space-between; align-items:center;">
             <div>
