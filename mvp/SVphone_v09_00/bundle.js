@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-06 07:50 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 07:50 UTC';});console.log('[SVphone] Build: 2026-03-06 07:50 UTC');
+window.SVPHONE_BUILD="2026-03-06 07:59 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 07:59 UTC';});console.log('[SVphone] Build: 2026-03-06 07:59 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -23898,12 +23898,12 @@ class PhoneController {
                             const decoded = window.decodeOpReturn(output.lockingScript)
                             if (!decoded) continue
                             const name = decoded.tokenName
-                            if (!name?.startsWith('CALL-') && !name?.startsWith('ANS-')) continue
+                            if (!name?.startsWith('CALL-') && !name?.startsWith('ANS-') && !name?.startsWith('CXID-')) continue
 
                             const attrs = this.callTokenManager.decodeCallAttributes(decoded.tokenAttributes)
                             if (!attrs?.senderIp) continue
 
-                            const isCall = name.startsWith('CALL-') && attrs.callee === address
+                            const isCall = (name.startsWith('CALL-') || name.startsWith('CXID-')) && attrs.callee === address
                             const isAnswer = name.startsWith('ANS-') && attrs.caller === address
                             if (!isCall && !isAnswer) continue
 

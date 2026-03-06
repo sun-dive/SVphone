@@ -634,12 +634,12 @@ class PhoneController {
                             const decoded = window.decodeOpReturn(output.lockingScript)
                             if (!decoded) continue
                             const name = decoded.tokenName
-                            if (!name?.startsWith('CALL-') && !name?.startsWith('ANS-')) continue
+                            if (!name?.startsWith('CALL-') && !name?.startsWith('ANS-') && !name?.startsWith('CXID-')) continue
 
                             const attrs = this.callTokenManager.decodeCallAttributes(decoded.tokenAttributes)
                             if (!attrs?.senderIp) continue
 
-                            const isCall = name.startsWith('CALL-') && attrs.callee === address
+                            const isCall = (name.startsWith('CALL-') || name.startsWith('CXID-')) && attrs.callee === address
                             const isAnswer = name.startsWith('ANS-') && attrs.caller === address
                             if (!isCall && !isAnswer) continue
 
