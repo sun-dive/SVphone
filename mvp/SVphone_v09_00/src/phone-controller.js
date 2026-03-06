@@ -294,10 +294,10 @@ class PhoneController {
             return
         }
         el.innerHTML = contacts.map(c => `
-            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-              <button onclick="app.callContact('${c.address}')" style="flex:1;min-width:0;padding:4px 8px;background:#1f6feb;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;"
+            <div style="display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+              <button onclick="app.callContact('${c.address}')" style="flex:1;min-width:0;padding:4px 6px;background:#1f6feb;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.7em;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;"
                       title="${c.address}">📞 ${c.address}</button>
-              <button onclick="app.removeContact('${c.address}')" style="flex-shrink:0;padding:2px 6px;background:#da3633;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.7em;">✕</button>
+              <button onclick="app.removeContact('${c.address}')" style="flex:0 0 auto;padding:2px 5px;background:#da3633;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.65em;line-height:1;">✕</button>
             </div>`).join('')
     }
 
