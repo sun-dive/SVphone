@@ -54,7 +54,7 @@ class SyntheticSdp {
 
       // Callee's DTLS fingerprint (from contacts)
       answer.push(`a=fingerprint:${calleeFingerprint}`)
-      answer.push('a=setup:passive')      // callee is passive when caller is actpass
+      answer.push('a=setup:active')       // callee is DTLS client (matches browser createAnswer default)
 
       // Mirror critical m-section attributes from offer
       let foundDirection = false

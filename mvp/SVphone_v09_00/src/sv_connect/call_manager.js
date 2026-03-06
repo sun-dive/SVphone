@@ -166,7 +166,9 @@ class CallManager extends EventEmitter {
 
       // Derive deterministic ICE credentials from session key
       const iceCreds = await window.iceCredentials.deriveAll(sessionKey)
-      this.emit('call:log', { msg: `[1-TX] Derived ICE creds: caller=${iceCreds.callerUfrag} callee=${iceCreds.calleeUfrag}`, type: 'info' })
+      this.emit('call:log', { msg: `[ICE] Derived: callerUfrag=${iceCreds.callerUfrag} callerPwd=${iceCreds.callerPwd.slice(0,4)}...${iceCreds.callerPwd.slice(-4)}`, type: 'info' })
+      this.emit('call:log', { msg: `[ICE] Derived: calleeUfrag=${iceCreds.calleeUfrag} calleePwd=${iceCreds.calleePwd.slice(0,4)}...${iceCreds.calleePwd.slice(-4)}`, type: 'info' })
+      this.emit('call:log', { msg: `[ICE] SessionKey hash: ${sessionKey.slice(0,8)}...`, type: 'info' })
 
       // Create call token
       const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
@@ -370,7 +372,8 @@ class CallManager extends EventEmitter {
       try {
         // Derive ICE credentials from the caller's session key
         const iceCreds = await window.iceCredentials.deriveAll(callToken.sessionKey)
-        iceLog(`[Accept] Derived ICE creds: callee=${iceCreds.calleeUfrag}`)
+        iceLog(`[Accept] Derived ICE creds: callee=${iceCreds.calleeUfrag} caller=${iceCreds.callerUfrag}`)
+        iceLog(`[Accept] SessionKey hash: ${(callToken.sessionKey || '').slice(0,8)}...`)
 
         // Create answer with persistent cert + derived ICE credentials
         const answer     = await this.peerConnection.createAnswerMunged(callToken.caller, offerSdp, iceCreds)
