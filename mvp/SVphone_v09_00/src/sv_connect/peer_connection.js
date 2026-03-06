@@ -199,10 +199,10 @@ class PeerConnection extends EventEmitter {
    * @param {Object} offerSdp - Optional SDP offer to set as remote
    * @returns {RTCPeerConnection}
    */
-  createPeerConnection(peerId, cert = null) {
+  createPeerConnection(peerId, cert = null, iceServersOverride = null) {
     try {
       const config = {
-        iceServers: this.iceServers,
+        iceServers: iceServersOverride !== null ? iceServersOverride : this.iceServers,
         bundlePolicy: 'max-bundle',
         rtcpMuxPolicy: 'require',
       }
@@ -379,8 +379,11 @@ class PeerConnection extends EventEmitter {
    */
   async createAnswerMunged(peerId, offerSdp, iceCreds) {
     try {
-      let pc = this.peerConnections.get(peerId)
-      if (!pc) pc = this.createPeerConnection(peerId, this._persistentCert)
+      // Always start fresh — stale PCs from failed calls have wrong iceServers config
+      if (this.peerConnections.has(peerId)) this.closePeerConnection(peerId)
+      // Callee: no STUN needed — host candidates pair with caller's srflx from offer.
+      // Avoids 30-40s STUN timeout through CGNAT that blocks ICE checking.
+      const pc = this.createPeerConnection(peerId, this._persistentCert, [])
 
       await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }))
       const raw       = await pc.createAnswer()

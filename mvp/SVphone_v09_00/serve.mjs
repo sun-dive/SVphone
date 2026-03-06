@@ -63,7 +63,12 @@ function requestHandler(req, res) {
       res.end('Not found')
       return
     }
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' })
+    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' }
+    // Prevent caching of JS bundles during development
+    if (ext === '.js' || ext === '.html') {
+      headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    }
+    res.writeHead(200, headers)
     res.end(data)
   })
 }
