@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { addPortMapping, deletePortMapping } from './upnp.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const HTTP_PORT  = 3000
@@ -17,7 +18,55 @@ const MIME = {
   '.json': 'application/json',
 }
 
+/** Read JSON body from a request */
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = ''
+    req.on('data', c => data += c)
+    req.on('end', () => {
+      try { resolve(JSON.parse(data)) } catch (e) { reject(e) }
+    })
+  })
+}
+
 function requestHandler(req, res) {
+  // UPnP port forwarding — POST to add, DELETE to remove
+  if (req.url === '/upnp/forward' && req.method === 'POST') {
+    readJsonBody(req).then(async ({ externalPort, internalPort }) => {
+      const internalIp = getLanIp()
+      if (!internalIp) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'No LAN IP detected' }))
+        return
+      }
+      try {
+        await addPortMapping(externalPort, internalPort, internalIp, 300)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, externalPort, internalPort, internalIp }))
+      } catch (e) {
+        console.error('[UPnP] addPortMapping error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: e.message }))
+      }
+    }).catch(() => { res.writeHead(400); res.end('Bad JSON') })
+    return
+  }
+
+  if (req.url === '/upnp/forward' && req.method === 'DELETE') {
+    readJsonBody(req).then(async ({ externalPort }) => {
+      try {
+        await deletePortMapping(externalPort)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, externalPort }))
+      } catch (e) {
+        console.error('[UPnP] deletePortMapping error:', e.message)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: e.message }))
+      }
+    }).catch(() => { res.writeHead(400); res.end('Bad JSON') })
+    return
+  }
+
   // Proxy /woc/* to WhatsOnChain API
   if (req.url.startsWith('/woc/')) {
     const apiPath = req.url.slice(4) // strip "/woc"

@@ -179,6 +179,7 @@ class CallManager extends EventEmitter {
 
       // Create offer with munged ICE credentials
       let mediaOffer = null
+      let upnpPorts  = []
       try {
         this.emit('call:log', { msg: '[1-TX] Creating munged SDP offer...', type: 'info' })
         await this.peerConnection.createOfferMunged(calleeAddress, iceCreds)
@@ -187,6 +188,25 @@ class CallManager extends EventEmitter {
         callToken.sdpOffer        = mediaOffer
         callToken.callerFingerprint = myFingerprint
         this.emit('call:log', { msg: '[1-TX] ✓ Offer ready (ICE gathered)', type: 'info' })
+
+        // UPnP: forward srflx ports so callee's packets reach us through the NAT
+        upnpPorts = this._extractSrflxPorts(mediaOffer.sdp)
+        for (const p of upnpPorts) {
+          try {
+            const r = await fetch('/upnp/forward', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ externalPort: p.externalPort, internalPort: p.internalPort }),
+            })
+            if (r.ok) {
+              this.emit('call:log', { msg: `[UPnP] Forwarded UDP ${p.externalPort} → :${p.internalPort}`, type: 'info' })
+            } else {
+              this.emit('call:log', { msg: `[UPnP] Forward failed (${r.status})`, type: 'warn' })
+            }
+          } catch (e) {
+            this.emit('call:log', { msg: `[UPnP] ${e.message}`, type: 'warn' })
+          }
+        }
       } catch (error) {
         console.warn('[CallManager] Failed to create munged offer:', error)
         throw error
@@ -225,6 +245,7 @@ class CallManager extends EventEmitter {
         iceCandidates: [],
         stats: {},
         oneTxMode: true,
+        upnpPorts:  upnpPorts.map(p => p.externalPort),
       }
 
       this.activeCallSessions.set(broadcastResult.callTokenId, session)
@@ -648,6 +669,17 @@ class CallManager extends EventEmitter {
         clearInterval(session.statsMonitor)
       }
 
+      // Remove UPnP port forwarding
+      if (session.upnpPorts?.length) {
+        for (const port of session.upnpPorts) {
+          fetch('/upnp/forward', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ externalPort: port }),
+          }).catch(() => {})
+        }
+      }
+
       // Close peer connection
       const callToken = this.signaling.getCallToken(callTokenId)
       if (callToken) {
@@ -677,6 +709,24 @@ class CallManager extends EventEmitter {
       console.error('[CallManager] Failed to end call:', error)
       throw error
     }
+  }
+
+  /**
+   * Extract srflx candidate ports from SDP for UPnP forwarding.
+   * @returns {{ externalPort: number, internalPort: number }[]}
+   */
+  _extractSrflxPorts(sdp) {
+    const ports = []
+    const seen  = new Set()
+    const re    = /a=candidate:\S+ \d+ udp \d+ \S+ (\d+) typ srflx raddr \S+ rport (\d+)/gi
+    let m
+    while ((m = re.exec(sdp)) !== null) {
+      const ext = parseInt(m[1])
+      const int = parseInt(m[2])
+      const key = `${ext}:${int}`
+      if (!seen.has(key)) { seen.add(key); ports.push({ externalPort: ext, internalPort: int }) }
+    }
+    return ports
   }
 
   /**

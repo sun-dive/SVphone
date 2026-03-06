@@ -69,6 +69,11 @@ CALLER                                          CALLEE
    -> STUN server returns srflx candidates
    -> Offer SDP now contains public IP:port
 
+5b. UPnP: POST /upnp/forward for each
+    srflx port (externalPort -> internalPort)
+    -> Router forwards UDP unconditionally
+    (skipped if UPnP unavailable)
+
 6. syntheticSdp.build(offer, calleeUfrag,
    calleePwd, calleeFingerprint)
    -> synthetic answer SDP
@@ -98,8 +103,8 @@ CALLER                                          CALLEE
                                                       public IP:port
 
 13. Caller's NAT forwards packet              <-- 12. (continued) UDP packet
-    (port was opened by STUN binding)              arrives at caller's srflx
-                                                   address
+    (port opened by STUN binding                   arrives at caller's srflx
+     or UPnP forwarding)                           address
 
 14. ICE agent creates peer-reflexive
     candidate for callee
@@ -203,6 +208,92 @@ These are **peer-to-peer ICE connectivity checks**, not STUN server queries. The
 
 When the caller's NAT receives these packets on the mapped port, it forwards them to the caller. The caller's ICE agent sees the callee's source address as a peer-reflexive candidate, enabling bidirectional communication.
 
+### UPnP automatic port forwarding
+
+Some home routers use **Address-Dependent Filtering (ADF)** — they only accept incoming UDP packets from IP addresses the device has already sent to. Since the caller only sent STUN packets to Google's server, packets from the callee's IP are dropped by the NAT even though the correct port is open.
+
+UPnP IGD (Internet Gateway Device) solves this by telling the router to forward a specific external UDP port to the caller's internal IP:port unconditionally, regardless of source address.
+
+**Flow (caller side, integrated into `initiateCall()`):**
+
+1. ICE gathering completes — offer SDP contains srflx candidates with public IP:port
+2. `_extractSrflxPorts(sdp)` parses srflx candidates to get external/internal port pairs
+3. Browser calls `POST /upnp/forward` on the dev server for each port pair
+4. Server-side `upnp.mjs` discovers the router via SSDP multicast, then sends a SOAP `AddPortMapping` request to forward the external UDP port to the caller's LAN IP:internal port (TTL 300s)
+5. Callee's ICE checks now reach the caller through the NAT — the router forwards them unconditionally
+6. On `endCall()`, the browser calls `DELETE /upnp/forward` to remove the mappings
+
+**Server-side (`upnp.mjs`):**
+- SSDP discovery: sends `M-SEARCH` to `239.255.255.250:1900`, parses `LOCATION` header from response
+- Fetches device description XML, finds `WANIPConnection` or `WANPPPConnection` service control URL
+- SOAP `AddPortMapping`: forwards `externalPort` UDP to `internalIp:internalPort` with description "SVphone"
+- SOAP `DeletePortMapping`: removes forwarding by external port
+- No npm dependencies — uses only `node:dgram` and `node:http`
+
+**Requirements:**
+- Router must support UPnP IGD (most consumer routers do, often enabled by default)
+- The dev server (`serve.mjs`) must run on the same LAN as the router
+- Only the caller needs UPnP — the callee's packets arrive at the forwarded port
+
+### CGNAT (Carrier-Grade NAT) — Mobile Data
+
+Mobile carriers place phones behind CGNAT, which typically implements **symmetric NAT** (Port-Dependent Mapping). In symmetric NAT the external port assigned by the NAT depends on both the source address and the destination address. A STUN query to Google returns external port P, but when the device sends to a different destination the CGNAT assigns a completely different port.
+
+This was confirmed during testing: when a phone (on mobile data) called the Mac, the STUN-discovered external port was 59805 but the actual port seen by the Mac was 61479 — the CGNAT assigned a different external port because the destination changed.
+
+**Broadband-as-caller, phone-as-callee (works with UPnP):**
+
+This is the viable cross-network path:
+
+1. Mac (broadband) has Endpoint-Independent Mapping (EIM) — the srflx port is stable regardless of destination
+2. Mac queries STUN, gets srflx candidate with a port that works for any source
+3. UPnP forwards that port on the router unconditionally (bypasses ADF filtering)
+4. Mac broadcasts CALL TX with offer SDP containing srflx candidates
+5. Phone (callee) receives CALL TX, sends ICE checks directly to Mac's srflx address
+6. CGNAT allows outbound UDP freely and creates a mapping for the phone's outbound packet
+7. Mac receives the checks (via UPnP forwarding), discovers phone's public IP:port as peer-reflexive
+8. Mac sends back to phone's CGNAT external address — CGNAT forwards it because a mapping exists for that destination (Mac's IP)
+9. ICE connected, DTLS handshake, media flows
+
+The callee (phone) does NOT need STUN. Its peer connection is created with `iceServers: []` to avoid a 30-40 second STUN timeout through CGNAT that would block ICE checking.
+
+**Phone-as-caller (fails with symmetric NAT):**
+
+When the phone is the caller:
+
+1. Phone queries STUN → gets srflx with external port P (mapped for STUN server destination only)
+2. Phone broadcasts CALL TX with srflx port P in the offer SDP
+3. Callee sends ICE checks to phone's srflx address (port P)
+4. Phone's CGNAT **drops the packet** — the mapping for port P only accepts packets from the STUN server's IP, not from the callee's IP
+5. ICE fails
+
+UPnP cannot help here because the CGNAT is carrier-controlled infrastructure, not the user's router.
+
+**Phone-to-phone (both on CGNAT — fails):**
+
+When both sides are on mobile data:
+
+1. Both sides have symmetric NAT — neither side's srflx port is valid for the other's IP
+2. Neither side can run UPnP on the carrier's infrastructure
+3. Even if one side somehow opened a port, the other side's symmetric NAT would assign a different port for that destination
+4. Only a TURN relay server could bridge two symmetric NATs
+
+**Compatibility matrix:**
+
+```
+Caller         Callee         Result
+─────────────  ─────────────  ──────────────────────────
+Broadband+UPnP Phone (CGNAT)  Works (1-TX)
+Broadband+UPnP Broadband      Works (1-TX)
+Broadband+EIF  Phone (CGNAT)  Works (1-TX, no UPnP needed)
+Broadband+ADF  Phone (CGNAT)  Fails without UPnP
+Phone (CGNAT)  Broadband      Fails (symmetric NAT)
+Phone (CGNAT)  Phone (CGNAT)  Fails (both symmetric)
+LAN            LAN            Works (host candidates)
+```
+
+**Future:** A TURN relay fallback would enable phone-as-caller and phone-to-phone scenarios. The caller would detect symmetric NAT (srflx port != host port in STUN response) and route media through a relay server.
+
 ### LAN calls
 
 On a local network, both peers have direct IP connectivity. STUN is not needed -- host candidates in the offer SDP provide the caller's LAN IP:port directly.
@@ -210,7 +301,10 @@ On a local network, both peers have direct IP connectivity. STUN is not needed -
 ## File Structure
 
 ```
-mvp/SVphone_v09_00/src/
+mvp/SVphone_v09_00/
+  upnp.mjs               -- Minimal UPnP IGD client (SSDP + SOAP, no dependencies)
+  serve.mjs              -- Dev server with /upnp/forward API endpoints
+  src/
   dtls_cert_store.js     -- IndexedDB persistent ECDSA RTCCertificate
   contacts_store.js      -- localStorage address->fingerprint map
   ice_credentials.js     -- HMAC-SHA256 ICE ufrag/pwd derivation + SDP munging
@@ -237,6 +331,6 @@ mvp/SVphone_v09_00/src/
 
 ## Limitations
 
-- **NAT compatibility**: The 1-TX flow requires the caller's NAT to accept packets from the callee on the STUN-mapped port. This works with Endpoint-Independent Mapping (EIM) and Endpoint-Independent or Address-Dependent Filtering. Symmetric NAT (port-dependent mapping/filtering) will block the callee's packets. A TURN relay fallback would be needed for those networks.
+- **NAT compatibility**: The 1-TX flow requires the caller's NAT to have Endpoint-Independent Mapping (EIM) so the srflx port is valid for any destination. Broadband routers (EIM) work; mobile CGNAT (symmetric/port-dependent mapping) does not — the srflx port is only valid for the STUN server. For ADF filtering on broadband, UPnP opens the port unconditionally. See the CGNAT section under NAT Traversal for the full compatibility matrix. A TURN relay would be needed for phone-as-caller or phone-to-phone calls.
 - **Single device per address**: The persistent DTLS certificate ties a fingerprint to one device. Calling the same address from a different device requires a new identity exchange.
 - **Contact exchange required**: The 1-TX path only works after fingerprints have been exchanged. First-time callers must complete the CXID identity exchange (2 transactions) before making a real call.
