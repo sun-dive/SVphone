@@ -257,7 +257,8 @@ class CallManager extends EventEmitter {
   onIncomingCall(data) {
     // Detect identity exchange: caller sent fingerprint but no SDP
     const callToken = this.signaling.getCallToken(data.callTokenId)
-    const isIdentityExchange = callToken?.callerFingerprint && !callToken?.sdpOffer
+    const sdpContent = typeof callToken?.sdpOffer === 'object' ? callToken?.sdpOffer?.sdp : callToken?.sdpOffer
+    const isIdentityExchange = callToken?.callerFingerprint && !sdpContent
 
     const session = {
       callTokenId: data.callTokenId,
@@ -303,7 +304,8 @@ class CallManager extends EventEmitter {
       const iceLog    = (msg, type = 'info') => this.emit('call:log', { msg, type })
 
       // ── Identity exchange: caller sent fingerprint but no SDP ──
-      const isIdentityExchange = callToken?.callerFingerprint && !callToken?.sdpOffer
+      const sdpContent = typeof callToken?.sdpOffer === 'object' ? callToken?.sdpOffer?.sdp : callToken?.sdpOffer
+      const isIdentityExchange = callToken?.callerFingerprint && !sdpContent
       if (isIdentityExchange) {
         // Save caller's identity to contacts
         window.contactsStore?.save(callToken.caller, callToken.callerFingerprint)

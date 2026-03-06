@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-06 07:59 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 07:59 UTC';});console.log('[SVphone] Build: 2026-03-06 07:59 UTC');
+window.SVPHONE_BUILD="2026-03-06 08:09 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 08:09 UTC';});console.log('[SVphone] Build: 2026-03-06 08:09 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19483,7 +19483,8 @@ class CallManager extends EventEmitter {
   onIncomingCall(data) {
     // Detect identity exchange: caller sent fingerprint but no SDP
     const callToken = this.signaling.getCallToken(data.callTokenId)
-    const isIdentityExchange = callToken?.callerFingerprint && !callToken?.sdpOffer
+    const sdpContent = typeof callToken?.sdpOffer === 'object' ? callToken?.sdpOffer?.sdp : callToken?.sdpOffer
+    const isIdentityExchange = callToken?.callerFingerprint && !sdpContent
 
     const session = {
       callTokenId: data.callTokenId,
@@ -19529,7 +19530,8 @@ class CallManager extends EventEmitter {
       const iceLog    = (msg, type = 'info') => this.emit('call:log', { msg, type })
 
       // ── Identity exchange: caller sent fingerprint but no SDP ──
-      const isIdentityExchange = callToken?.callerFingerprint && !callToken?.sdpOffer
+      const sdpContent = typeof callToken?.sdpOffer === 'object' ? callToken?.sdpOffer?.sdp : callToken?.sdpOffer
+      const isIdentityExchange = callToken?.callerFingerprint && !sdpContent
       if (isIdentityExchange) {
         // Save caller's identity to contacts
         window.contactsStore?.save(callToken.caller, callToken.callerFingerprint)
