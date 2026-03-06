@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-06 09:35 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 09:35 UTC';});console.log('[SVphone] Build: 2026-03-06 09:35 UTC');
+window.SVPHONE_BUILD="2026-03-06 10:05 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 10:05 UTC';});console.log('[SVphone] Build: 2026-03-06 10:05 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19974,11 +19974,11 @@ class PeerConnection extends EventEmitter {
     super()
     this.peerConnections = new Map() // Map<peerId, RTCPeerConnection>
 
-    // ICE configuration: SVphone STUN server for NAT/CGNAT traversal
-    // stun-server.js running on svphone.com reflects each peer's real public UDP IP:port
-    // so ICE can build srflx candidates and punch through carrier NAT.
+    // ICE configuration: STUN server for NAT/CGNAT traversal
+    // Reflects each peer's real public UDP IP:port so ICE can build
+    // srflx candidates and punch through carrier NAT.
     this.iceServers = options.iceServers || [
-      { urls: 'stun:svphone.com:3478' },
+      { urls: 'stun:stun.l.google.com:19302' },
     ]
 
     // Optional TURN server if caller provides one (for restricted networks)

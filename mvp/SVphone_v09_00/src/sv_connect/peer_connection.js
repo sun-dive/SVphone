@@ -12,11 +12,11 @@ class PeerConnection extends EventEmitter {
     super()
     this.peerConnections = new Map() // Map<peerId, RTCPeerConnection>
 
-    // ICE configuration: SVphone STUN server for NAT/CGNAT traversal
-    // stun-server.js running on svphone.com reflects each peer's real public UDP IP:port
-    // so ICE can build srflx candidates and punch through carrier NAT.
+    // ICE configuration: STUN server for NAT/CGNAT traversal
+    // Reflects each peer's real public UDP IP:port so ICE can build
+    // srflx candidates and punch through carrier NAT.
     this.iceServers = options.iceServers || [
-      { urls: 'stun:svphone.com:3478' },
+      { urls: 'stun:stun.l.google.com:19302' },
     ]
 
     // Optional TURN server if caller provides one (for restricted networks)
