@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-06 09:31 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 09:31 UTC';});console.log('[SVphone] Build: 2026-03-06 09:31 UTC');
+window.SVPHONE_BUILD="2026-03-06 09:35 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 09:35 UTC';});console.log('[SVphone] Build: 2026-03-06 09:35 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -23394,8 +23394,6 @@ class PhoneController {
                         localStorage.setItem('svphone_my_identity', identity)
                         const identityEl = document.getElementById('myIdentityStr')
                         if (identityEl) identityEl.value = identity
-                        const addrLabel = document.getElementById('myAddressLabel')
-                        if (addrLabel) addrLabel.textContent = addr
                     }
                     this.refreshContactsList()
                 }).catch(e => {
@@ -23563,10 +23561,13 @@ class PhoneController {
             return
         }
         el.innerHTML = contacts.map(c => `
-            <div style="display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-              <button onclick="app.callContact('${c.address}')" style="flex:1;min-width:0;padding:4px 6px;background:#1f6feb;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.7em;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;"
-                      title="${c.address}">📞 ${c.address}</button>
-              <button onclick="app.removeContact('${c.address}')" style="flex:0 0 auto;padding:2px 5px;background:#da3633;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.65em;line-height:1;">✕</button>
+            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+              <span style="flex:1;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                    title="${c.address}">${c.address.slice(0, 20)}...
+              </span>
+              <span style="color:#3fb950;font-size:0.75em;">✓ 1-TX</span>
+              <button onclick="app.callContact('${c.address}')" style="padding:2px 8px;background:#1f6feb;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;">Call</button>
+              <button onclick="app.removeContact('${c.address}')" style="padding:2px 8px;background:#da3633;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;">✕</button>
             </div>`).join('')
     }
 
