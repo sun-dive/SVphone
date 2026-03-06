@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-06 09:25 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 09:25 UTC';});console.log('[SVphone] Build: 2026-03-06 09:25 UTC');
+window.SVPHONE_BUILD="2026-03-06 09:28 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 09:28 UTC';});console.log('[SVphone] Build: 2026-03-06 09:28 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -23564,9 +23564,9 @@ class PhoneController {
         }
         el.innerHTML = contacts.map(c => `
             <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-              <button onclick="app.callContact('${c.address}')" style="flex:1;padding:4px 8px;background:#1f6feb;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;"
+              <button onclick="app.callContact('${c.address}')" style="flex:1;min-width:0;padding:4px 8px;background:#1f6feb;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;"
                       title="${c.address}">📞 ${c.address}</button>
-              <button onclick="app.removeContact('${c.address}')" style="padding:2px 8px;background:#da3633;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;">✕</button>
+              <button onclick="app.removeContact('${c.address}')" style="flex-shrink:0;padding:2px 6px;background:#da3633;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.7em;">✕</button>
             </div>`).join('')
     }
 
