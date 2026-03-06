@@ -415,8 +415,13 @@ class PhoneController {
         })
 
         this.callManager.on('call:incoming-session', (session) => {
-            this.ui.log(`📞 Incoming call from ${session.caller}`, 'info')
-            this.showIncomingCall(session.caller, session.callTokenId)
+            if (session.identityExchange) {
+                this.ui.log(`Incoming identity exchange request from ${session.caller}`, 'info')
+                this.showIncomingCall(session.caller, session.callTokenId, true)
+            } else {
+                this.ui.log(`Incoming call from ${session.caller}`, 'info')
+                this.showIncomingCall(session.caller, session.callTokenId, false)
+            }
             this.currentCallToken = session.callTokenId
             this.currentRole = 'callee'
         })
@@ -464,6 +469,24 @@ class PhoneController {
                     sessionKey: session.calleeSessionKey
                 }
             }
+        })
+
+        this.callManager.on('call:identity-exchanged', (data) => {
+            this.ui.stopOutgoingRing()
+            this.ui.stopRingtone()
+            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
+            if (this._incomingTimeout) { clearTimeout(this._incomingTimeout); this._incomingTimeout = null }
+            document.getElementById('incomingCall').style.display = 'none'
+            document.getElementById('acceptBtn').style.display = 'none'
+            document.getElementById('rejectBtn').style.display = 'none'
+            if (data.role === 'caller') {
+                this.ui.log(`✓ Contact saved for ${data.address}! You can now call them.`, 'success')
+            } else {
+                this.ui.log(`✓ Identity exchanged with ${data.address}. Contact saved.`, 'success')
+            }
+            this.ui.updateCallStatus('ended', 'Identity exchanged')
+            this.ui.updateCallButtonStatus('idle')
+            this.refreshContactsList()
         })
 
         this.callManager.on('call:connected', () => {
@@ -675,10 +698,10 @@ class PhoneController {
     /**
      * Show incoming call UI
      */
-    showIncomingCall(caller, callTokenId) {
-        console.debug(`[RECV] ✅ INCOMING CALL DETECTED! Caller: ${caller}`)
+    showIncomingCall(caller, callTokenId, identityExchange = false) {
+        console.debug(`[RECV] ✅ INCOMING ${identityExchange ? 'IDENTITY EXCHANGE' : 'CALL'} DETECTED! Caller: ${caller}`)
         this.currentCallToken = callTokenId
-        this.ui.showIncomingCall(caller)
+        this.ui.showIncomingCall(caller, identityExchange)
 
         // Auto-return to standby if not answered within 3 minutes
         this._incomingTimeout = setTimeout(() => {

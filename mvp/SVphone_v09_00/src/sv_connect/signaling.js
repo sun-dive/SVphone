@@ -276,7 +276,8 @@ class CallSignaling {
    * @private
    */
   handleCallResponse(callId, inscription, callInfo) {
-    if (!callInfo.sdpAnswer) return
+    // Accept ANS tokens with sdpAnswer OR with callerFingerprint (identity exchange)
+    if (!callInfo.sdpAnswer && !callInfo.callerFingerprint) return
 
     this.callTokens.set(callId, { callTokenId: callId, txId: callId, status: 'answered' })
 
@@ -290,6 +291,7 @@ class CallSignaling {
       calleePort: callInfo.senderPort,
       calleeSessionKey: callInfo.sessionKey,
       sdpAnswer: callInfo.sdpAnswer,
+      callerFingerprint: callInfo.callerFingerprint,
       codec: callInfo.codec,
       quality: callInfo.quality,
       mediaTypes: callInfo.mediaTypes,

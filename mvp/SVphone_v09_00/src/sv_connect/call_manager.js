@@ -97,6 +97,56 @@ class CallManager extends EventEmitter {
    */
   async initiateCall(calleeAddress, options = {}) {
     try {
+      const calleeFingerprint = window.contactsStore?.get(calleeAddress) ?? null
+      const myFingerprint     = this.peerConnection._persistentCertFingerprint ?? null
+
+      if (!myFingerprint) {
+        throw new Error('Persistent DTLS cert not yet loaded — try again in a moment.')
+      }
+
+      // ── Identity exchange: callee not in contacts ──
+      if (!calleeFingerprint) {
+        this.emit('call:log', { msg: '[Identity] Callee not in contacts — sending identity exchange...', type: 'info' })
+
+        const sessionKey = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+        const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
+          codec:   'opus',
+          quality: 'hd',
+          mediaTypes: ['audio']
+        })
+        callToken.sdpOffer          = ''   // empty SDP signals identity exchange
+        callToken.callerFingerprint = myFingerprint
+        callToken.tokenPrefix       = 'CXID'  // contact exchange ID
+
+        const broadcastResult = await this.signaling.broadcastCallToken(callToken, options.mintTokenFn)
+
+        const session = {
+          callTokenId:      broadcastResult.callTokenId,
+          txId:             broadcastResult.txId,
+          calleeAddress,
+          role:             'caller',
+          status:           'identity-exchange',
+          createdAt:        Date.now(),
+          sessionKey,
+          iceCreds:         null,
+          mediaOffer:       null,
+          mediaAnswer:      null,
+          iceCandidates:    [],
+          stats:            {},
+          oneTxMode:        false,
+          identityExchange: true,
+        }
+
+        this.activeCallSessions.set(broadcastResult.callTokenId, session)
+        this.emit('call:initiated-session', session)
+        this.emit('call:log', { msg: '[Identity] Exchange request sent — waiting for response...', type: 'info' })
+        console.log('[CallManager] Identity exchange initiated to:', calleeAddress)
+
+        return session
+      }
+
+      // ── 1-TX call: callee fingerprint is in contacts ──
+
       // Initialize media stream, or re-initialize if video requirement changed
       const needsVideo = options.video !== false
       const hasVideo   = (this.peerConnection.mediaStream?.getVideoTracks().length ?? 0) > 0
@@ -109,21 +159,6 @@ class CallManager extends EventEmitter {
           audio: options.audio !== false,
           video: needsVideo
         })
-      }
-
-      // Check 1-TX prerequisites: callee fingerprint in contacts + persistent cert loaded
-      const calleeFingerprint = window.contactsStore?.get(calleeAddress) ?? null
-      const myFingerprint     = this.peerConnection._persistentCertFingerprint ?? null
-
-      if (!calleeFingerprint) {
-        throw new Error(
-          'Callee not found in contacts.\n' +
-          'Exchange identity strings first: share your identity from the wallet page,\n' +
-          'then paste the callee\'s identity string into your contacts.'
-        )
-      }
-      if (!myFingerprint) {
-        throw new Error('Persistent DTLS cert not yet loaded — try again in a moment.')
       }
 
       // Generate ephemeral session key
@@ -220,21 +255,26 @@ class CallManager extends EventEmitter {
    * @private
    */
   onIncomingCall(data) {
+    // Detect identity exchange: caller sent fingerprint but no SDP
+    const callToken = this.signaling.getCallToken(data.callTokenId)
+    const isIdentityExchange = callToken?.callerFingerprint && !callToken?.sdpOffer
+
     const session = {
       callTokenId: data.callTokenId,
       caller: data.caller,
       role: 'callee',
-      status: 'incoming', // incoming → ringing → accepting → connecting → connected → ended
+      status: 'incoming',
       createdAt: Date.now(),
       mediaOffer: null,
       mediaAnswer: null,
       iceCandidates: [],
-      stats: {}
+      stats: {},
+      identityExchange: isIdentityExchange,
     }
 
     this.activeCallSessions.set(data.callTokenId, session)
     this.emit('call:incoming-session', session)
-    console.log('[CallManager] Incoming call from:', data.caller)
+    console.log('[CallManager] Incoming', isIdentityExchange ? 'identity exchange' : 'call', 'from:', data.caller)
   }
 
   /**
@@ -259,6 +299,51 @@ class CallManager extends EventEmitter {
       const session = this.activeCallSessions.get(callTokenId)
       if (!session) throw new Error(`Call session not found: ${callTokenId}`)
 
+      const callToken = this.signaling.getCallToken(callTokenId)
+      const iceLog    = (msg, type = 'info') => this.emit('call:log', { msg, type })
+
+      // ── Identity exchange: caller sent fingerprint but no SDP ──
+      const isIdentityExchange = callToken?.callerFingerprint && !callToken?.sdpOffer
+      if (isIdentityExchange) {
+        // Save caller's identity to contacts
+        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint)
+        iceLog(`[Identity] Saved contact for ${callToken.caller}`, 'success')
+
+        // Broadcast ANS with our fingerprint
+        const myFingerprint = this.peerConnection._persistentCertFingerprint ?? null
+        if (myFingerprint && options.broadcastAnswerFn) {
+          try {
+            await options.broadcastAnswerFn(callTokenId, callToken.caller, {
+              sdpAnswer:        '',
+              senderIp:         this.signaling.myIp || '0.0.0.0',
+              senderPort:       this.signaling.myPort || 0,
+              sessionKey:       callToken.sessionKey || '',
+              codec:            'opus',
+              quality:          'hd',
+              mediaTypes:       ['audio'],
+              callee:           this.signaling.myAddress,
+              calleeFingerprint: myFingerprint,
+            })
+            iceLog('[Identity] Your identity sent back to caller', 'success')
+          } catch (err) {
+            console.warn('[CallManager] Identity ANS broadcast failed:', err.message)
+          }
+        }
+
+        session.status = 'ended'
+        session.identityExchange = true
+        this.emit('call:identity-exchanged', {
+          callTokenId,
+          address:     callToken.caller,
+          fingerprint: callToken.callerFingerprint,
+          role:        'callee',
+        })
+        console.log('[CallManager] Identity exchange accepted — caller fingerprint saved')
+        return session
+      }
+
+      // ── Normal call accept flow ──
+
       if (!this.peerConnection.mediaStream) {
         await this.peerConnection.initializeMediaStream({
           audio: options.audio !== false,
@@ -268,9 +353,6 @@ class CallManager extends EventEmitter {
 
       session.status = 'accepting'
       this.signaling.acceptCall(callTokenId, {})
-
-      const callToken = this.signaling.getCallToken(callTokenId)
-      const iceLog    = (msg, type = 'info') => this.emit('call:log', { msg, type })
 
       if (!callToken?.sdpOffer) {
         session.status = 'connecting'
@@ -394,6 +476,21 @@ class CallManager extends EventEmitter {
     }
 
     if (session) {
+      // Identity exchange: save callee's fingerprint and end
+      if (session.identityExchange && data.callerFingerprint) {
+        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint)
+        session.status = 'ended'
+        this.emit('call:identity-exchanged', {
+          callTokenId: session.callTokenId,
+          address:     session.calleeAddress,
+          fingerprint: data.callerFingerprint,
+          role:        'caller',
+        })
+        this.emit('call:log', { msg: `[Identity] Contact saved for ${session.calleeAddress}! You can now call them.`, type: 'success' })
+        console.log('[CallManager] Identity exchange complete — callee fingerprint saved')
+        return
+      }
+
       session.status = 'answered'
       this.emit('call:answered-session', data)
       console.log('[CallManager] Call answered')

@@ -296,8 +296,9 @@ class CallTokenManager {
       const attrs = this.encodeCallAttributes(callToken)
       const callerIdent = callToken.caller?.slice(0, 5) || 'unkn'
 
+      const prefix = callToken.tokenPrefix || 'CALL'
       const result = await window.tokenBuilder.createCallSignalTx(
-        `CALL-${callerIdent}`,
+        `${prefix}-${callerIdent}`,
         callerHash + calleeHash,
         attrs,
         callToken.callee,
@@ -309,6 +310,52 @@ class CallTokenManager {
       return { txId: result.txId, tokenId: result.txId }
     } catch (err) {
       this.log(`Call signal failed: ${err.message}`, 'error')
+      throw err
+    }
+  }
+
+  /**
+   * Broadcast an ANS signal back to the caller.
+   * Same TX structure as CALL but with ANS- prefix.
+   * The callerFingerprint field carries the callee's fingerprint in this direction.
+   * @param {string} callerAddress - Caller's BSV address (recipient)
+   * @param {Object} answerData - {callee, senderIp, senderPort, sessionKey, codec, quality, mediaTypes, sdpAnswer, calleeFingerprint}
+   * @returns {Promise<{txId: string}>}
+   */
+  async broadcastCallAnswer(callerAddress, answerData) {
+    this.log('Sending answer signal to caller...', 'info')
+    try {
+      const callerHash = await this.hashAddress(callerAddress)
+      const calleeHash = await this.hashAddress(answerData.callee || '')
+      const attrs = this.encodeCallAttributes({
+        senderIp:    answerData.senderIp || '0.0.0.0',
+        senderPort:  answerData.senderPort || 0,
+        sessionKey:  answerData.sessionKey || '',
+        codec:       answerData.codec || 'opus',
+        quality:     answerData.quality || 'hd',
+        mediaTypes:  answerData.mediaTypes || ['audio'],
+        sdpAnswer:   answerData.sdpAnswer || '',
+        caller:      callerAddress,
+        callee:      answerData.callee || '',
+        senderIp4:   answerData.senderIp4 || null,
+        senderIp6:   answerData.senderIp6 || null,
+        callerFingerprint: answerData.calleeFingerprint || '',
+      })
+      const calleeIdent = answerData.callee?.slice(0, 5) || 'unkn'
+
+      const result = await window.tokenBuilder.createCallSignalTx(
+        `ANS-${calleeIdent}`,
+        callerHash + calleeHash,
+        attrs,
+        callerAddress,
+      )
+
+      this.log(`✓ Answer sent: ${result.txId}`, 'success')
+      this.log(`https://whatsonchain.com/tx/${result.txId}`, 'info')
+
+      return { txId: result.txId }
+    } catch (err) {
+      this.log(`Answer signal failed: ${err.message}`, 'error')
       throw err
     }
   }

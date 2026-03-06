@@ -58,6 +58,19 @@ class CallHandlers {
             })
 
             this.app.currentCallToken = session.callTokenId
+
+            // Identity exchange: no media, just waiting for ANS with fingerprint
+            if (session.identityExchange) {
+                this.ui.log('Exchanging identities — waiting for response...', 'info')
+                this.ui.updateCallStatus('identity-exchange', 'Exchanging identities...')
+                this.app._unansweredTimeout = setTimeout(() => {
+                    this.ui.log('⏱ No response — identity exchange timed out', 'warning')
+                    this.ui.updateCallStatus('ended', 'No response')
+                    this.ui.updateCallButtonStatus('idle')
+                }, 3 * 60 * 1000)
+                return
+            }
+
             this.ui.log('✓ Call initiated successfully', 'success')
             this.app._unansweredTimeout = setTimeout(() => {
                 this.ui.stopOutgoingRing()
@@ -68,11 +81,7 @@ class CallHandlers {
 
         } catch (error) {
             const errorMsg = error.message || error.toString()
-            if (errorMsg.includes('Callee not found in contacts') || errorMsg.includes('Exchange identity')) {
-                this.ui.log(`⚠️  ${errorMsg}`, 'error')
-                this.ui.updateCallButtonStatus('idle')
-                return
-            } else if (errorMsg.includes('Persistent DTLS cert not yet loaded')) {
+            if (errorMsg.includes('Persistent DTLS cert not yet loaded')) {
                 this.ui.log(`⚠️  ${errorMsg}`, 'error')
                 this.ui.updateCallButtonStatus('idle')
                 return
@@ -190,7 +199,7 @@ class CallHandlers {
                 return result
             }
 
-            await this.app.callManager.acceptCall(callTokenId, {
+            const result = await this.app.callManager.acceptCall(callTokenId, {
                 audio: true,
                 video: true,
                 broadcastAnswerFn,
@@ -200,8 +209,13 @@ class CallHandlers {
             document.getElementById('incomingCall').style.display = 'none'
             document.getElementById('acceptBtn').style.display = 'none'
             document.getElementById('rejectBtn').style.display = 'none'
-            document.getElementById('endCallBtn').style.display = 'inline-block'
 
+            // Identity exchange ends immediately — no ongoing call
+            if (result?.identityExchange) {
+                return
+            }
+
+            document.getElementById('endCallBtn').style.display = 'inline-block'
             this.ui.log('✓ Call accepted', 'success')
         } catch (error) {
             this.ui.log(`Error accepting call: ${error.message}`, 'error')

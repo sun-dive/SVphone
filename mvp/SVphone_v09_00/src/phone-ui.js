@@ -181,14 +181,22 @@ class PhoneUI {
     /**
      * Show incoming call UI
      */
-    showIncomingCall(caller) {
-        console.debug(`[RECV] ✅ INCOMING CALL DETECTED! Caller: ${caller}`)
+    showIncomingCall(caller, identityExchange = false) {
+        console.debug(`[RECV] ✅ INCOMING ${identityExchange ? 'IDENTITY EXCHANGE' : 'CALL'} DETECTED! Caller: ${caller}`)
         this.displayElements.incomingCall.style.display = 'block'
         this.displayElements.incomingFrom.textContent = caller
         this.buttonElements.acceptBtn.style.display = 'inline-block'
         this.buttonElements.rejectBtn.style.display = 'inline-block'
-        this.updateCallStatus('ringing', '📞 Incoming call...')
-        this.log(`📞 Incoming call from: ${caller}`, 'info')
+        const titleEl = document.getElementById('incomingTitle')
+        if (identityExchange) {
+            if (titleEl) titleEl.textContent = 'Identity Exchange Request'
+            this.updateCallStatus('ringing', 'Identity exchange request')
+            this.log(`Identity exchange request from: ${caller}`, 'info')
+        } else {
+            if (titleEl) titleEl.textContent = 'Incoming Call'
+            this.updateCallStatus('ringing', 'Incoming call...')
+            this.log(`Incoming call from: ${caller}`, 'info')
+        }
         // Pre-fill callee field so user can call back after the call ends
         const calleeField = this.addressElements.calleeAddress
         if (calleeField && !calleeField.value) calleeField.value = caller

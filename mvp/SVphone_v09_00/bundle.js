@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-06 06:31 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 06:31 UTC';});console.log('[SVphone] Build: 2026-03-06 06:31 UTC');
+window.SVPHONE_BUILD="2026-03-06 07:50 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 07:50 UTC';});console.log('[SVphone] Build: 2026-03-06 07:50 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -17982,7 +17982,8 @@ class CallSignaling {
    * @private
    */
   handleCallResponse(callId, inscription, callInfo) {
-    if (!callInfo.sdpAnswer) return
+    // Accept ANS tokens with sdpAnswer OR with callerFingerprint (identity exchange)
+    if (!callInfo.sdpAnswer && !callInfo.callerFingerprint) return
 
     this.callTokens.set(callId, { callTokenId: callId, txId: callId, status: 'answered' })
 
@@ -17996,6 +17997,7 @@ class CallSignaling {
       calleePort: callInfo.senderPort,
       calleeSessionKey: callInfo.sessionKey,
       sdpAnswer: callInfo.sdpAnswer,
+      callerFingerprint: callInfo.callerFingerprint,
       codec: callInfo.codec,
       quality: callInfo.quality,
       mediaTypes: callInfo.mediaTypes,
@@ -19321,6 +19323,56 @@ class CallManager extends EventEmitter {
    */
   async initiateCall(calleeAddress, options = {}) {
     try {
+      const calleeFingerprint = window.contactsStore?.get(calleeAddress) ?? null
+      const myFingerprint     = this.peerConnection._persistentCertFingerprint ?? null
+
+      if (!myFingerprint) {
+        throw new Error('Persistent DTLS cert not yet loaded — try again in a moment.')
+      }
+
+      // ── Identity exchange: callee not in contacts ──
+      if (!calleeFingerprint) {
+        this.emit('call:log', { msg: '[Identity] Callee not in contacts — sending identity exchange...', type: 'info' })
+
+        const sessionKey = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+        const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
+          codec:   'opus',
+          quality: 'hd',
+          mediaTypes: ['audio']
+        })
+        callToken.sdpOffer          = ''   // empty SDP signals identity exchange
+        callToken.callerFingerprint = myFingerprint
+        callToken.tokenPrefix       = 'CXID'  // contact exchange ID
+
+        const broadcastResult = await this.signaling.broadcastCallToken(callToken, options.mintTokenFn)
+
+        const session = {
+          callTokenId:      broadcastResult.callTokenId,
+          txId:             broadcastResult.txId,
+          calleeAddress,
+          role:             'caller',
+          status:           'identity-exchange',
+          createdAt:        Date.now(),
+          sessionKey,
+          iceCreds:         null,
+          mediaOffer:       null,
+          mediaAnswer:      null,
+          iceCandidates:    [],
+          stats:            {},
+          oneTxMode:        false,
+          identityExchange: true,
+        }
+
+        this.activeCallSessions.set(broadcastResult.callTokenId, session)
+        this.emit('call:initiated-session', session)
+        this.emit('call:log', { msg: '[Identity] Exchange request sent — waiting for response...', type: 'info' })
+        console.log('[CallManager] Identity exchange initiated to:', calleeAddress)
+
+        return session
+      }
+
+      // ── 1-TX call: callee fingerprint is in contacts ──
+
       // Initialize media stream, or re-initialize if video requirement changed
       const needsVideo = options.video !== false
       const hasVideo   = (this.peerConnection.mediaStream?.getVideoTracks().length ?? 0) > 0
@@ -19333,21 +19385,6 @@ class CallManager extends EventEmitter {
           audio: options.audio !== false,
           video: needsVideo
         })
-      }
-
-      // Check 1-TX prerequisites: callee fingerprint in contacts + persistent cert loaded
-      const calleeFingerprint = window.contactsStore?.get(calleeAddress) ?? null
-      const myFingerprint     = this.peerConnection._persistentCertFingerprint ?? null
-
-      if (!calleeFingerprint) {
-        throw new Error(
-          'Callee not found in contacts.\n' +
-          'Exchange identity strings first: share your identity from the wallet page,\n' +
-          'then paste the callee\'s identity string into your contacts.'
-        )
-      }
-      if (!myFingerprint) {
-        throw new Error('Persistent DTLS cert not yet loaded — try again in a moment.')
       }
 
       // Generate ephemeral session key
@@ -19444,21 +19481,26 @@ class CallManager extends EventEmitter {
    * @private
    */
   onIncomingCall(data) {
+    // Detect identity exchange: caller sent fingerprint but no SDP
+    const callToken = this.signaling.getCallToken(data.callTokenId)
+    const isIdentityExchange = callToken?.callerFingerprint && !callToken?.sdpOffer
+
     const session = {
       callTokenId: data.callTokenId,
       caller: data.caller,
       role: 'callee',
-      status: 'incoming', // incoming → ringing → accepting → connecting → connected → ended
+      status: 'incoming',
       createdAt: Date.now(),
       mediaOffer: null,
       mediaAnswer: null,
       iceCandidates: [],
-      stats: {}
+      stats: {},
+      identityExchange: isIdentityExchange,
     }
 
     this.activeCallSessions.set(data.callTokenId, session)
     this.emit('call:incoming-session', session)
-    console.log('[CallManager] Incoming call from:', data.caller)
+    console.log('[CallManager] Incoming', isIdentityExchange ? 'identity exchange' : 'call', 'from:', data.caller)
   }
 
   /**
@@ -19483,6 +19525,51 @@ class CallManager extends EventEmitter {
       const session = this.activeCallSessions.get(callTokenId)
       if (!session) throw new Error(`Call session not found: ${callTokenId}`)
 
+      const callToken = this.signaling.getCallToken(callTokenId)
+      const iceLog    = (msg, type = 'info') => this.emit('call:log', { msg, type })
+
+      // ── Identity exchange: caller sent fingerprint but no SDP ──
+      const isIdentityExchange = callToken?.callerFingerprint && !callToken?.sdpOffer
+      if (isIdentityExchange) {
+        // Save caller's identity to contacts
+        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint)
+        iceLog(`[Identity] Saved contact for ${callToken.caller}`, 'success')
+
+        // Broadcast ANS with our fingerprint
+        const myFingerprint = this.peerConnection._persistentCertFingerprint ?? null
+        if (myFingerprint && options.broadcastAnswerFn) {
+          try {
+            await options.broadcastAnswerFn(callTokenId, callToken.caller, {
+              sdpAnswer:        '',
+              senderIp:         this.signaling.myIp || '0.0.0.0',
+              senderPort:       this.signaling.myPort || 0,
+              sessionKey:       callToken.sessionKey || '',
+              codec:            'opus',
+              quality:          'hd',
+              mediaTypes:       ['audio'],
+              callee:           this.signaling.myAddress,
+              calleeFingerprint: myFingerprint,
+            })
+            iceLog('[Identity] Your identity sent back to caller', 'success')
+          } catch (err) {
+            console.warn('[CallManager] Identity ANS broadcast failed:', err.message)
+          }
+        }
+
+        session.status = 'ended'
+        session.identityExchange = true
+        this.emit('call:identity-exchanged', {
+          callTokenId,
+          address:     callToken.caller,
+          fingerprint: callToken.callerFingerprint,
+          role:        'callee',
+        })
+        console.log('[CallManager] Identity exchange accepted — caller fingerprint saved')
+        return session
+      }
+
+      // ── Normal call accept flow ──
+
       if (!this.peerConnection.mediaStream) {
         await this.peerConnection.initializeMediaStream({
           audio: options.audio !== false,
@@ -19492,9 +19579,6 @@ class CallManager extends EventEmitter {
 
       session.status = 'accepting'
       this.signaling.acceptCall(callTokenId, {})
-
-      const callToken = this.signaling.getCallToken(callTokenId)
-      const iceLog    = (msg, type = 'info') => this.emit('call:log', { msg, type })
 
       if (!callToken?.sdpOffer) {
         session.status = 'connecting'
@@ -19618,6 +19702,21 @@ class CallManager extends EventEmitter {
     }
 
     if (session) {
+      // Identity exchange: save callee's fingerprint and end
+      if (session.identityExchange && data.callerFingerprint) {
+        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint)
+        session.status = 'ended'
+        this.emit('call:identity-exchanged', {
+          callTokenId: session.callTokenId,
+          address:     session.calleeAddress,
+          fingerprint: data.callerFingerprint,
+          role:        'caller',
+        })
+        this.emit('call:log', { msg: `[Identity] Contact saved for ${session.calleeAddress}! You can now call them.`, type: 'success' })
+        console.log('[CallManager] Identity exchange complete — callee fingerprint saved')
+        return
+      }
+
       session.status = 'answered'
       this.emit('call:answered-session', data)
       console.log('[CallManager] Call answered')
@@ -22161,8 +22260,9 @@ class CallTokenManager {
       const attrs = this.encodeCallAttributes(callToken)
       const callerIdent = callToken.caller?.slice(0, 5) || 'unkn'
 
+      const prefix = callToken.tokenPrefix || 'CALL'
       const result = await window.tokenBuilder.createCallSignalTx(
-        `CALL-${callerIdent}`,
+        `${prefix}-${callerIdent}`,
         callerHash + calleeHash,
         attrs,
         callToken.callee,
@@ -22174,6 +22274,52 @@ class CallTokenManager {
       return { txId: result.txId, tokenId: result.txId }
     } catch (err) {
       this.log(`Call signal failed: ${err.message}`, 'error')
+      throw err
+    }
+  }
+
+  /**
+   * Broadcast an ANS signal back to the caller.
+   * Same TX structure as CALL but with ANS- prefix.
+   * The callerFingerprint field carries the callee's fingerprint in this direction.
+   * @param {string} callerAddress - Caller's BSV address (recipient)
+   * @param {Object} answerData - {callee, senderIp, senderPort, sessionKey, codec, quality, mediaTypes, sdpAnswer, calleeFingerprint}
+   * @returns {Promise<{txId: string}>}
+   */
+  async broadcastCallAnswer(callerAddress, answerData) {
+    this.log('Sending answer signal to caller...', 'info')
+    try {
+      const callerHash = await this.hashAddress(callerAddress)
+      const calleeHash = await this.hashAddress(answerData.callee || '')
+      const attrs = this.encodeCallAttributes({
+        senderIp:    answerData.senderIp || '0.0.0.0',
+        senderPort:  answerData.senderPort || 0,
+        sessionKey:  answerData.sessionKey || '',
+        codec:       answerData.codec || 'opus',
+        quality:     answerData.quality || 'hd',
+        mediaTypes:  answerData.mediaTypes || ['audio'],
+        sdpAnswer:   answerData.sdpAnswer || '',
+        caller:      callerAddress,
+        callee:      answerData.callee || '',
+        senderIp4:   answerData.senderIp4 || null,
+        senderIp6:   answerData.senderIp6 || null,
+        callerFingerprint: answerData.calleeFingerprint || '',
+      })
+      const calleeIdent = answerData.callee?.slice(0, 5) || 'unkn'
+
+      const result = await window.tokenBuilder.createCallSignalTx(
+        `ANS-${calleeIdent}`,
+        callerHash + calleeHash,
+        attrs,
+        callerAddress,
+      )
+
+      this.log(`✓ Answer sent: ${result.txId}`, 'success')
+      this.log(`https://whatsonchain.com/tx/${result.txId}`, 'info')
+
+      return { txId: result.txId }
+    } catch (err) {
+      this.log(`Answer signal failed: ${err.message}`, 'error')
       throw err
     }
   }
@@ -22373,14 +22519,22 @@ class PhoneUI {
     /**
      * Show incoming call UI
      */
-    showIncomingCall(caller) {
-        console.debug(`[RECV] ✅ INCOMING CALL DETECTED! Caller: ${caller}`)
+    showIncomingCall(caller, identityExchange = false) {
+        console.debug(`[RECV] ✅ INCOMING ${identityExchange ? 'IDENTITY EXCHANGE' : 'CALL'} DETECTED! Caller: ${caller}`)
         this.displayElements.incomingCall.style.display = 'block'
         this.displayElements.incomingFrom.textContent = caller
         this.buttonElements.acceptBtn.style.display = 'inline-block'
         this.buttonElements.rejectBtn.style.display = 'inline-block'
-        this.updateCallStatus('ringing', '📞 Incoming call...')
-        this.log(`📞 Incoming call from: ${caller}`, 'info')
+        const titleEl = document.getElementById('incomingTitle')
+        if (identityExchange) {
+            if (titleEl) titleEl.textContent = 'Identity Exchange Request'
+            this.updateCallStatus('ringing', 'Identity exchange request')
+            this.log(`Identity exchange request from: ${caller}`, 'info')
+        } else {
+            if (titleEl) titleEl.textContent = 'Incoming Call'
+            this.updateCallStatus('ringing', 'Incoming call...')
+            this.log(`Incoming call from: ${caller}`, 'info')
+        }
         // Pre-fill callee field so user can call back after the call ends
         const calleeField = this.addressElements.calleeAddress
         if (calleeField && !calleeField.value) calleeField.value = caller
@@ -22664,6 +22818,19 @@ class CallHandlers {
             })
 
             this.app.currentCallToken = session.callTokenId
+
+            // Identity exchange: no media, just waiting for ANS with fingerprint
+            if (session.identityExchange) {
+                this.ui.log('Exchanging identities — waiting for response...', 'info')
+                this.ui.updateCallStatus('identity-exchange', 'Exchanging identities...')
+                this.app._unansweredTimeout = setTimeout(() => {
+                    this.ui.log('⏱ No response — identity exchange timed out', 'warning')
+                    this.ui.updateCallStatus('ended', 'No response')
+                    this.ui.updateCallButtonStatus('idle')
+                }, 3 * 60 * 1000)
+                return
+            }
+
             this.ui.log('✓ Call initiated successfully', 'success')
             this.app._unansweredTimeout = setTimeout(() => {
                 this.ui.stopOutgoingRing()
@@ -22674,11 +22841,7 @@ class CallHandlers {
 
         } catch (error) {
             const errorMsg = error.message || error.toString()
-            if (errorMsg.includes('Callee not found in contacts') || errorMsg.includes('Exchange identity')) {
-                this.ui.log(`⚠️  ${errorMsg}`, 'error')
-                this.ui.updateCallButtonStatus('idle')
-                return
-            } else if (errorMsg.includes('Persistent DTLS cert not yet loaded')) {
+            if (errorMsg.includes('Persistent DTLS cert not yet loaded')) {
                 this.ui.log(`⚠️  ${errorMsg}`, 'error')
                 this.ui.updateCallButtonStatus('idle')
                 return
@@ -22796,7 +22959,7 @@ class CallHandlers {
                 return result
             }
 
-            await this.app.callManager.acceptCall(callTokenId, {
+            const result = await this.app.callManager.acceptCall(callTokenId, {
                 audio: true,
                 video: true,
                 broadcastAnswerFn,
@@ -22806,8 +22969,13 @@ class CallHandlers {
             document.getElementById('incomingCall').style.display = 'none'
             document.getElementById('acceptBtn').style.display = 'none'
             document.getElementById('rejectBtn').style.display = 'none'
-            document.getElementById('endCallBtn').style.display = 'inline-block'
 
+            // Identity exchange ends immediately — no ongoing call
+            if (result?.identityExchange) {
+                return
+            }
+
+            document.getElementById('endCallBtn').style.display = 'inline-block'
             this.ui.log('✓ Call accepted', 'success')
         } catch (error) {
             this.ui.log(`Error accepting call: ${error.message}`, 'error')
@@ -23511,8 +23679,13 @@ class PhoneController {
         })
 
         this.callManager.on('call:incoming-session', (session) => {
-            this.ui.log(`📞 Incoming call from ${session.caller}`, 'info')
-            this.showIncomingCall(session.caller, session.callTokenId)
+            if (session.identityExchange) {
+                this.ui.log(`Incoming identity exchange request from ${session.caller}`, 'info')
+                this.showIncomingCall(session.caller, session.callTokenId, true)
+            } else {
+                this.ui.log(`Incoming call from ${session.caller}`, 'info')
+                this.showIncomingCall(session.caller, session.callTokenId, false)
+            }
             this.currentCallToken = session.callTokenId
             this.currentRole = 'callee'
         })
@@ -23560,6 +23733,24 @@ class PhoneController {
                     sessionKey: session.calleeSessionKey
                 }
             }
+        })
+
+        this.callManager.on('call:identity-exchanged', (data) => {
+            this.ui.stopOutgoingRing()
+            this.ui.stopRingtone()
+            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
+            if (this._incomingTimeout) { clearTimeout(this._incomingTimeout); this._incomingTimeout = null }
+            document.getElementById('incomingCall').style.display = 'none'
+            document.getElementById('acceptBtn').style.display = 'none'
+            document.getElementById('rejectBtn').style.display = 'none'
+            if (data.role === 'caller') {
+                this.ui.log(`✓ Contact saved for ${data.address}! You can now call them.`, 'success')
+            } else {
+                this.ui.log(`✓ Identity exchanged with ${data.address}. Contact saved.`, 'success')
+            }
+            this.ui.updateCallStatus('ended', 'Identity exchanged')
+            this.ui.updateCallButtonStatus('idle')
+            this.refreshContactsList()
         })
 
         this.callManager.on('call:connected', () => {
@@ -23771,10 +23962,10 @@ class PhoneController {
     /**
      * Show incoming call UI
      */
-    showIncomingCall(caller, callTokenId) {
-        console.debug(`[RECV] ✅ INCOMING CALL DETECTED! Caller: ${caller}`)
+    showIncomingCall(caller, callTokenId, identityExchange = false) {
+        console.debug(`[RECV] ✅ INCOMING ${identityExchange ? 'IDENTITY EXCHANGE' : 'CALL'} DETECTED! Caller: ${caller}`)
         this.currentCallToken = callTokenId
-        this.ui.showIncomingCall(caller)
+        this.ui.showIncomingCall(caller, identityExchange)
 
         // Auto-return to standby if not answered within 3 minutes
         this._incomingTimeout = setTimeout(() => {
