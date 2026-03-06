@@ -536,8 +536,17 @@ class PhoneController {
                             break
                         }
 
-                        console.log(`[Poll] ${txId.slice(0,12)}… signal=${signal ? JSON.stringify(signal).slice(0,80) : 'null'}`)
                         if (signal) {
+                            // UI-visible log so user can verify decoded token data
+                            const sdpStr = signal.sdp ? (typeof signal.sdp === 'object' ? signal.sdp.sdp : signal.sdp) : ''
+                            const sdpLen = sdpStr?.length ?? 0
+                            const sdpCands = (sdpStr.match(/a=candidate:/g) || []).length
+                            this.ui.log(
+                                `[Token] ${signal.type.toUpperCase()}: ip4=${signal.ip4 ?? 'none'} ` +
+                                `ip6=${signal.ip6 ? signal.ip6.slice(0,16)+'…' : 'none'} ` +
+                                `port=${signal.port ?? 0} sdp=${sdpLen}B (${sdpCands} cands)`,
+                                'info'
+                            )
                             results.push({ txId, inscription: signal })
                         }
                     } catch (e) {

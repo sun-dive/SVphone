@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-06 00:21 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 00:21 UTC';});console.log('[SVphone] Build: 2026-03-06 00:21 UTC');
+window.SVPHONE_BUILD="2026-03-06 01:01 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 01:01 UTC';});console.log('[SVphone] Build: 2026-03-06 01:01 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19124,6 +19124,7 @@ class CallManager extends EventEmitter {
             callToken.sdpOffer.sdp
           )
           session.mediaAnswer = answer
+          iceLog(`[ICE] CALL SDP: ${callerCandidates.length} usable candidates (port-9 excluded)`)
           console.debug('[CallManager] ✓ Deferred answer prepared, gathering candidates...')
 
           // Broadcast ANS TX immediately after gathering (no 5s wait for STUN srflx we don't have)
@@ -20047,8 +20048,12 @@ class PeerConnection extends EventEmitter {
     let sdpMid = null
     let sdpMLineIndex = -1
 
-    // Log a summary of all candidate lines in the SDP so we can see what the browser gathered
-    const allCandLines = lines.filter(l => l.startsWith('a=candidate:'))
+    // Log a summary of candidate lines in the SDP (exclude port-9 bundle-only placeholders)
+    const allCandLines = lines.filter(l => {
+      if (!l.startsWith('a=candidate:')) return false
+      const p = l.split(' '); const port = parseInt(p[5])
+      return port !== 9 && port !== 0
+    })
     log(`[ICE] Remote SDP: ${allCandLines.length} candidates`)
     for (const cl of allCandLines) {
       const p = cl.slice('a=candidate:'.length).split(' ')
@@ -21501,21 +21506,17 @@ class CallTokenManager {
       bytes.push(0x01)
 
       // IP address and port
+      // Format: 1 byte type (0=IPv4, 1=IPv6) + 4 or 16 bytes IP (full, no bit masking)
       const ip = callToken.senderIp || '0.0.0.0'
       const port = callToken.senderPort
       const isIPv6 = ip.includes(':')
-      const ipBits = isIPv6 ? 1 : 0
 
       if (!isIPv6) {
-        const parts = ip.split('.').map(p => parseInt(p, 10))
-        bytes.push((ipBits << 7) | (parts[0] & 0x7F))
-        bytes.push(parts[1])
-        bytes.push(parts[2])
-        bytes.push(parts[3])
+        bytes.push(0x00) // type = IPv4
+        bytes.push(...ip.split('.').map(p => parseInt(p, 10)))
       } else {
-        const ipv6Buf = this._ipv6ToBytes(ip)
-        bytes.push((ipBits << 7) | (ipv6Buf[0] & 0x7F))
-        bytes.push(...ipv6Buf.slice(1))
+        bytes.push(0x01) // type = IPv6
+        bytes.push(...this._ipv6ToBytes(ip))
       }
 
       // Port (2 bytes, big-endian)
@@ -21602,18 +21603,16 @@ class CallTokenManager {
 
       let offset = 1 // Skip version byte
 
-      // IP address
-      const ipTypeByte = bytes[offset++]
-      const isIPv6 = (ipTypeByte >> 7) & 1
-      const firstByte = ipTypeByte & 0x7F
+      // IP address: 1 byte type (0=IPv4, 1=IPv6) + 4 or 16 bytes
+      const ipType = bytes[offset++]
+      const isIPv6 = ipType === 0x01
       let senderIp
       if (!isIPv6) {
-        senderIp = `${firstByte}.${bytes[offset]}.${bytes[offset + 1]}.${bytes[offset + 2]}`
-        offset += 3
+        senderIp = `${bytes[offset]}.${bytes[offset+1]}.${bytes[offset+2]}.${bytes[offset+3]}`
+        offset += 4
       } else {
-        const ipBytes = [firstByte, ...bytes.slice(offset, offset + 15)]
-        senderIp = this._bytesToIPv6(ipBytes)
-        offset += 15
+        senderIp = this._bytesToIPv6(bytes.slice(offset, offset + 16))
+        offset += 16
       }
 
       // Port
@@ -23250,8 +23249,17 @@ class PhoneController {
                             break
                         }
 
-                        console.log(`[Poll] ${txId.slice(0,12)}… signal=${signal ? JSON.stringify(signal).slice(0,80) : 'null'}`)
                         if (signal) {
+                            // UI-visible log so user can verify decoded token data
+                            const sdpStr = signal.sdp ? (typeof signal.sdp === 'object' ? signal.sdp.sdp : signal.sdp) : ''
+                            const sdpLen = sdpStr?.length ?? 0
+                            const sdpCands = (sdpStr.match(/a=candidate:/g) || []).length
+                            this.ui.log(
+                                `[Token] ${signal.type.toUpperCase()}: ip4=${signal.ip4 ?? 'none'} ` +
+                                `ip6=${signal.ip6 ? signal.ip6.slice(0,16)+'…' : 'none'} ` +
+                                `port=${signal.port ?? 0} sdp=${sdpLen}B (${sdpCands} cands)`,
+                                'info'
+                            )
                             results.push({ txId, inscription: signal })
                         }
                     } catch (e) {

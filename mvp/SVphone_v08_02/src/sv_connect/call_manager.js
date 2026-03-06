@@ -243,6 +243,7 @@ class CallManager extends EventEmitter {
             callToken.sdpOffer.sdp
           )
           session.mediaAnswer = answer
+          iceLog(`[ICE] CALL SDP: ${callerCandidates.length} usable candidates (port-9 excluded)`)
           console.debug('[CallManager] ✓ Deferred answer prepared, gathering candidates...')
 
           // Broadcast ANS TX immediately after gathering (no 5s wait for STUN srflx we don't have)

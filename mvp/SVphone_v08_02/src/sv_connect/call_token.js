@@ -45,21 +45,17 @@ class CallTokenManager {
       bytes.push(0x01)
 
       // IP address and port
+      // Format: 1 byte type (0=IPv4, 1=IPv6) + 4 or 16 bytes IP (full, no bit masking)
       const ip = callToken.senderIp || '0.0.0.0'
       const port = callToken.senderPort
       const isIPv6 = ip.includes(':')
-      const ipBits = isIPv6 ? 1 : 0
 
       if (!isIPv6) {
-        const parts = ip.split('.').map(p => parseInt(p, 10))
-        bytes.push((ipBits << 7) | (parts[0] & 0x7F))
-        bytes.push(parts[1])
-        bytes.push(parts[2])
-        bytes.push(parts[3])
+        bytes.push(0x00) // type = IPv4
+        bytes.push(...ip.split('.').map(p => parseInt(p, 10)))
       } else {
-        const ipv6Buf = this._ipv6ToBytes(ip)
-        bytes.push((ipBits << 7) | (ipv6Buf[0] & 0x7F))
-        bytes.push(...ipv6Buf.slice(1))
+        bytes.push(0x01) // type = IPv6
+        bytes.push(...this._ipv6ToBytes(ip))
       }
 
       // Port (2 bytes, big-endian)
@@ -146,18 +142,16 @@ class CallTokenManager {
 
       let offset = 1 // Skip version byte
 
-      // IP address
-      const ipTypeByte = bytes[offset++]
-      const isIPv6 = (ipTypeByte >> 7) & 1
-      const firstByte = ipTypeByte & 0x7F
+      // IP address: 1 byte type (0=IPv4, 1=IPv6) + 4 or 16 bytes
+      const ipType = bytes[offset++]
+      const isIPv6 = ipType === 0x01
       let senderIp
       if (!isIPv6) {
-        senderIp = `${firstByte}.${bytes[offset]}.${bytes[offset + 1]}.${bytes[offset + 2]}`
-        offset += 3
+        senderIp = `${bytes[offset]}.${bytes[offset+1]}.${bytes[offset+2]}.${bytes[offset+3]}`
+        offset += 4
       } else {
-        const ipBytes = [firstByte, ...bytes.slice(offset, offset + 15)]
-        senderIp = this._bytesToIPv6(ipBytes)
-        offset += 15
+        senderIp = this._bytesToIPv6(bytes.slice(offset, offset + 16))
+        offset += 16
       }
 
       // Port
