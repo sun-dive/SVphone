@@ -6,4 +6,7 @@ Commit file changes.
     repo state -> commit
 
 ## Notes
-Don't push.
+Ask user whether or not to push.
+
+create new bundle.js and include in the push
+ - the user will then Update from Remote and Deploy HEAD Commit to svphone.com

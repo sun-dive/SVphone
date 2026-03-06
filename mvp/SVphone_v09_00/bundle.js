@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-06 05:44 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 05:44 UTC';});console.log('[SVphone] Build: 2026-03-06 05:44 UTC');
+window.SVPHONE_BUILD="2026-03-06 06:31 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 06:31 UTC';});console.log('[SVphone] Build: 2026-03-06 06:31 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;

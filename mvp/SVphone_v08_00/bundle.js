@@ -17322,10 +17322,10 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
       const inscriptionScriptBytes = inscriptionScript.toBinary();
       const inscVarInt = inscriptionScriptBytes.length < 253 ? 1 : 3;
       const inscOutputSize = 8 + inscVarInt + inscriptionScriptBytes.length;
-      const estimatedSize = TX_OVERHEAD2 + BYTES_PER_INPUT2 + inscOutputSize + BYTES_PER_P2PKH_OUTPUT2;
+      const estimatedSize = TX_OVERHEAD2 + BYTES_PER_INPUT2 + inscOutputSize + 2 * BYTES_PER_P2PKH_OUTPUT2;
       const fee = Math.ceil(estimatedSize * FEE_PER_KB / 1e3);
       const sorted = [...safeUtxos].sort((a, b) => a.satoshis - b.satoshis);
-      const utxo = sorted.find((u) => u.satoshis >= 1 + fee);
+      const utxo = sorted.find((u) => u.satoshis >= 2 + fee);
       if (!utxo) {
         const best = sorted[sorted.length - 1];
         throw new Error(
@@ -17343,7 +17343,11 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
         lockingScript: inscriptionScript,
         satoshis: 1
       });
-      const changeAmount = utxo.satoshis - 1 - fee;
+      tx.addOutput({
+        lockingScript: new P2PKH().lock(recipientAddress),
+        satoshis: 1
+      });
+      const changeAmount = utxo.satoshis - 2 - fee;
       tx.addOutput({
         lockingScript: new P2PKH().lock(myAddress),
         satoshis: changeAmount
@@ -17354,7 +17358,7 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
       provider2.registerPendingTx(
         txId,
         [{ txId: utxo.txId, outputIndex: utxo.outputIndex }],
-        changeAmount > 0 ? { outputIndex: 1, satoshis: changeAmount } : void 0
+        changeAmount > 0 ? { outputIndex: 2, satoshis: changeAmount } : void 0
       );
       return { txId };
     }

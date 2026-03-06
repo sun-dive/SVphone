@@ -95,15 +95,17 @@ export class InscriptionBuilder {
     const inscriptionScript = this.buildInscriptionLockingScript(jsonData, recipientAddress)
     const inscriptionScriptBytes = inscriptionScript.toBinary()
 
-    // Calculate fee: 1 input + inscription output + change output
+    // Calculate fee: 1 input + inscription output + notification output + change output
+    // The notification output is a standard P2PKH to the callee so WoC indexes the TX
+    // in the callee's address history (non-standard inscription outputs are not indexed).
     const inscVarInt = inscriptionScriptBytes.length < 0xfd ? 1 : 3
     const inscOutputSize = 8 + inscVarInt + inscriptionScriptBytes.length
-    const estimatedSize = TX_OVERHEAD + BYTES_PER_INPUT + inscOutputSize + BYTES_PER_P2PKH_OUTPUT
+    const estimatedSize = TX_OVERHEAD + BYTES_PER_INPUT + inscOutputSize + 2 * BYTES_PER_P2PKH_OUTPUT
     const fee = Math.ceil(estimatedSize * FEE_PER_KB / 1000)
 
-    // Try smallest UTXO that covers 1 sat + fee
+    // Try smallest UTXO that covers inscription (1) + notification (1) + fee
     const sorted = [...safeUtxos].sort((a, b) => a.satoshis - b.satoshis)
-    const utxo = sorted.find(u => u.satoshis >= 1 + fee)
+    const utxo = sorted.find(u => u.satoshis >= 2 + fee)
     if (!utxo) {
       const best = sorted[sorted.length - 1]
       throw new Error(
@@ -120,14 +122,22 @@ export class InscriptionBuilder {
       unlockingScriptTemplate: new P2PKH().unlock(key),
     })
 
-    // Output 0: 1-sat inscription to callee
+    // Output 0: 1-sat inscription to callee (carries call data, non-standard script)
     tx.addOutput({
       lockingScript: inscriptionScript,
       satoshis: 1,
     })
 
-    // Output 1: change back to caller
-    const changeAmount = utxo.satoshis - 1 - fee
+    // Output 1: 1-sat standard P2PKH notification to callee
+    // WoC does not index non-standard inscription outputs by address, so this
+    // plain output ensures the TX appears in the callee's address history.
+    tx.addOutput({
+      lockingScript: new P2PKH().lock(recipientAddress),
+      satoshis: 1,
+    })
+
+    // Output 2: change back to caller
+    const changeAmount = utxo.satoshis - 2 - fee
     tx.addOutput({
       lockingScript: new P2PKH().lock(myAddress),
       satoshis: changeAmount,
@@ -140,7 +150,7 @@ export class InscriptionBuilder {
     provider.registerPendingTx(
       txId,
       [{ txId: utxo.txId, outputIndex: utxo.outputIndex }],
-      changeAmount > 0 ? { outputIndex: 1, satoshis: changeAmount } : undefined,
+      changeAmount > 0 ? { outputIndex: 2, satoshis: changeAmount } : undefined,
     )
 
     return { txId }
