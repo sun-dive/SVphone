@@ -491,6 +491,9 @@ class PhoneController {
 
         this.callManager.on('call:connected', () => {
             console.debug('[call:connected] Event listener fired!')
+            this.ui.stopOutgoingRing()
+            this.ui.stopRingtone()
+            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
             this.ui.log('📞 Call connected! Media stream established', 'success')
             this.ui.updateCallStatus('connected', 'Call connected')
             document.getElementById('endCallBtn').style.display = 'inline-block'

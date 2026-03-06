@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-06 08:50 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 08:50 UTC';});console.log('[SVphone] Build: 2026-03-06 08:50 UTC');
+window.SVPHONE_BUILD="2026-03-06 08:54 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-06 08:54 UTC';});console.log('[SVphone] Build: 2026-03-06 08:54 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -23760,6 +23760,9 @@ class PhoneController {
 
         this.callManager.on('call:connected', () => {
             console.debug('[call:connected] Event listener fired!')
+            this.ui.stopOutgoingRing()
+            this.ui.stopRingtone()
+            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
             this.ui.log('📞 Call connected! Media stream established', 'success')
             this.ui.updateCallStatus('connected', 'Call connected')
             document.getElementById('endCallBtn').style.display = 'inline-block'
