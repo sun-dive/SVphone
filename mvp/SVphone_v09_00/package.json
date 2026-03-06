@@ -1,7 +1,7 @@
 {
-  "name": "svphone-v08-00",
-  "version": "0.8.00",
-  "description": "SVphone v08.00",
+  "name": "svphone-v09-00",
+  "version": "0.9.00",
+  "description": "SVphone v09.00",
   "type": "module",
   "scripts": {
     "serve": "node serve.mjs",
