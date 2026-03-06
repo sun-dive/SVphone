@@ -125,6 +125,8 @@ class PhoneController {
                         localStorage.setItem('svphone_my_identity', identity)
                         const identityEl = document.getElementById('myIdentityStr')
                         if (identityEl) identityEl.value = identity
+                        const addrLabel = document.getElementById('myAddressLabel')
+                        if (addrLabel) addrLabel.textContent = addr
                     }
                     this.refreshContactsList()
                 }).catch(e => {
@@ -293,11 +295,8 @@ class PhoneController {
         }
         el.innerHTML = contacts.map(c => `
             <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-              <span style="flex:1;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                    title="${c.address}">${c.address.slice(0, 20)}...
-              </span>
-              <span style="color:#3fb950;font-size:0.75em;">✓ 1-TX</span>
-              <button onclick="app.callContact('${c.address}')" style="padding:2px 8px;background:#1f6feb;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;">Call</button>
+              <button onclick="app.callContact('${c.address}')" style="flex:1;padding:4px 8px;background:#1f6feb;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;"
+                      title="${c.address}">📞 ${c.address}</button>
               <button onclick="app.removeContact('${c.address}')" style="padding:2px 8px;background:#da3633;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;">✕</button>
             </div>`).join('')
     }
