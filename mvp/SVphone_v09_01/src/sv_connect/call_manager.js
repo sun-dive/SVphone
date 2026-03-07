@@ -868,34 +868,41 @@ class CallManager extends EventEmitter {
       })
 
       // Also check gathered SDP (in case STUN completed before listener was added)
+      // Note: Chrome uses lowercase "udp", so match case-insensitively with \w+
       const gatheredSdp = (finalAns?.sdp || answer?.sdp || '')
-      const srflxMatch = gatheredSdp.match(/a=candidate:\S+\s+\d+\s+UDP\s+\d+\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+srflx/)
+      const srflxMatch = gatheredSdp.match(/(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+srflx/)
       if (srflxMatch) announceSrflx(srflxMatch[1], parseInt(srflxMatch[2]), 'SDP')
 
-      // Fallback: if no srflx found, check host candidates against our known public IP.
-      // When the machine has a public IP directly on its interface (no NAT), the browser
-      // deduplicates srflx with host (RFC 8445) and never generates a separate srflx candidate.
-      // In that case, the host candidate IS the public address — use it.
+      // Fallback: if no srflx found, use host candidate port with our known public IP.
+      // Covers two cases:
+      //  1. Machine has public IP on interface → browser deduplicates srflx with host (RFC 8445)
+      //  2. STUN didn't respond → only host candidates available
+      // Chrome uses mDNS hostnames (xxx.local) instead of IPs, so match any address with \S+
       if (!srflxAnnounced) {
         const myPublicIp = this.signaling.myIp4
         if (myPublicIp) {
+          // Try matching our public IP directly in host candidates
           const escapedIp = myPublicIp.replace(/\./g, '\\.')
           const hostMatch = gatheredSdp.match(new RegExp(
-            `a=candidate:\\S+\\s+\\d+\\s+UDP\\s+\\d+\\s+${escapedIp}\\s+(\\d+)\\s+typ\\s+host`
+            `(?:^|\\n)a=candidate:\\S+\\s+1\\s+\\w+\\s+\\d+\\s+${escapedIp}\\s+(\\d+)\\s+typ\\s+host`
           ))
           if (hostMatch) {
             announceSrflx(myPublicIp, parseInt(hostMatch[1]), 'host-public')
           } else {
-            // Last resort: use any IPv4 host candidate port with our known public IP
+            // Last resort: use any host candidate's port (may be mDNS hostname)
             const anyHostMatch = gatheredSdp.match(
-              /a=candidate:\S+\s+\d+\s+UDP\s+\d+\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+host/
+              /a=candidate:\S+\s+1\s+\w+\s+\d+\s+(\S+)\s+(\d+)\s+typ\s+host/
             )
             if (anyHostMatch) {
               const hostPort = parseInt(anyHostMatch[2])
-              iceLog(`[PrePunch] No srflx — using public IP + host port as best guess: ${myPublicIp}:${hostPort}`)
+              iceLog(`[PrePunch] No srflx — using public IP + host port: ${myPublicIp}:${hostPort}`)
               announceSrflx(myPublicIp, hostPort, 'host-fallback')
+            } else {
+              iceLog(`[PrePunch] No candidates found in SDP (${gatheredSdp.length}B)`, 'warn')
             }
           }
+        } else {
+          iceLog('[PrePunch] No public IP detected — cannot announce port', 'warn')
         }
       }
 
