@@ -226,11 +226,26 @@ class CallManager extends EventEmitter {
         throw error
       }
 
-      // Caller does NOT punch yet — waits for callee's PORT token with exact srflx.
-      // When onCallAnswered receives the port announcement, it injects the
-      // callee's exact IP:port (±20 spray) and starts punching.
+      // Start blind spray immediately to callee's known IP.
+      // Uses VoIP port range as initial guess; will be upgraded to exact ±20 spray
+      // when/if the callee's PORT token arrives with the actual srflx port.
       if (calleeIp) {
-        this.emit('call:log', { msg: `[PORT] Waiting for callee PORT token (callee IP: ${calleeIp})...`, type: 'info' })
+        await this._injectPortSpray(calleeAddress, calleeIp, { knownPort: null, batch: 0 })
+        this.emit('call:log', { msg: `[Spray] Blind spray → ${calleeIp} (VoIP range, awaiting PORT token)`, type: 'info' })
+
+        let blindBatch = 1
+        this._callerPunchInterval = setInterval(async () => {
+          const pc = this.peerConnection.getPeerConnection(calleeAddress)
+          if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
+            clearInterval(this._callerPunchInterval)
+            this._callerPunchInterval = null
+            if (pc?.connectionState === 'connected') {
+              this.emit('call:log', { msg: '[Spray] Caller connected!', type: 'success' })
+            }
+            return
+          }
+          await this._injectPortSpray(calleeAddress, calleeIp, { knownPort: null, batch: blindBatch++ })
+        }, 3000)
       } else {
         this.emit('call:log', { msg: '[PORT] No callee IP in contacts — callee port discovery unavailable', type: 'warn' })
       }
@@ -611,13 +626,17 @@ class CallManager extends EventEmitter {
         return
       }
 
-      // Port announcement (no SDP, just callee's srflx IP:port from STUN)
+      // Port announcement (no SDP, just callee's srflx IP:port from STUN/host)
       const calleePort = data.calleePort
       const calleeIp   = data.calleeIp4 || data.calleeIp6 || null
       if (!data.sdpAnswer && calleePort && calleeIp) {
-        this.emit('call:log', { msg: `[PORT] Callee port received: ${calleeIp}:${calleePort}`, type: 'success' })
+        this.emit('call:log', { msg: `[PORT] Callee port received: ${calleeIp}:${calleePort} — upgrading spray`, type: 'success' })
 
-        // Inject callee's exact srflx ±20 and start continuous spray
+        // Stop blind spray, upgrade to targeted ±20 around exact port
+        if (this._callerPunchInterval) {
+          clearInterval(this._callerPunchInterval)
+          this._callerPunchInterval = null
+        }
         this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: 0 })
 
         let sprayBatch = 1
@@ -634,7 +653,7 @@ class CallManager extends EventEmitter {
           await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: sprayBatch++ })
         }, 3000)
 
-        console.log('[CallManager] Port announcement received — punching to callee srflx')
+        console.log('[CallManager] Port announcement received — upgraded to targeted spray')
         return  // Don't emit call:answered-session for port announcements
       }
 
@@ -852,6 +871,33 @@ class CallManager extends EventEmitter {
       const gatheredSdp = (finalAns?.sdp || answer?.sdp || '')
       const srflxMatch = gatheredSdp.match(/a=candidate:\S+\s+\d+\s+UDP\s+\d+\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+srflx/)
       if (srflxMatch) announceSrflx(srflxMatch[1], parseInt(srflxMatch[2]), 'SDP')
+
+      // Fallback: if no srflx found, check host candidates against our known public IP.
+      // When the machine has a public IP directly on its interface (no NAT), the browser
+      // deduplicates srflx with host (RFC 8445) and never generates a separate srflx candidate.
+      // In that case, the host candidate IS the public address — use it.
+      if (!srflxAnnounced) {
+        const myPublicIp = this.signaling.myIp4
+        if (myPublicIp) {
+          const escapedIp = myPublicIp.replace(/\./g, '\\.')
+          const hostMatch = gatheredSdp.match(new RegExp(
+            `a=candidate:\\S+\\s+\\d+\\s+UDP\\s+\\d+\\s+${escapedIp}\\s+(\\d+)\\s+typ\\s+host`
+          ))
+          if (hostMatch) {
+            announceSrflx(myPublicIp, parseInt(hostMatch[1]), 'host-public')
+          } else {
+            // Last resort: use any IPv4 host candidate port with our known public IP
+            const anyHostMatch = gatheredSdp.match(
+              /a=candidate:\S+\s+\d+\s+UDP\s+\d+\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+host/
+            )
+            if (anyHostMatch) {
+              const hostPort = parseInt(anyHostMatch[2])
+              iceLog(`[PrePunch] No srflx — using public IP + host port as best guess: ${myPublicIp}:${hostPort}`)
+              announceSrflx(myPublicIp, hostPort, 'host-fallback')
+            }
+          }
+        }
+      }
 
       // DataChannel handler for incoming punch channel from caller
       rtcPc.ondatachannel = (event) => {
