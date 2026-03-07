@@ -66,7 +66,10 @@ class SyntheticSdp {
           l.startsWith('a=rtpmap:')  ||
           l.startsWith('a=fmtp:')    ||
           l.startsWith('a=rtcp-fb:') ||
-          l.startsWith('a=extmap:')
+          l.startsWith('a=extmap:')  ||
+          l.startsWith('a=sctpmap:') ||
+          l.startsWith('a=sctp-port:') ||
+          l.startsWith('a=max-message-size:')
         ) {
           answer.push(l)
           continue

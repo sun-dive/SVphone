@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-07 03:50 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-07 03:50 UTC';});console.log('[SVphone] Build: 2026-03-07 03:50 UTC');
+window.SVPHONE_BUILD="2026-03-07 04:59 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-07 04:59 UTC';});console.log('[SVphone] Build: 2026-03-07 04:59 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -17689,7 +17689,10 @@ class SyntheticSdp {
           l.startsWith('a=rtpmap:')  ||
           l.startsWith('a=fmtp:')    ||
           l.startsWith('a=rtcp-fb:') ||
-          l.startsWith('a=extmap:')
+          l.startsWith('a=extmap:')  ||
+          l.startsWith('a=sctpmap:') ||
+          l.startsWith('a=sctp-port:') ||
+          l.startsWith('a=max-message-size:')
         ) {
           answer.push(l)
           continue
@@ -19433,10 +19436,19 @@ class CallManager extends EventEmitter {
         mediaTypes: options.mediaTypes || (needsVideo ? ['audio', 'video'] : ['audio'])
       })
 
-      // Create offer with munged ICE credentials
+      // Create offer with munged ICE credentials + DataChannel for punch signaling
       let mediaOffer = null
       try {
         this.emit('call:log', { msg: '[1-TX] Creating munged SDP offer...', type: 'info' })
+
+        // Ensure PC exists so we can add a DataChannel before the offer is created
+        if (!this.peerConnection.getPeerConnection(calleeAddress)) {
+          this.peerConnection.createPeerConnection(calleeAddress, this.peerConnection._persistentCert)
+        }
+        const callerPc = this.peerConnection.getPeerConnection(calleeAddress)
+        const punchCh = callerPc.createDataChannel('sv-punch')
+        this._setupPunchChannel(punchCh, 'caller')
+
         await this.peerConnection.createOfferMunged(calleeAddress, iceCreds)
         const finalOffer = await this.peerConnection.waitForIceGathering(calleeAddress)
         mediaOffer = finalOffer
@@ -19586,6 +19598,16 @@ class CallManager extends EventEmitter {
     }
 
     this.activeCallSessions.set(data.callTokenId, session)
+
+    // For 1-TX calls with caller's IP, start ICE pre-punch IMMEDIATELY
+    // (before user clicks Accept) so both sides punch simultaneously.
+    if (!isIdentityExchange && sdpContent && callToken?.senderIp4) {
+      this._startPrePunch(data.callTokenId, callToken).catch(err => {
+        console.warn('[CallManager] Pre-punch failed:', err)
+        this.emit('call:log', { msg: `[PrePunch] Failed: ${err.message}`, type: 'error' })
+      })
+    }
+
     this.emit('call:incoming-session', session)
     console.log('[CallManager] Incoming', isIdentityExchange ? 'identity exchange' : 'call', 'from:', data.caller)
   }
@@ -19660,15 +19682,56 @@ class CallManager extends EventEmitter {
 
       // ── Normal call accept flow ──
 
+      session.status = 'accepting'
+      this.signaling.acceptCall(callTokenId, {})
+
+      // ── Pre-punch path: PC already exists and is punching ──
+      if (session.prePunchActive) {
+        const rtcPc = this.peerConnection.getPeerConnection(callToken.caller)
+        if (rtcPc && rtcPc.connectionState !== 'failed' && rtcPc.connectionState !== 'closed') {
+          iceLog('[Accept] Pre-punch PC active — adding media tracks to existing connection')
+
+          // Get media permissions and add tracks to the existing PC
+          if (!this.peerConnection.mediaStream) {
+            await this.peerConnection.initializeMediaStream({
+              audio: options.audio !== false,
+              video: options.video !== false,
+            })
+          }
+          if (this.peerConnection.mediaStream) {
+            this.peerConnection.mediaStream.getTracks().forEach(track => {
+              rtcPc.addTrack(track, this.peerConnection.mediaStream)
+            })
+            iceLog('[Accept] ✓ Media tracks added to pre-punched connection')
+          }
+
+          // If already connected during pre-punch, transition immediately
+          if (rtcPc.connectionState === 'connected') {
+            session.status = 'connected'
+            session.connectedAt = Date.now()
+            this.startStatsMonitoring(callTokenId)
+            this.emit('call:connected', { callTokenId, timestamp: Date.now() })
+            iceLog('[Accept] ✓ Already connected from pre-punch!', 'success')
+          } else {
+            session.status = 'connecting'
+          }
+
+          this.emit('call:accepted-session', session)
+          return session
+        }
+        // Pre-punch PC failed — fall through to normal flow
+        iceLog('[Accept] Pre-punch PC failed, falling back to normal flow')
+        session.prePunchActive = false
+      }
+
+      // ── Standard flow (no pre-punch or pre-punch failed) ──
+
       if (!this.peerConnection.mediaStream) {
         await this.peerConnection.initializeMediaStream({
           audio: options.audio !== false,
           video: options.video !== false
         })
       }
-
-      session.status = 'accepting'
-      this.signaling.acceptCall(callTokenId, {})
 
       if (!callToken?.sdpOffer) {
         session.status = 'connecting'
@@ -19712,7 +19775,6 @@ class CallManager extends EventEmitter {
           iceLog('[Accept] ✓ 1-TX: ICE active. Callee firing checks to caller — waiting for peer-reflexive...')
 
           // Continuous callee punch: target the caller's srflx port (from CALL token)
-          // so we hit the exact NAT binding the caller created via STUN.
           const callerIp4 = callToken.senderIp4 ?? null
           const callerPunchPort = callToken.senderPort || 3478
           if (callerIp4) {
@@ -19797,6 +19859,19 @@ class CallManager extends EventEmitter {
       const session = this.activeCallSessions.get(callTokenId)
       if (session) {
         session.status = 'rejected'
+
+        // Clean up pre-punch PC if active
+        if (session.prePunchActive) {
+          if (this._calleePunchInterval) {
+            clearInterval(this._calleePunchInterval)
+            this._calleePunchInterval = null
+          }
+          const callToken = this.signaling.getCallToken(callTokenId)
+          if (callToken) {
+            this.peerConnection.closePeerConnection(callToken.caller)
+          }
+          session.prePunchActive = false
+        }
       }
 
       this.emit('call:rejected-session', { callTokenId, reason })
@@ -19898,20 +19973,26 @@ class CallManager extends EventEmitter {
     }
 
     if (session) {
+      // If pre-punch connected before user accepted, defer the transition.
+      // acceptCall() will handle the connected state when the user clicks Accept.
+      if (session.prePunchActive && session.status === 'incoming') {
+        session.preConnected = true
+        this.emit('call:log', { msg: '[PrePunch] ICE connected before user accepted — waiting for Accept', type: 'success' })
+        console.log('[CallManager] Pre-punch connected, awaiting user accept')
+        return
+      }
+
       console.debug('[CallManager] onPeerConnected: Found session, setting status to connected')
       session.status = 'connected'
       session.connectedAt = Date.now()
 
       // Start collecting statistics
-      console.debug('[CallManager] onPeerConnected: Starting stats monitoring')
       this.startStatsMonitoring(session.callTokenId)
 
-      console.debug('[CallManager] onPeerConnected: About to emit call:connected event')
       this.emit('call:connected', {
         callTokenId: session.callTokenId,
         timestamp: Date.now()
       })
-      console.debug('[CallManager] onPeerConnected: Emitted call:connected event')
 
       console.log('[CallManager] Peer connected')
     } else {
@@ -19926,6 +20007,116 @@ class CallManager extends EventEmitter {
   onPeerConnectionFailed(data) {
     console.error('[CallManager] Peer connection failed:', data.peerId)
     this.emit('call:connection-failed', data)
+  }
+
+  /**
+   * Set up a DataChannel for punch-hit/ack signaling.
+   * When ICE connects and the channel opens, both sides exchange
+   * confirmation messages so they know the exact addresses that worked.
+   * @private
+   */
+  _setupPunchChannel(channel, role) {
+    const iceLog = (msg, type = 'info') => this.emit('call:log', { msg, type })
+    channel.onopen = () => {
+      iceLog(`[PUNCH] DataChannel open (${role}) — sending PUNCH_HIT`, 'success')
+      channel.send(JSON.stringify({ type: 'PUNCH_HIT', role, ts: Date.now() }))
+    }
+    channel.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg.type === 'PUNCH_HIT') {
+          iceLog(`[PUNCH] Received PUNCH_HIT from ${msg.role}`, 'success')
+          channel.send(JSON.stringify({ type: 'PUNCH_ACK', role, ts: Date.now() }))
+        } else if (msg.type === 'PUNCH_ACK') {
+          iceLog('[PUNCH] Received PUNCH_ACK — connection confirmed!', 'success')
+        }
+      } catch { /* ignore malformed messages */ }
+    }
+    channel.onerror = (e) => iceLog(`[PUNCH] DataChannel error: ${e.message || e}`, 'error')
+    this._punchChannel = channel
+  }
+
+  /**
+   * Start ICE pre-punch immediately when a 1-TX CALL TX arrives.
+   * Creates the PeerConnection and begins punching to the caller's IP
+   * BEFORE the user clicks Accept — so both sides punch simultaneously.
+   * The same PC is reused when acceptCall() runs.
+   * @private
+   */
+  async _startPrePunch(callTokenId, callToken) {
+    const iceLog = (msg, type = 'info') => this.emit('call:log', { msg, type })
+    const offerSdp = typeof callToken.sdpOffer === 'object' ? callToken.sdpOffer.sdp : callToken.sdpOffer
+
+    // Derive ICE credentials from the caller's session key
+    const iceCreds = await window.iceCredentials.deriveAll(callToken.sessionKey)
+    iceLog(`[PrePunch] Derived ICE creds: callee=${iceCreds.calleeUfrag}`)
+
+    // Create PC without media (no permissions needed yet)
+    // createAnswerMunged sets remote desc (offer) + creates munged answer + sets local desc
+    const answer   = await this.peerConnection.createAnswerMunged(callToken.caller, offerSdp, iceCreds)
+    const finalAns = await this.peerConnection.waitForIceGathering(callToken.caller)
+
+    // Set up DataChannel handler for incoming punch channel from caller
+    const rtcPc = this.peerConnection.getPeerConnection(callToken.caller)
+    if (rtcPc) {
+      rtcPc.ondatachannel = (event) => {
+        iceLog('[PrePunch] DataChannel received from caller')
+        this._setupPunchChannel(event.channel, 'callee')
+      }
+    }
+
+    // Inject caller's public IP as srflx candidates
+    if (callToken.senderIp4 || callToken.senderIp6) {
+      const pubCandidates = this.peerConnection._buildPublicIpCandidates(
+        offerSdp,
+        callToken.senderIp4 ?? null,
+        callToken.senderIp6 ?? null,
+        iceLog
+      )
+      for (const c of pubCandidates) {
+        this.peerConnection.addIceCandidate(callToken.caller, c).catch(() => {})
+      }
+    }
+
+    // Continuous callee punch to caller's srflx port
+    const callerIp4 = callToken.senderIp4 ?? null
+    const callerPunchPort = callToken.senderPort || 3478
+    if (callerIp4) {
+      let calleePunchIdx = 0
+      iceLog(`[PrePunch] Callee punching → ${callerIp4}:${callerPunchPort} (before user accepts)`)
+      this._calleePunchInterval = setInterval(async () => {
+        const pc = this.peerConnection.getPeerConnection(callToken.caller)
+        if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
+          clearInterval(this._calleePunchInterval)
+          this._calleePunchInterval = null
+          if (pc?.connectionState === 'connected') {
+            iceLog('[PrePunch] Punch through! Connected before accept.', 'success')
+          }
+          return
+        }
+        try {
+          await this.peerConnection.addIceCandidate(callToken.caller, {
+            candidate: `candidate:calleepunch${calleePunchIdx} 1 UDP ${1677729535 - calleePunchIdx} ${callerIp4} ${callerPunchPort} typ srflx raddr 0.0.0.0 rport 0`,
+            sdpMid: '0',
+            sdpMLineIndex: 0,
+          })
+          iceLog(`[PrePunch] Callee punch #${calleePunchIdx + 1} → ${callerIp4}:${callerPunchPort}`)
+        } catch {
+          clearInterval(this._calleePunchInterval)
+          this._calleePunchInterval = null
+        }
+        calleePunchIdx++
+      }, 3000)
+    }
+
+    // Update session so acceptCall() can reuse this PC
+    const session = this.activeCallSessions.get(callTokenId)
+    if (session) {
+      session.prePunchActive = true
+      session.iceCreds = iceCreds
+      session.mediaAnswer = finalAns || answer
+    }
+    iceLog('[PrePunch] ICE active — callee punching before user accepts')
   }
 
   /**
@@ -19993,10 +20184,14 @@ class CallManager extends EventEmitter {
         clearInterval(session.statsMonitor)
       }
 
-      // Stop ADF punch intervals
+      // Stop ADF punch intervals and close punch channel
       if (this._callerPunchInterval) {
         clearInterval(this._callerPunchInterval)
         this._callerPunchInterval = null
+      }
+      if (this._punchChannel) {
+        try { this._punchChannel.close() } catch {}
+        this._punchChannel = null
       }
       if (this._calleePunchInterval) {
         clearInterval(this._calleePunchInterval)
