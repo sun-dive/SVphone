@@ -99,7 +99,6 @@ class CallManager extends EventEmitter {
     try {
       const contactData       = window.contactsStore?.get(calleeAddress) ?? null
       const calleeFingerprint = contactData?.fingerprint ?? null
-      const calleeIp          = contactData?.ip ?? null
       const myFingerprint     = this.peerConnection._persistentCertFingerprint ?? null
 
       if (!myFingerprint) {
@@ -226,33 +225,10 @@ class CallManager extends EventEmitter {
         throw error
       }
 
-      // Broadcast CALL TX first — spray must start AFTER so NAT mappings are fresh
-      // when the callee detects the TX and begins responding.
+      // Broadcast CALL TX — no spray yet. Contact IP may be stale.
+      // Caller waits for PORT token with callee's fresh IP:port before spraying.
       const broadcastResult = await this.signaling.broadcastCallToken(callToken, options.mintTokenFn)
-
-      // Now start blind spray to callee's known IP.
-      // Uses VoIP port range as initial guess; will be upgraded to exact ±20 spray
-      // when/if the callee's PORT token arrives with the actual srflx port.
-      if (calleeIp) {
-        await this._injectPortSpray(calleeAddress, calleeIp, { knownPort: null, batch: 0 })
-        this.emit('call:log', { msg: `[Spray] Blind spray → ${calleeIp} (VoIP range, awaiting PORT token)`, type: 'info' })
-
-        let blindBatch = 1
-        this._callerPunchInterval = setInterval(async () => {
-          const pc = this.peerConnection.getPeerConnection(calleeAddress)
-          if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
-            clearInterval(this._callerPunchInterval)
-            this._callerPunchInterval = null
-            if (pc?.connectionState === 'connected') {
-              this.emit('call:log', { msg: '[Spray] Caller connected!', type: 'success' })
-            }
-            return
-          }
-          await this._injectPortSpray(calleeAddress, calleeIp, { knownPort: null, batch: blindBatch++ })
-        }, 3000)
-      } else {
-        this.emit('call:log', { msg: '[PORT] No callee IP in contacts — callee port discovery unavailable', type: 'warn' })
-      }
+      this.emit('call:log', { msg: '[1-TX] ✓ CALL TX broadcast — awaiting PORT token for callee IP:port', type: 'info' })
 
       // Create session tracking
       const session = {
@@ -631,13 +607,9 @@ class CallManager extends EventEmitter {
       const calleePort = data.calleePort
       const calleeIp   = data.calleeIp4 || data.calleeIp6 || null
       if (!data.sdpAnswer && calleePort && calleeIp) {
-        this.emit('call:log', { msg: `[PORT] Callee port received: ${calleeIp}:${calleePort} — upgrading spray`, type: 'success' })
+        this.emit('call:log', { msg: `[PORT] Callee port received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
-        // Stop blind spray, upgrade to targeted ±20 around exact port
-        if (this._callerPunchInterval) {
-          clearInterval(this._callerPunchInterval)
-          this._callerPunchInterval = null
-        }
+        // Start targeted ±20 spray using fresh IP:port from PORT token
         this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: 0 })
 
         let sprayBatch = 1
