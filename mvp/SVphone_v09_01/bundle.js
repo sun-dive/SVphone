@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-07 07:36 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-07 07:36 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-07 07:36 UTC');
+window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-07 22:48 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-07 22:48 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-07 22:48 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19483,7 +19483,11 @@ class CallManager extends EventEmitter {
         throw error
       }
 
-      // Start blind spray immediately to callee's known IP.
+      // Broadcast CALL TX first — spray must start AFTER so NAT mappings are fresh
+      // when the callee detects the TX and begins responding.
+      const broadcastResult = await this.signaling.broadcastCallToken(callToken, options.mintTokenFn)
+
+      // Now start blind spray to callee's known IP.
       // Uses VoIP port range as initial guess; will be upgraded to exact ±20 spray
       // when/if the callee's PORT token arrives with the actual srflx port.
       if (calleeIp) {
@@ -19506,9 +19510,6 @@ class CallManager extends EventEmitter {
       } else {
         this.emit('call:log', { msg: '[PORT] No callee IP in contacts — callee port discovery unavailable', type: 'warn' })
       }
-
-      // Broadcast single CALL TX
-      const broadcastResult = await this.signaling.broadcastCallToken(callToken, options.mintTokenFn)
 
       // Create session tracking
       const session = {

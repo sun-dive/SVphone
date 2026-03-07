@@ -226,7 +226,11 @@ class CallManager extends EventEmitter {
         throw error
       }
 
-      // Start blind spray immediately to callee's known IP.
+      // Broadcast CALL TX first — spray must start AFTER so NAT mappings are fresh
+      // when the callee detects the TX and begins responding.
+      const broadcastResult = await this.signaling.broadcastCallToken(callToken, options.mintTokenFn)
+
+      // Now start blind spray to callee's known IP.
       // Uses VoIP port range as initial guess; will be upgraded to exact ±20 spray
       // when/if the callee's PORT token arrives with the actual srflx port.
       if (calleeIp) {
@@ -249,9 +253,6 @@ class CallManager extends EventEmitter {
       } else {
         this.emit('call:log', { msg: '[PORT] No callee IP in contacts — callee port discovery unavailable', type: 'warn' })
       }
-
-      // Broadcast single CALL TX
-      const broadcastResult = await this.signaling.broadcastCallToken(callToken, options.mintTokenFn)
 
       // Create session tracking
       const session = {
