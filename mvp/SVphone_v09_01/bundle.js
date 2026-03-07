@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-07 02:04 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-07 02:04 UTC';});console.log('[SVphone] Build: 2026-03-07 02:04 UTC');
+window.SVPHONE_BUILD="2026-03-07 03:03 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-07 03:03 UTC';});console.log('[SVphone] Build: 2026-03-07 03:03 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19584,8 +19584,8 @@ class CallManager extends EventEmitter {
       const sdpContent = typeof callToken?.sdpOffer === 'object' ? callToken?.sdpOffer?.sdp : callToken?.sdpOffer
       const isIdentityExchange = callToken?.callerFingerprint && !sdpContent
       if (isIdentityExchange) {
-        // Save caller's identity to contacts
-        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint)
+        // Save caller's identity to contacts (include IP for ADF pre-punch)
+        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp4 || null)
         iceLog(`[Identity] Saved contact for ${callToken.caller}`, 'success')
 
         // Broadcast ANS with our fingerprint
@@ -19595,6 +19595,8 @@ class CallManager extends EventEmitter {
             await options.broadcastAnswerFn(callTokenId, callToken.caller, {
               sdpAnswer:        '',
               senderIp:         this.signaling.myIp || '0.0.0.0',
+              senderIp4:        this.signaling.myIp4 ?? null,
+              senderIp6:        this.signaling.myIp6 ?? null,
               senderPort:       this.signaling.myPort || 0,
               sessionKey:       callToken.sessionKey || '',
               codec:            'opus',
@@ -19758,7 +19760,7 @@ class CallManager extends EventEmitter {
     if (session) {
       // Identity exchange: save callee's fingerprint and end
       if (session.identityExchange && data.callerFingerprint) {
-        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint)
+        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp4 || null)
         session.status = 'ended'
         this.emit('call:identity-exchanged', {
           callTokenId: session.callTokenId,
