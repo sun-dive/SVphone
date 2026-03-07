@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-07 23:32 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-07 23:32 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-07 23:32 UTC');
+window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-07 23:48 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-07 23:48 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-07 23:48 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19866,17 +19866,22 @@ class CallManager extends EventEmitter {
       if (!data.sdpAnswer && calleePort && calleeIp) {
         this.emit('call:log', { msg: `[PORT] Callee port received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
-        // Start targeted ±20 spray using fresh IP:port from PORT token
+        // Start targeted ±20 spray using fresh IP:port from PORT token.
+        // Spray for up to 2 min — ISP TX propagation can delay the other side by 60s+.
         this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: 0 })
 
         let sprayBatch = 1
+        const sprayStart = Date.now()
         this._callerPunchInterval = setInterval(async () => {
           const pc = this.peerConnection.getPeerConnection(session.calleeAddress)
-          if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
+          const elapsed = Date.now() - sprayStart
+          if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed' || elapsed > 120000) {
             clearInterval(this._callerPunchInterval)
             this._callerPunchInterval = null
             if (pc?.connectionState === 'connected') {
               this.emit('call:log', { msg: '[PORT] Caller connected!', type: 'success' })
+            } else if (elapsed > 120000) {
+              this.emit('call:log', { msg: '[Spray] Caller spray timed out after 2 min', type: 'warn' })
             }
             return
           }
@@ -20191,18 +20196,23 @@ class CallManager extends EventEmitter {
       return
     }
 
-    this.emit('call:log', { msg: `[Spray] PORT TX in mempool — starting callee spray to ${ip}:${port}`, type: 'success' })
+    this.emit('call:log', { msg: `[Spray] PORT TX in mempool — starting callee spray to ${ip}:${port} (up to 2 min)`, type: 'success' })
 
+    // Spray for up to 2 min — ISP TX propagation can delay the other side by 60s+.
     this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: 0 })
 
     let sprayBatch = 1
+    const sprayStart = Date.now()
     this._calleePunchInterval = setInterval(async () => {
       const pc = this.peerConnection.getPeerConnection(callerPeerId)
-      if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
+      const elapsed = Date.now() - sprayStart
+      if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed' || elapsed > 120000) {
         clearInterval(this._calleePunchInterval)
         this._calleePunchInterval = null
         if (pc?.connectionState === 'connected') {
           this.emit('call:log', { msg: '[Spray] Callee connected!', type: 'success' })
+        } else if (elapsed > 120000) {
+          this.emit('call:log', { msg: '[Spray] Callee spray timed out after 2 min', type: 'warn' })
         }
         return
       }
