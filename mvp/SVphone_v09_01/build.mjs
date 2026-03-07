@@ -1,6 +1,7 @@
 import { build } from 'esbuild'
 import { readFileSync, writeFileSync, unlinkSync } from 'fs'
 
+const VERSION    = 'v09.01'
 const BUILD_TIME = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC'
 
 // Step 1: Build TypeScript/BSV SDK bundle
@@ -49,7 +50,7 @@ const parts = [tsBundle]
 for (const file of [...phoneFiles, ...walletFiles]) {
   parts.push(readFileSync(file, 'utf8'))
 }
-const stamp = `window.SVPHONE_BUILD="${BUILD_TIME}";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: ${BUILD_TIME}';});console.log('[SVphone] Build: ${BUILD_TIME}');`
+const stamp = `window.SVPHONE_VERSION="${VERSION}";window.SVPHONE_BUILD="${BUILD_TIME}";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\\.[0-9]+/,'${VERSION}'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: ${VERSION} / ${BUILD_TIME}';});console.log('[SVphone] ${VERSION} Build: ${BUILD_TIME}');`
 writeFileSync('bundle.js', [stamp, ...parts].join('\n'))
 
 console.log('Build complete: bundle.js')

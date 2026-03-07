@@ -1,4 +1,4 @@
-window.SVPHONE_BUILD="2026-03-07 04:59 UTC";document.addEventListener('DOMContentLoaded',()=>{const el=document.getElementById('svphone-build');if(el)el.textContent='build: 2026-03-07 04:59 UTC';});console.log('[SVphone] Build: 2026-03-07 04:59 UTC');
+window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-07 05:02 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-07 05:02 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-07 05:02 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;

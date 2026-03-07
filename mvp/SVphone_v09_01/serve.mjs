@@ -98,14 +98,14 @@ if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
     key:  fs.readFileSync(keyPath),
   }
   https.createServer(sslOptions, requestHandler).listen(HTTPS_PORT, () => {
-    console.log(`\n📱 SVphone v09.01 Dev Server`)
+    console.log(`\n📱 SVphone Dev Server`)
     console.log(`${'═'.repeat(50)}`)
     console.log(`HTTP  → http://localhost:${HTTP_PORT}   (this machine)`)
     console.log(`HTTPS → https://${lanIp ?? '?'}:${HTTPS_PORT}  (other devices on LAN)`)
     console.log(`\nPress Ctrl+C to stop\n`)
   })
 } else {
-  console.log(`\n📱 SVphone v09.01 Dev Server`)
+  console.log(`\n📱 SVphone Dev Server`)
   console.log(`${'═'.repeat(50)}`)
   console.log(`HTTP  → http://localhost:${HTTP_PORT}`)
   if (lanIp) {
