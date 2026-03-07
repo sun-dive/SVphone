@@ -490,6 +490,30 @@ class PhoneController {
             this.refreshContactsList()
         })
 
+        // Port discovery: callee's STUN found its srflx — broadcast PORT token to caller
+        this.callManager.on('call:port-discovered', async (data) => {
+            if (!this.callTokenManager) return
+            try {
+                const myAddress = this.signaling.myAddress
+                if (!myAddress) return
+                this.ui.log(`[PORT] Broadcasting port ${data.port} to caller...`, 'info')
+                await this.callTokenManager.broadcastCallAnswer(data.callerAddress, {
+                    callee:      myAddress,
+                    senderIp:    data.ip,
+                    senderIp4:   data.ip,
+                    senderPort:  data.port,
+                    sessionKey:  data.sessionKey || '',
+                    codec:       'opus',
+                    quality:     'hd',
+                    mediaTypes:  ['audio'],
+                    sdpAnswer:   '',   // no SDP — port announcement only
+                })
+                this.ui.log(`[PORT] Port ${data.port} announced to caller`, 'success')
+            } catch (err) {
+                this.ui.log(`[PORT] Failed to announce port: ${err.message}`, 'error')
+            }
+        })
+
         this.callManager.on('call:connected', () => {
             console.debug('[call:connected] Event listener fired!')
             this.ui.stopOutgoingRing()

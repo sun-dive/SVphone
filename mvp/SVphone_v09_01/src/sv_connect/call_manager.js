@@ -226,50 +226,13 @@ class CallManager extends EventEmitter {
         throw error
       }
 
-      // ADF continuous punch: keep sending ICE candidates to callee's known IP
-      // on port 3478 so the NAT binding stays fresh and ICE stays alive.
+      // Caller does NOT punch yet — waits for callee's PORT token with exact srflx.
+      // When onCallAnswered receives the port announcement, it injects the
+      // callee's exact IP:port (±20 spray) and starts punching.
       if (calleeIp) {
-        const PUNCH_PORT = 3478
-        let punchIdx = 0
-        const sendPunch = async () => {
-          try {
-            await this.peerConnection.addIceCandidate(calleeAddress, {
-              candidate: `candidate:adfpunch${punchIdx} 1 UDP ${1677729535 - punchIdx} ${calleeIp} ${PUNCH_PORT} typ srflx raddr 0.0.0.0 rport 0`,
-              sdpMid: '0',
-              sdpMLineIndex: 0,
-            })
-          } catch (e) {
-            return false
-          }
-          punchIdx++
-          return true
-        }
-
-        // Send first punch immediately
-        await sendPunch()
-        this.emit('call:log', { msg: `[ADF] Punch #1 → ${calleeIp}:${PUNCH_PORT}`, type: 'info' })
-
-        // Continue punching every 3 seconds
-        this._callerPunchInterval = setInterval(async () => {
-          const pc = this.peerConnection.getPeerConnection(calleeAddress)
-          if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
-            clearInterval(this._callerPunchInterval)
-            this._callerPunchInterval = null
-            if (pc?.connectionState === 'connected') {
-              this.emit('call:log', { msg: '[ADF] Punch through! Connected.', type: 'success' })
-            }
-            return
-          }
-          const ok = await sendPunch()
-          if (ok) {
-            this.emit('call:log', { msg: `[ADF] Punch #${punchIdx} → ${calleeIp}:${PUNCH_PORT}`, type: 'info' })
-          } else {
-            clearInterval(this._callerPunchInterval)
-            this._callerPunchInterval = null
-          }
-        }, 3000)
+        this.emit('call:log', { msg: `[PORT] Waiting for callee PORT token (callee IP: ${calleeIp})...`, type: 'info' })
       } else {
-        this.emit('call:log', { msg: '[ADF] No callee IP in contacts — skipping pre-punch', type: 'warn' })
+        this.emit('call:log', { msg: '[PORT] No callee IP in contacts — callee port discovery unavailable', type: 'warn' })
       }
 
       // Broadcast single CALL TX
@@ -517,35 +480,24 @@ class CallManager extends EventEmitter {
           // 1-TX: ICE fires checks to caller → peer-reflexive → DTLS → connected
           iceLog('[Accept] ✓ 1-TX: ICE active. Callee firing checks to caller — waiting for peer-reflexive...')
 
-          // Continuous callee punch: target the caller's srflx port (from CALL token)
+          // Targeted callee spray to caller's known srflx port ±20
           const callerIp4 = callToken.senderIp4 ?? null
-          const callerPunchPort = callToken.senderPort || 3478
-          if (callerIp4) {
-            let calleePunchIdx = 0
-            iceLog(`[ADF] Callee punching → ${callerIp4}:${callerPunchPort} (caller srflx port)`)
+          const callerPunchPort = callToken.senderPort || null
+          if (callerIp4 && callerPunchPort) {
+            await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPunchPort, batch: 0 })
+
+            let sprayBatch = 1
             this._calleePunchInterval = setInterval(async () => {
               const pc = this.peerConnection.getPeerConnection(callToken.caller)
               if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
                 clearInterval(this._calleePunchInterval)
                 this._calleePunchInterval = null
                 if (pc?.connectionState === 'connected') {
-                  iceLog('[ADF] Punch through! Connected.', 'success')
+                  iceLog('[Spray] Callee connected!', 'success')
                 }
                 return
               }
-              try {
-                await this.peerConnection.addIceCandidate(callToken.caller, {
-                  candidate: `candidate:calleepunch${calleePunchIdx} 1 UDP ${1677729535 - calleePunchIdx} ${callerIp4} ${callerPunchPort} typ srflx raddr 0.0.0.0 rport 0`,
-                  sdpMid: '0',
-                  sdpMLineIndex: 0,
-                })
-                iceLog(`[ADF] Callee punch #${calleePunchIdx + 1} → ${callerIp4}:${callerPunchPort}`)
-              } catch {
-                clearInterval(this._calleePunchInterval)
-                this._calleePunchInterval = null
-                return
-              }
-              calleePunchIdx++
+              await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPunchPort, batch: sprayBatch++ })
             }, 3000)
           }
         } else {
@@ -659,6 +611,33 @@ class CallManager extends EventEmitter {
         return
       }
 
+      // Port announcement (no SDP, just callee's srflx IP:port from STUN)
+      const calleePort = data.calleePort
+      const calleeIp   = data.calleeIp4 || data.calleeIp6 || null
+      if (!data.sdpAnswer && calleePort && calleeIp) {
+        this.emit('call:log', { msg: `[PORT] Callee port received: ${calleeIp}:${calleePort}`, type: 'success' })
+
+        // Inject callee's exact srflx ±20 and start continuous spray
+        this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: 0 })
+
+        let sprayBatch = 1
+        this._callerPunchInterval = setInterval(async () => {
+          const pc = this.peerConnection.getPeerConnection(session.calleeAddress)
+          if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
+            clearInterval(this._callerPunchInterval)
+            this._callerPunchInterval = null
+            if (pc?.connectionState === 'connected') {
+              this.emit('call:log', { msg: '[PORT] Caller connected!', type: 'success' })
+            }
+            return
+          }
+          await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: sprayBatch++ })
+        }, 3000)
+
+        console.log('[CallManager] Port announcement received — punching to callee srflx')
+        return  // Don't emit call:answered-session for port announcements
+      }
+
       session.status = 'answered'
       this.emit('call:answered-session', data)
       console.log('[CallManager] Call answered')
@@ -753,6 +732,43 @@ class CallManager extends EventEmitter {
   }
 
   /**
+   * Inject ICE candidates targeting ±20 ports around a known remote port.
+   * Opens NAT mappings so the peer's actual port is likely covered.
+   * @private
+   * @param {string} peerId   - Remote peer address
+   * @param {string} remoteIp - Remote public IP
+   * @param {Object} options  - { knownPort, batch }
+   * @returns {Promise<number>} candidates injected
+   */
+  async _injectPortSpray(peerId, remoteIp, options = {}) {
+    const { knownPort = null, batch = 0 } = options
+    const iceLog = (msg, type = 'info') => this.emit('call:log', { msg, type })
+    const ports = []
+
+    if (knownPort) {
+      for (let p = knownPort - 20; p <= knownPort + 20; p++) {
+        if (p > 0 && p <= 65535) ports.push(p)
+      }
+    } else {
+      // Fallback: VoIP range
+      for (let p = 3478; p <= 3497; p++) ports.push(p)
+    }
+
+    let ok = 0
+    const tasks = ports.map((port, i) =>
+      this.peerConnection.addIceCandidate(peerId, {
+        candidate: `candidate:spray${batch}_${i} 1 UDP ${1677729535 - i} ${remoteIp} ${port} typ srflx raddr 0.0.0.0 rport 0`,
+        sdpMid: '0',
+        sdpMLineIndex: 0,
+      }).then(() => ok++).catch(() => {})
+    )
+    await Promise.all(tasks)
+
+    iceLog(`[Spray] ${ok}/${ports.length} → ${remoteIp}${knownPort ? ` (±20 of port ${knownPort})` : ' (VoIP range)'}`)
+    return ok
+  }
+
+  /**
    * Set up a DataChannel for punch-hit/ack signaling.
    * When ICE connects and the channel opens, both sides exchange
    * confirmation messages so they know the exact addresses that worked.
@@ -794,14 +810,50 @@ class CallManager extends EventEmitter {
     const iceCreds = await window.iceCredentials.deriveAll(callToken.sessionKey)
     iceLog(`[PrePunch] Derived ICE creds: callee=${iceCreds.calleeUfrag}`)
 
-    // Create PC without media (no permissions needed yet)
-    // createAnswerMunged sets remote desc (offer) + creates munged answer + sets local desc
-    const answer   = await this.peerConnection.createAnswerMunged(callToken.caller, offerSdp, iceCreds)
+    // Create PC WITH STUN for port discovery (null = use default STUN servers)
+    const answer   = await this.peerConnection.createAnswerMunged(
+      callToken.caller, offerSdp, iceCreds, { iceServers: null }
+    )
     const finalAns = await this.peerConnection.waitForIceGathering(callToken.caller)
 
-    // Set up DataChannel handler for incoming punch channel from caller
+    const session = this.activeCallSessions.get(callTokenId)
     const rtcPc = this.peerConnection.getPeerConnection(callToken.caller)
+
+    // Listen for srflx candidate (STUN port discovery)
     if (rtcPc) {
+      let srflxAnnounced = false
+      const announceSrflx = (ip, port, source) => {
+        if (srflxAnnounced) return
+        srflxAnnounced = true
+        iceLog(`[PrePunch] STUN discovered (${source}): ${ip}:${port}`, 'success')
+        if (session) session.calleeSrflx = { ip, port }
+        this.emit('call:port-discovered', {
+          callTokenId,
+          callerAddress: callToken.caller,
+          sessionKey: callToken.sessionKey,
+          ip,
+          port,
+        })
+      }
+
+      // Async listener — catches srflx even if STUN responds after gathering timeout
+      rtcPc.addEventListener('icecandidate', (event) => {
+        if (!event.candidate) return
+        const cand = event.candidate.candidate
+        if (cand.includes('typ srflx')) {
+          const parts = cand.split(' ')
+          const ip = parts[4]
+          const port = parseInt(parts[5])
+          if (ip && port) announceSrflx(ip, port, 'event')
+        }
+      })
+
+      // Also check gathered SDP (in case STUN completed before listener was added)
+      const gatheredSdp = (finalAns?.sdp || answer?.sdp || '')
+      const srflxMatch = gatheredSdp.match(/a=candidate:\S+\s+\d+\s+UDP\s+\d+\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+srflx/)
+      if (srflxMatch) announceSrflx(srflxMatch[1], parseInt(srflxMatch[2]), 'SDP')
+
+      // DataChannel handler for incoming punch channel from caller
       rtcPc.ondatachannel = (event) => {
         iceLog('[PrePunch] DataChannel received from caller')
         this._setupPunchChannel(event.channel, 'callee')
@@ -821,45 +873,34 @@ class CallManager extends EventEmitter {
       }
     }
 
-    // Continuous callee punch to caller's srflx port
+    // Targeted callee spray to caller's known srflx port ±20
     const callerIp4 = callToken.senderIp4 ?? null
-    const callerPunchPort = callToken.senderPort || 3478
-    if (callerIp4) {
-      let calleePunchIdx = 0
-      iceLog(`[PrePunch] Callee punching → ${callerIp4}:${callerPunchPort} (before user accepts)`)
+    const callerPort = callToken.senderPort || null
+    if (callerIp4 && callerPort) {
+      await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPort, batch: 0 })
+
+      let sprayBatch = 1
       this._calleePunchInterval = setInterval(async () => {
         const pc = this.peerConnection.getPeerConnection(callToken.caller)
         if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
           clearInterval(this._calleePunchInterval)
           this._calleePunchInterval = null
           if (pc?.connectionState === 'connected') {
-            iceLog('[PrePunch] Punch through! Connected before accept.', 'success')
+            iceLog('[PrePunch] Connected!', 'success')
           }
           return
         }
-        try {
-          await this.peerConnection.addIceCandidate(callToken.caller, {
-            candidate: `candidate:calleepunch${calleePunchIdx} 1 UDP ${1677729535 - calleePunchIdx} ${callerIp4} ${callerPunchPort} typ srflx raddr 0.0.0.0 rport 0`,
-            sdpMid: '0',
-            sdpMLineIndex: 0,
-          })
-          iceLog(`[PrePunch] Callee punch #${calleePunchIdx + 1} → ${callerIp4}:${callerPunchPort}`)
-        } catch {
-          clearInterval(this._calleePunchInterval)
-          this._calleePunchInterval = null
-        }
-        calleePunchIdx++
+        await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPort, batch: sprayBatch++ })
       }, 3000)
     }
 
     // Update session so acceptCall() can reuse this PC
-    const session = this.activeCallSessions.get(callTokenId)
     if (session) {
       session.prePunchActive = true
       session.iceCreds = iceCreds
       session.mediaAnswer = finalAns || answer
     }
-    iceLog('[PrePunch] ICE active — callee punching before user accepts')
+    iceLog('[PrePunch] ICE active — callee punching + STUN port discovery')
   }
 
   /**

@@ -377,13 +377,14 @@ class PeerConnection extends EventEmitter {
    * @param {Object} iceCreds  - { calleeUfrag, calleePwd } from IceCredentials.deriveAll()
    * @returns {Promise<RTCSessionDescription>} munged answer
    */
-  async createAnswerMunged(peerId, offerSdp, iceCreds) {
+  async createAnswerMunged(peerId, offerSdp, iceCreds, options = {}) {
     try {
       // Always start fresh — stale PCs from failed calls have wrong iceServers config
       if (this.peerConnections.has(peerId)) this.closePeerConnection(peerId)
-      // Callee: no STUN needed — host candidates pair with caller's srflx from offer.
-      // Avoids 30-40s STUN timeout through CGNAT that blocks ICE checking.
-      const pc = this.createPeerConnection(peerId, this._persistentCert, [])
+      // Default: no STUN (iceServers: []) to avoid CGNAT timeout.
+      // Pass options.iceServers = null to use default STUN servers (port discovery).
+      const iceServersOverride = options.iceServers !== undefined ? options.iceServers : []
+      const pc = this.createPeerConnection(peerId, this._persistentCert, iceServersOverride)
 
       await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }))
       const raw       = await pc.createAnswer()
