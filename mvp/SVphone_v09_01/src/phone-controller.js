@@ -508,7 +508,11 @@ class PhoneController {
                     mediaTypes:  ['audio'],
                     sdpAnswer:   '',   // no SDP — port announcement only
                 })
-                this.ui.log(`[PORT] Port ${data.port} announced to caller`, 'success')
+                this.ui.log(`[PORT] Port ${data.port} announced to caller — starting callee spray`, 'success')
+                // PORT TX is in mempool — start callee spray now.
+                // Both sides spray simultaneously: caller starts when it sees PORT token,
+                // callee starts here after broadcasting it.
+                this.callManager.startCalleeSpray(data.callTokenId)
             } catch (err) {
                 this.ui.log(`[PORT] Failed to announce port: ${err.message}`, 'error')
             }

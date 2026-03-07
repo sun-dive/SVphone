@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-07 23:11 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-07 23:11 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-07 23:11 UTC');
+window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-07 23:32 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-07 23:32 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-07 23:32 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -20156,34 +20156,58 @@ class CallManager extends EventEmitter {
       }
     }
 
-    // Targeted callee spray to caller's known srflx port ±20
+    // Save caller spray target — spray deferred until PORT TX is in mempool
+    // so both sides punch simultaneously (caller waits for PORT TX too).
     const callerIp4 = callToken.senderIp4 ?? null
     const callerPort = callToken.senderPort || null
-    if (callerIp4 && callerPort) {
-      await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPort, batch: 0 })
-
-      let sprayBatch = 1
-      this._calleePunchInterval = setInterval(async () => {
-        const pc = this.peerConnection.getPeerConnection(callToken.caller)
-        if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
-          clearInterval(this._calleePunchInterval)
-          this._calleePunchInterval = null
-          if (pc?.connectionState === 'connected') {
-            iceLog('[PrePunch] Connected!', 'success')
-          }
-          return
-        }
-        await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPort, batch: sprayBatch++ })
-      }, 3000)
-    }
 
     // Update session so acceptCall() can reuse this PC
     if (session) {
       session.prePunchActive = true
       session.iceCreds = iceCreds
       session.mediaAnswer = finalAns || answer
+      session.callerSprayTarget = { ip: callerIp4, port: callerPort, callerPeerId: callToken.caller }
     }
-    iceLog('[PrePunch] ICE active — callee punching + STUN port discovery')
+    iceLog('[PrePunch] ICE active — awaiting PORT TX broadcast before spraying')
+  }
+
+  /**
+   * Start callee spray after PORT TX has been broadcast to mempool.
+   * Called by phone-controller after broadcastCallAnswer() completes.
+   * Both sides spray simultaneously — caller starts when it sees the PORT token,
+   * callee starts here after broadcasting it.
+   * @param {string} callTokenId - Call token ID
+   */
+  startCalleeSpray(callTokenId) {
+    const session = this.activeCallSessions.get(callTokenId)
+    if (!session?.callerSprayTarget) {
+      this.emit('call:log', { msg: '[Spray] No caller spray target saved — skipping callee spray', type: 'warn' })
+      return
+    }
+
+    const { ip, port, callerPeerId } = session.callerSprayTarget
+    if (!ip || !port) {
+      this.emit('call:log', { msg: '[Spray] Caller IP/port missing — skipping callee spray', type: 'warn' })
+      return
+    }
+
+    this.emit('call:log', { msg: `[Spray] PORT TX in mempool — starting callee spray to ${ip}:${port}`, type: 'success' })
+
+    this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: 0 })
+
+    let sprayBatch = 1
+    this._calleePunchInterval = setInterval(async () => {
+      const pc = this.peerConnection.getPeerConnection(callerPeerId)
+      if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
+        clearInterval(this._calleePunchInterval)
+        this._calleePunchInterval = null
+        if (pc?.connectionState === 'connected') {
+          this.emit('call:log', { msg: '[Spray] Callee connected!', type: 'success' })
+        }
+        return
+      }
+      await this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: sprayBatch++ })
+    }, 3000)
   }
 
   /**
@@ -24172,7 +24196,11 @@ class PhoneController {
                     mediaTypes:  ['audio'],
                     sdpAnswer:   '',   // no SDP — port announcement only
                 })
-                this.ui.log(`[PORT] Port ${data.port} announced to caller`, 'success')
+                this.ui.log(`[PORT] Port ${data.port} announced to caller — starting callee spray`, 'success')
+                // PORT TX is in mempool — start callee spray now.
+                // Both sides spray simultaneously: caller starts when it sees PORT token,
+                // callee starts here after broadcasting it.
+                this.callManager.startCalleeSpray(data.callTokenId)
             } catch (err) {
                 this.ui.log(`[PORT] Failed to announce port: ${err.message}`, 'error')
             }
