@@ -188,6 +188,14 @@ class CallManager extends EventEmitter {
         mediaOffer = finalOffer
         callToken.sdpOffer        = mediaOffer
         callToken.callerFingerprint = myFingerprint
+
+        // Extract caller's srflx port from gathered SDP so callee knows where to punch
+        const srflxMatch = (mediaOffer.sdp || '').match(/(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+srflx/)
+        if (srflxMatch) {
+          callToken.senderPort = parseInt(srflxMatch[2], 10)
+          this.emit('call:log', { msg: `[1-TX] ✓ srflx port: ${srflxMatch[2]} (included in CALL token for callee punch target)`, type: 'info' })
+        }
+
         this.emit('call:log', { msg: '[1-TX] ✓ Offer ready (ICE gathered)', type: 'info' })
       } catch (error) {
         console.warn('[CallManager] Failed to create munged offer:', error)
@@ -210,21 +218,18 @@ class CallManager extends EventEmitter {
       }
 
       // ADF continuous punch: keep sending ICE candidates to callee's known IP
-      // at intervals so the caller's NAT stays open and ICE stays alive until
-      // the callee picks up and fires checks back.
+      // on port 3478 so the NAT binding stays fresh and ICE stays alive.
       if (calleeIp) {
+        const PUNCH_PORT = 3478
         let punchIdx = 0
-        const punchPorts = [3478,3479,3480,3481,3482,3483,3484,3485,3486,3487,3488,3489,3490,3491,3492,3493,3494,3495,3496,3497]
         const sendPunch = async () => {
-          const port = punchPorts[punchIdx % punchPorts.length]
           try {
             await this.peerConnection.addIceCandidate(calleeAddress, {
-              candidate: `candidate:adfpunch${punchIdx} 1 UDP ${1677729535 - punchIdx} ${calleeIp} ${port} typ srflx raddr 0.0.0.0 rport 0`,
+              candidate: `candidate:adfpunch${punchIdx} 1 UDP ${1677729535 - punchIdx} ${calleeIp} ${PUNCH_PORT} typ srflx raddr 0.0.0.0 rport 0`,
               sdpMid: '0',
               sdpMLineIndex: 0,
             })
           } catch (e) {
-            // PC may be closed — stop punching
             return false
           }
           punchIdx++
@@ -233,9 +238,9 @@ class CallManager extends EventEmitter {
 
         // Send first punch immediately
         await sendPunch()
-        this.emit('call:log', { msg: `[ADF] Punch #1 sent to ${calleeIp}:${punchPorts[0]}`, type: 'info' })
+        this.emit('call:log', { msg: `[ADF] Punch #1 → ${calleeIp}:${PUNCH_PORT}`, type: 'info' })
 
-        // Continue punching every 3 seconds to keep ICE alive
+        // Continue punching every 3 seconds
         this._callerPunchInterval = setInterval(async () => {
           const pc = this.peerConnection.getPeerConnection(calleeAddress)
           if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
@@ -248,8 +253,7 @@ class CallManager extends EventEmitter {
           }
           const ok = await sendPunch()
           if (ok) {
-            const port = punchPorts[(punchIdx - 1) % punchPorts.length]
-            this.emit('call:log', { msg: `[ADF] Punch #${punchIdx} sent to ${calleeIp}:${port}`, type: 'info' })
+            this.emit('call:log', { msg: `[ADF] Punch #${punchIdx} → ${calleeIp}:${PUNCH_PORT}`, type: 'info' })
           } else {
             clearInterval(this._callerPunchInterval)
             this._callerPunchInterval = null
@@ -453,12 +457,13 @@ class CallManager extends EventEmitter {
           // 1-TX: ICE fires checks to caller → peer-reflexive → DTLS → connected
           iceLog('[Accept] ✓ 1-TX: ICE active. Callee firing checks to caller — waiting for peer-reflexive...')
 
-          // Continuous callee punch: keep injecting caller's IP at intervals
-          // to keep ICE alive and NAT holes open on both sides
+          // Continuous callee punch: target the caller's srflx port (from CALL token)
+          // so we hit the exact NAT binding the caller created via STUN.
           const callerIp4 = callToken.senderIp4 ?? null
+          const callerPunchPort = callToken.senderPort || 3478
           if (callerIp4) {
             let calleePunchIdx = 0
-            const calleePunchPorts = [3478,3479,3480,3481,3482,3483,3484,3485,3486,3487,3488,3489,3490,3491,3492,3493,3494,3495,3496,3497]
+            iceLog(`[ADF] Callee punching → ${callerIp4}:${callerPunchPort} (caller srflx port)`)
             this._calleePunchInterval = setInterval(async () => {
               const pc = this.peerConnection.getPeerConnection(callToken.caller)
               if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
@@ -469,14 +474,13 @@ class CallManager extends EventEmitter {
                 }
                 return
               }
-              const port = calleePunchPorts[calleePunchIdx % calleePunchPorts.length]
               try {
                 await this.peerConnection.addIceCandidate(callToken.caller, {
-                  candidate: `candidate:calleepunch${calleePunchIdx} 1 UDP ${1677729535 - calleePunchIdx} ${callerIp4} ${port} typ srflx raddr 0.0.0.0 rport 0`,
+                  candidate: `candidate:calleepunch${calleePunchIdx} 1 UDP ${1677729535 - calleePunchIdx} ${callerIp4} ${callerPunchPort} typ srflx raddr 0.0.0.0 rport 0`,
                   sdpMid: '0',
                   sdpMLineIndex: 0,
                 })
-                iceLog(`[ADF] Callee punch #${calleePunchIdx + 1} sent to ${callerIp4}:${port}`)
+                iceLog(`[ADF] Callee punch #${calleePunchIdx + 1} → ${callerIp4}:${callerPunchPort}`)
               } catch {
                 clearInterval(this._calleePunchInterval)
                 this._calleePunchInterval = null
