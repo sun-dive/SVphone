@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 07:11 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 07:11 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 07:11 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 08:06 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 08:06 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 08:06 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19760,6 +19760,11 @@ class CallManager extends EventEmitter {
                 }
                 return
               }
+              // Pause spray while DTLS is in progress
+              if (pc.connectionState === 'connecting') {
+                iceLog('[Spray] DTLS in progress — pausing spray')
+                return
+              }
               await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPunchPort, batch: sprayBatch++ })
             }, 3000)
           }
@@ -19900,6 +19905,12 @@ class CallManager extends EventEmitter {
             } else if (elapsed > 120000) {
               this.emit('call:log', { msg: '[Spray] Caller spray timed out after 2 min', type: 'warn' })
             }
+            return
+          }
+          // Pause spray while DTLS is in progress — injecting new candidates
+          // creates new pairs that compete with the ongoing handshake
+          if (pc.connectionState === 'connecting') {
+            this.emit('call:log', { msg: '[Spray] DTLS in progress — pausing spray', type: 'info' })
             return
           }
           await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: sprayBatch++ })
@@ -20234,6 +20245,12 @@ class CallManager extends EventEmitter {
         } else if (elapsed > 120000) {
           this.emit('call:log', { msg: '[Spray] Callee spray timed out after 2 min', type: 'warn' })
         }
+        return
+      }
+      // Pause spray while DTLS is in progress — injecting new candidates
+      // creates new pairs that compete with the ongoing handshake
+      if (pc.connectionState === 'connecting') {
+        this.emit('call:log', { msg: '[Spray] DTLS in progress — pausing spray', type: 'info' })
         return
       }
       await this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: sprayBatch++ })

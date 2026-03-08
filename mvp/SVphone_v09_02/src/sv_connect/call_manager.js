@@ -484,6 +484,11 @@ class CallManager extends EventEmitter {
                 }
                 return
               }
+              // Pause spray while DTLS is in progress
+              if (pc.connectionState === 'connecting') {
+                iceLog('[Spray] DTLS in progress — pausing spray')
+                return
+              }
               await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPunchPort, batch: sprayBatch++ })
             }, 3000)
           }
@@ -624,6 +629,12 @@ class CallManager extends EventEmitter {
             } else if (elapsed > 120000) {
               this.emit('call:log', { msg: '[Spray] Caller spray timed out after 2 min', type: 'warn' })
             }
+            return
+          }
+          // Pause spray while DTLS is in progress — injecting new candidates
+          // creates new pairs that compete with the ongoing handshake
+          if (pc.connectionState === 'connecting') {
+            this.emit('call:log', { msg: '[Spray] DTLS in progress — pausing spray', type: 'info' })
             return
           }
           await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: sprayBatch++ })
@@ -958,6 +969,12 @@ class CallManager extends EventEmitter {
         } else if (elapsed > 120000) {
           this.emit('call:log', { msg: '[Spray] Callee spray timed out after 2 min', type: 'warn' })
         }
+        return
+      }
+      // Pause spray while DTLS is in progress — injecting new candidates
+      // creates new pairs that compete with the ongoing handshake
+      if (pc.connectionState === 'connecting') {
+        this.emit('call:log', { msg: '[Spray] DTLS in progress — pausing spray', type: 'info' })
         return
       }
       await this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: sprayBatch++ })
