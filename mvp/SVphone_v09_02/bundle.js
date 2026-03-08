@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 03:16 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 03:16 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 03:16 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 03:40 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 03:40 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 03:40 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -24336,36 +24336,46 @@ class PhoneController {
         try {
             const seenTxIds = new Set()
 
-            // Pre-seed seenTxIds with the current address history so that TXs already
-            // on-chain when polling starts are ignored.  Only signals that arrive
-            // AFTER this point (new calls/answers) will be processed.
+            // Pre-seed seenTxIds with current UTXOs so existing TXs are ignored.
+            // Only new UTXOs (new calls/answers) will be processed.
             try {
-                const initialHistory = await window.provider.getAddressHistory()
-                for (const { txId } of initialHistory) seenTxIds.add(txId)
-                console.log(`[Poll] Pre-seeded ${seenTxIds.size} existing txIds — will only process new signals`)
+                const initialUtxos = await window.provider.getUtxos()
+                for (const u of initialUtxos) seenTxIds.add(u.txId)
+                console.log(`[Poll] Pre-seeded ${seenTxIds.size} existing txIds from UTXOs — will only process new signals`)
             } catch (e) {
                 console.warn('[Poll] Could not pre-seed seenTxIds:', e.message)
             }
 
-            // Scan address history for SVphone call/answer OP_RETURN signals
+            // Scan UTXOs for SVphone call/answer OP_RETURN signals.
+            // UTXOs reflect mempool changes almost instantly (vs address history
+            // which can lag 30-60s on WoC).
             const scanSignalsFn = async (address) => {
                 if (!address) return []
 
-                const history = await window.provider.getAddressHistory()
-                console.log(`[Poll] address=${address.slice(0,12)}… history=${history.length} txs`)
+                const utxos = await window.provider.getUtxos()
                 const results = []
 
-                for (const { txId } of history) {
-                    if (seenTxIds.has(txId)) continue
+                // Collect unique new txIds from UTXOs
+                const newTxIds = []
+                for (const u of utxos) {
+                    if (seenTxIds.has(u.txId)) continue
+                    newTxIds.push(u.txId)
+                    seenTxIds.add(u.txId)
+                }
+                if (newTxIds.length > 0) {
+                    console.log(`[Poll] address=${address.slice(0,12)}… ${newTxIds.length} new UTXO txId(s)`)
+                }
+
+                // Cap seenTxIds to prevent unbounded growth
+                if (seenTxIds.size > 500) {
+                    const iter = seenTxIds.values()
+                    while (seenTxIds.size > 400) seenTxIds.delete(iter.next().value)
+                }
+
+                for (const txId of newTxIds) {
 
                     try {
                         const tx = await window.provider.getSourceTransaction(txId)
-                        // Cap seenTxIds to prevent unbounded growth over long sessions
-                        if (seenTxIds.size > 500) {
-                            const oldest = seenTxIds.values().next().value
-                            seenTxIds.delete(oldest)
-                        }
-                        seenTxIds.add(txId) // Only mark seen after successful fetch
 
                         // Scan outputs for P OP_RETURN call signals
                         let signal = null
