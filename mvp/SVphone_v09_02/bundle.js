@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-08 01:16 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-08 01:16 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-08 01:16 UTC');
+window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-08 01:50 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-08 01:50 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-08 01:50 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -20124,9 +20124,20 @@ class CallManager extends EventEmitter {
     const iceCreds = await window.iceCredentials.deriveAll(callToken.sessionKey)
     iceLog(`[PrePunch] Derived ICE creds: callee=${iceCreds.calleeUfrag}`)
 
+    // Strip ICE candidates from the offer before setting as remote description.
+    // The offer contains the caller's srflx candidate, which would cause the callee's
+    // ICE agent to immediately send connectivity checks to the caller. These checks
+    // ALWAYS fail (caller's NAT hasn't opened for callee yet) and put ICE into "failed"
+    // state. If spray starts before the keepalive can restart ICE, spray candidates
+    // are added but never checked — preventing connection.
+    // Stripping candidates keeps ICE in "new" state until spray provides the first
+    // remote candidates, ensuring fresh connectivity checks.
+    const strippedOffer = offerSdp.replace(/^a=candidate:.*\r?\n/gm, '')
+      .replace(/^a=end-of-candidates.*\r?\n/gm, '')
+
     // Create PC WITH STUN for port discovery (null = use default STUN servers)
     const answer   = await this.peerConnection.createAnswerMunged(
-      callToken.caller, offerSdp, iceCreds, { iceServers: null }
+      callToken.caller, strippedOffer, iceCreds, { iceServers: null }
     )
     const finalAns = await this.peerConnection.waitForIceGathering(callToken.caller)
 
