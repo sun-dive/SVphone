@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 04:12 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 04:12 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 04:12 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 04:58 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 04:58 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 04:58 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -14710,23 +14710,32 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
   var WOC_BASE = typeof location !== "undefined" && location.hostname === "localhost" ? "/woc/v1/bsv/main" : "https://api.whatsonchain.com/v1/bsv/main";
   var MIN_REQUEST_DELAY = 600;
   var RATE_LIMIT_BACKOFF = 3e3;
-  var fetchQueue = Promise.resolve();
+  var fetchStack = [];
+  var fetchProcessing = false;
+  async function processStack() {
+    if (fetchProcessing) return;
+    fetchProcessing = true;
+    while (fetchStack.length > 0) {
+      const entry = fetchStack.pop();
+      let delay = MIN_REQUEST_DELAY;
+      try {
+        const resp = await fetch(entry.url, entry.init);
+        if (resp.status === 429) {
+          console.warn(`[queuedFetch] 429 rate limit hit \u2014 backing off ${RATE_LIMIT_BACKOFF}ms`);
+          delay = RATE_LIMIT_BACKOFF;
+        }
+        entry.resolve(resp);
+      } catch (err) {
+        entry.reject(err);
+      }
+      await new Promise((r2) => setTimeout(r2, delay));
+    }
+    fetchProcessing = false;
+  }
   function queuedFetch(url, init2) {
     return new Promise((resolve, reject) => {
-      fetchQueue = fetchQueue.then(async () => {
-        let delay = MIN_REQUEST_DELAY;
-        try {
-          const resp = await fetch(url, init2);
-          if (resp.status === 429) {
-            console.warn(`[queuedFetch] 429 rate limit hit \u2014 backing off ${RATE_LIMIT_BACKOFF}ms`);
-            delay = RATE_LIMIT_BACKOFF;
-          }
-          resolve(resp);
-        } catch (err) {
-          reject(err);
-        }
-        await new Promise((r2) => setTimeout(r2, delay));
-      });
+      fetchStack.push({ url, init: init2, resolve, reject });
+      processStack();
     });
   }
   var WalletProvider = class {
@@ -15324,7 +15333,8 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
     async getSafeUtxos() {
       const utxos = await this.provider.getUtxos();
       const safe = [];
-      for (const u of utxos) {
+      for (let i = utxos.length - 1; i >= 0; i--) {
+        const u = utxos[i];
         if (u.satoshis <= TOKEN_SATS) {
           this.tryAutoImport(u).catch(() => {
           });

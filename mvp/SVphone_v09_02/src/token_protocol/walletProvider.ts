@@ -35,7 +35,7 @@ export interface WalletBlockHeader extends SpvBlockHeader {
   prevHash: string
 }
 
-// ─── Rate Limiter (serializing queue) ────────────────────────────────
+// ─── Rate Limiter (serializing stack — LIFO) ─────────────────────────
 
 // Normal delay between requests. WoC free tier is ~3 req/sec; 600ms keeps us under 1.7 req/sec.
 const MIN_REQUEST_DELAY = 600
@@ -43,32 +43,51 @@ const MIN_REQUEST_DELAY = 600
 const RATE_LIMIT_BACKOFF = 3000
 
 /**
- * Serializing fetch queue. All API calls go through this single queue
+ * Serializing fetch stack (LIFO). All API calls go through this single stack
  * so that concurrent async paths (balance refresh, incoming scan, auto-import)
- * cannot burst past the rate limit. Each request waits for the previous
- * one to complete + the minimum delay before starting.
- * On 429, waits RATE_LIMIT_BACKOFF (3s) instead of MIN_REQUEST_DELAY so WoC's
- * rate-limit window has time to reset before the next queued request fires.
- * NOTE: This relies on global fetchQueue state; do not instantiate multiple providers.
+ * cannot burst past the rate limit.
+ *
+ * LIFO order ensures the most recent request is always processed first.
+ * When background auto-import queues many getRawTransaction calls, any new
+ * request (e.g. phone polling getUtxos, broadcast) lands on top and runs next.
+ *
+ * NOTE: This relies on global stack state; do not instantiate multiple providers.
  */
-let fetchQueue: Promise<void> = Promise.resolve()
+interface StackEntry {
+  url: string
+  init?: RequestInit
+  resolve: (resp: Response) => void
+  reject: (err: any) => void
+}
+
+const fetchStack: StackEntry[] = []
+let fetchProcessing = false
+
+async function processStack(): Promise<void> {
+  if (fetchProcessing) return
+  fetchProcessing = true
+  while (fetchStack.length > 0) {
+    const entry = fetchStack.pop()!  // LIFO: newest request first
+    let delay = MIN_REQUEST_DELAY
+    try {
+      const resp = await fetch(entry.url, entry.init)
+      if (resp.status === 429) {
+        console.warn(`[queuedFetch] 429 rate limit hit — backing off ${RATE_LIMIT_BACKOFF}ms`)
+        delay = RATE_LIMIT_BACKOFF
+      }
+      entry.resolve(resp)
+    } catch (err) {
+      entry.reject(err)
+    }
+    await new Promise(r => setTimeout(r, delay))
+  }
+  fetchProcessing = false
+}
 
 function queuedFetch(url: string, init?: RequestInit): Promise<Response> {
   return new Promise<Response>((resolve, reject) => {
-    fetchQueue = fetchQueue.then(async () => {
-      let delay = MIN_REQUEST_DELAY
-      try {
-        const resp = await fetch(url, init)
-        if (resp.status === 429) {
-          console.warn(`[queuedFetch] 429 rate limit hit — backing off ${RATE_LIMIT_BACKOFF}ms`)
-          delay = RATE_LIMIT_BACKOFF
-        }
-        resolve(resp)
-      } catch (err) {
-        reject(err)
-      }
-      await new Promise(r => setTimeout(r, delay))
-    })
+    fetchStack.push({ url, init, resolve, reject })
+    processStack()
   })
 }
 

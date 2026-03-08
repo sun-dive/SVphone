@@ -150,7 +150,12 @@ export class TokenBuilder {
     const utxos = await this.provider.getUtxos()
     const safe: Utxo[] = []
 
-    for (const u of utxos) {
+    // Process newest UTXOs first: WoC returns oldest-first, so we iterate
+    // in reverse. This means auto-import processes the most recent incoming
+    // tokens before older ones, and with the LIFO fetch stack, the newest
+    // token's getSourceTransaction lands on top and runs first.
+    for (let i = utxos.length - 1; i >= 0; i--) {
+      const u = utxos[i]
       if (u.satoshis <= TOKEN_SATS) {
         // Quarantined: attempt P auto-import in background, but
         // never allow spending regardless of result
