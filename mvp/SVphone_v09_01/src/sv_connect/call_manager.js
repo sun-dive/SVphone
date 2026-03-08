@@ -397,8 +397,11 @@ class CallManager extends EventEmitter {
             })
           }
           if (this.peerConnection.mediaStream) {
+            const existingSenders = rtcPc.getSenders()
             this.peerConnection.mediaStream.getTracks().forEach(track => {
-              rtcPc.addTrack(track, this.peerConnection.mediaStream)
+              if (!existingSenders.find(s => s.track === track)) {
+                rtcPc.addTrack(track, this.peerConnection.mediaStream)
+              }
             })
             iceLog('[Accept] ✓ Media tracks added to pre-punched connection')
           }
