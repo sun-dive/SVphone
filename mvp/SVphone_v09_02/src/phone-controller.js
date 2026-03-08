@@ -496,7 +496,8 @@ class PhoneController {
             try {
                 const myAddress = this.signaling.myAddress
                 if (!myAddress) return
-                this.ui.log(`[PORT] Broadcasting port ${data.port} to caller...`, 'info')
+                const portFeePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
+                this.ui.log(`[PORT] Broadcasting port ${data.port} to caller... (fee ${portFeePerKb} sats/KB)`, 'info')
                 await this.callTokenManager.broadcastCallAnswer(data.callerAddress, {
                     callee:      myAddress,
                     senderIp:    data.ip,
@@ -507,6 +508,7 @@ class PhoneController {
                     quality:     'hd',
                     mediaTypes:  ['audio'],
                     sdpAnswer:   '',   // no SDP — port announcement only
+                    feePerKb:    portFeePerKb,
                 })
                 this.ui.log(`[PORT] Port ${data.port} announced to caller — starting callee spray`, 'success')
                 // PORT TX is in mempool — start callee spray now.

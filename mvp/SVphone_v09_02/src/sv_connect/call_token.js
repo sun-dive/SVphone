@@ -297,11 +297,13 @@ class CallTokenManager {
       const callerIdent = callToken.caller?.slice(0, 5) || 'unkn'
 
       const prefix = callToken.tokenPrefix || 'CALL'
+      const feePerKb = callToken.feePerKb || 1.1
       const result = await window.tokenBuilder.createCallSignalTx(
         `${prefix}-${callerIdent}`,
         callerHash + calleeHash,
         attrs,
         callToken.callee,
+        feePerKb,
       )
 
       this.log(`✓ Call signal sent: ${result.txId}`, 'success')
@@ -343,11 +345,13 @@ class CallTokenManager {
       })
       const calleeIdent = answerData.callee?.slice(0, 5) || 'unkn'
 
+      const feePerKb = answerData.feePerKb || 1.1
       const result = await window.tokenBuilder.createCallSignalTx(
         `ANS-${calleeIdent}`,
         callerHash + calleeHash,
         attrs,
         callerAddress,
+        feePerKb,
       )
 
       this.log(`✓ Answer sent: ${result.txId}`, 'success')

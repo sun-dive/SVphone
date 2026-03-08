@@ -41,11 +41,12 @@ class CallHandlers {
             const video    = callMode.startsWith('video')
             const quality  = callMode.endsWith('hd') ? 'hd' : 'ld'
 
+            const feePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
             const mintTokenFn = async (token) =>
-                this.app.callTokenManager.createAndBroadcastCallToken(token)
+                this.app.callTokenManager.createAndBroadcastCallToken({ ...token, feePerKb })
 
             this.ui.updateCallButtonStatus('calling')
-            this.ui.log(`📞 Calling ${calleeAddress}... (${callMode})`, 'info')
+            this.ui.log(`📞 Calling ${calleeAddress}... (${callMode}, fee ${feePerKb} sats/KB)`, 'info')
 
             // Start outgoing ring immediately — before ICE/TX which takes several seconds
             this.ui.startOutgoingRing()
@@ -99,7 +100,7 @@ class CallHandlers {
                         video: false,
                         quality: quality2,
                         mintTokenFn: async (token) =>
-                            this.app.callTokenManager.createAndBroadcastCallToken(token)
+                            this.app.callTokenManager.createAndBroadcastCallToken({ ...token, feePerKb })
                     })
                     this.app.currentCallToken = session.callTokenId
                     this.ui.log('✓ Audio-only call initiated', 'success')
@@ -188,11 +189,13 @@ class CallHandlers {
             if (myPort) this.app.signaling.myPort = myPort
 
             // broadcastAnswerFn: send answer signal back to caller
+            const ansFeePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
             const broadcastAnswerFn = async (_callTokenId, callerAddress, answerData) => {
                 this.ui.log(`📤 Sending answer signal to caller...`, 'info')
                 const answerWithCallee = {
                     ...answerData,
                     callee: this.app.signaling.myAddress,
+                    feePerKb: ansFeePerKb,
                 }
                 const result = await this.app.callTokenManager.broadcastCallAnswer(callerAddress, answerWithCallee)
                 this.ui.log(`✓ Answer sent: ${result.txId}`, 'success')

@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 02:56 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 02:56 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 02:56 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 03:16 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 03:16 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 03:16 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -22696,11 +22696,13 @@ class CallTokenManager {
       const callerIdent = callToken.caller?.slice(0, 5) || 'unkn'
 
       const prefix = callToken.tokenPrefix || 'CALL'
+      const feePerKb = callToken.feePerKb || 1.1
       const result = await window.tokenBuilder.createCallSignalTx(
         `${prefix}-${callerIdent}`,
         callerHash + calleeHash,
         attrs,
         callToken.callee,
+        feePerKb,
       )
 
       this.log(`✓ Call signal sent: ${result.txId}`, 'success')
@@ -22742,11 +22744,13 @@ class CallTokenManager {
       })
       const calleeIdent = answerData.callee?.slice(0, 5) || 'unkn'
 
+      const feePerKb = answerData.feePerKb || 1.1
       const result = await window.tokenBuilder.createCallSignalTx(
         `ANS-${calleeIdent}`,
         callerHash + calleeHash,
         attrs,
         callerAddress,
+        feePerKb,
       )
 
       this.log(`✓ Answer sent: ${result.txId}`, 'success')
@@ -23236,11 +23240,12 @@ class CallHandlers {
             const video    = callMode.startsWith('video')
             const quality  = callMode.endsWith('hd') ? 'hd' : 'ld'
 
+            const feePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
             const mintTokenFn = async (token) =>
-                this.app.callTokenManager.createAndBroadcastCallToken(token)
+                this.app.callTokenManager.createAndBroadcastCallToken({ ...token, feePerKb })
 
             this.ui.updateCallButtonStatus('calling')
-            this.ui.log(`📞 Calling ${calleeAddress}... (${callMode})`, 'info')
+            this.ui.log(`📞 Calling ${calleeAddress}... (${callMode}, fee ${feePerKb} sats/KB)`, 'info')
 
             // Start outgoing ring immediately — before ICE/TX which takes several seconds
             this.ui.startOutgoingRing()
@@ -23294,7 +23299,7 @@ class CallHandlers {
                         video: false,
                         quality: quality2,
                         mintTokenFn: async (token) =>
-                            this.app.callTokenManager.createAndBroadcastCallToken(token)
+                            this.app.callTokenManager.createAndBroadcastCallToken({ ...token, feePerKb })
                     })
                     this.app.currentCallToken = session.callTokenId
                     this.ui.log('✓ Audio-only call initiated', 'success')
@@ -23383,11 +23388,13 @@ class CallHandlers {
             if (myPort) this.app.signaling.myPort = myPort
 
             // broadcastAnswerFn: send answer signal back to caller
+            const ansFeePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
             const broadcastAnswerFn = async (_callTokenId, callerAddress, answerData) => {
                 this.ui.log(`📤 Sending answer signal to caller...`, 'info')
                 const answerWithCallee = {
                     ...answerData,
                     callee: this.app.signaling.myAddress,
+                    feePerKb: ansFeePerKb,
                 }
                 const result = await this.app.callTokenManager.broadcastCallAnswer(callerAddress, answerWithCallee)
                 this.ui.log(`✓ Answer sent: ${result.txId}`, 'success')
@@ -24195,7 +24202,8 @@ class PhoneController {
             try {
                 const myAddress = this.signaling.myAddress
                 if (!myAddress) return
-                this.ui.log(`[PORT] Broadcasting port ${data.port} to caller...`, 'info')
+                const portFeePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
+                this.ui.log(`[PORT] Broadcasting port ${data.port} to caller... (fee ${portFeePerKb} sats/KB)`, 'info')
                 await this.callTokenManager.broadcastCallAnswer(data.callerAddress, {
                     callee:      myAddress,
                     senderIp:    data.ip,
@@ -24206,6 +24214,7 @@ class PhoneController {
                     quality:     'hd',
                     mediaTypes:  ['audio'],
                     sdpAnswer:   '',   // no SDP — port announcement only
+                    feePerKb:    portFeePerKb,
                 })
                 this.ui.log(`[PORT] Port ${data.port} announced to caller — starting callee spray`, 'success')
                 // PORT TX is in mempool — start callee spray now.
