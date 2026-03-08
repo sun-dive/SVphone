@@ -230,6 +230,9 @@ class CallManager extends EventEmitter {
       const broadcastResult = await this.signaling.broadcastCallToken(callToken, options.mintTokenFn)
       this.emit('call:log', { msg: '[1-TX] ✓ CALL TX broadcast — awaiting PORT token for callee IP:port', type: 'info' })
 
+      // Keep NAT binding alive while waiting for PORT token (can be 60s+ with slow ISP)
+      this._startNatKeepalive(calleeAddress)
+
       // Create session tracking
       const session = {
         callTokenId:  broadcastResult.callTokenId,
@@ -615,6 +618,9 @@ class CallManager extends EventEmitter {
       if (!data.sdpAnswer && calleePort && calleeIp) {
         this.emit('call:log', { msg: `[PORT] Callee port received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
+        // Stop NAT keepalive — spray takes over as the outgoing packet source
+        this._stopNatKeepalive()
+
         // Start targeted ±20 spray using fresh IP:port from PORT token.
         // Spray for up to 2 min — ISP TX propagation can delay the other side by 60s+.
         this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: 0 })
@@ -737,6 +743,54 @@ class CallManager extends EventEmitter {
   /**
    * Inject ICE candidates targeting ±20 ports around a known remote port.
    * Opens NAT mappings so the peer's actual port is likely covered.
+   * Start periodic NAT keepalive to prevent binding expiry.
+   * Injects a dummy remote candidate every 15s so the ICE agent sends an
+   * outgoing STUN check from the PeerConnection's local port. For EIM NATs
+   * (most broadband), any outgoing packet refreshes the port binding.
+   * Critical for the caller — the gap between STUN discovery and PORT token
+   * detection can exceed NAT binding timeouts (30-60s for UDP).
+   * @private
+   * @param {string} peerId - Remote peer address
+   */
+  _startNatKeepalive(peerId) {
+    if (this._natKeepaliveInterval) return // already running
+    const iceLog = (msg, type = 'info') => this.emit('call:log', { msg, type })
+    let count = 0
+    iceLog('[Keepalive] Starting NAT binding refresh (every 15s)')
+    this._natKeepaliveInterval = setInterval(() => {
+      const pc = this.peerConnection.getPeerConnection(peerId)
+      if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
+        clearInterval(this._natKeepaliveInterval)
+        this._natKeepaliveInterval = null
+        iceLog('[Keepalive] Stopped (connection state changed)')
+        return
+      }
+      // Dummy candidate triggers outgoing STUN check from the same local port.
+      // Using TEST-NET (192.0.2.x) — packet exits NAT but is never routed.
+      // Incrementing port ensures each candidate is unique (new pair = new check).
+      this.peerConnection.addIceCandidate(peerId, {
+        candidate: `candidate:ka${count} 1 UDP 1 192.0.2.1 ${3478 + count} typ host`,
+        sdpMid: '0',
+        sdpMLineIndex: 0,
+      }).catch(() => {})
+      count++
+      iceLog(`[Keepalive] NAT binding refresh #${count}`)
+    }, 15000)
+  }
+
+  /**
+   * Stop NAT keepalive if running.
+   * @private
+   */
+  _stopNatKeepalive() {
+    if (this._natKeepaliveInterval) {
+      clearInterval(this._natKeepaliveInterval)
+      this._natKeepaliveInterval = null
+      this.emit('call:log', { msg: '[Keepalive] Stopped', type: 'info' })
+    }
+  }
+
+  /**
    * @private
    * @param {string} peerId   - Remote peer address
    * @param {string} remoteIp - Remote public IP
@@ -830,6 +884,8 @@ class CallManager extends EventEmitter {
         srflxAnnounced = true
         iceLog(`[PrePunch] STUN discovered (${source}): ${ip}:${port}`, 'success')
         if (session) session.calleeSrflx = { ip, port }
+        // Keep NAT binding alive until spray starts
+        this._startNatKeepalive(callToken.caller)
         this.emit('call:port-discovered', {
           callTokenId,
           callerAddress: callToken.caller,
@@ -897,18 +953,9 @@ class CallManager extends EventEmitter {
       }
     }
 
-    // Inject caller's public IP as srflx candidates
-    if (callToken.senderIp4 || callToken.senderIp6) {
-      const pubCandidates = this.peerConnection._buildPublicIpCandidates(
-        offerSdp,
-        callToken.senderIp4 ?? null,
-        callToken.senderIp6 ?? null,
-        iceLog
-      )
-      for (const c of pubCandidates) {
-        this.peerConnection.addIceCandidate(callToken.caller, c).catch(() => {})
-      }
-    }
+    // NOTE: _buildPublicIpCandidates removed — injecting caller's IP before both
+    // sides are ready causes premature ICE failure (NAT blocks the checks).
+    // The spray handles candidate injection after both sides are synchronized.
 
     // Save caller spray target — spray deferred until PORT TX is in mempool
     // so both sides punch simultaneously (caller waits for PORT TX too).
@@ -946,6 +993,9 @@ class CallManager extends EventEmitter {
     }
 
     this.emit('call:log', { msg: `[Spray] PORT TX in mempool — starting callee spray to ${ip}:${port} (up to 2 min)`, type: 'success' })
+
+    // Stop NAT keepalive — spray takes over
+    this._stopNatKeepalive()
 
     // Spray for up to 2 min — ISP TX propagation can delay the other side by 60s+.
     this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: 0 })
@@ -1033,6 +1083,9 @@ class CallManager extends EventEmitter {
       if (session.statsMonitor) {
         clearInterval(session.statsMonitor)
       }
+
+      // Stop NAT keepalive
+      this._stopNatKeepalive()
 
       // Stop ADF punch intervals and close punch channel
       if (this._callerPunchInterval) {
