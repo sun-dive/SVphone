@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 21:54 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 21:54 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 21:54 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 22:09 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 22:09 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 22:09 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19880,7 +19880,7 @@ class CallManager extends EventEmitter {
     if (!session && data.caller) {
       for (const [id, s] of this.activeCallSessions) {
         if (s.role === 'callee' && s.caller === data.caller) {
-          this.emit('call:log', { msg: `[ANS] Own ANS token detected via UTXO polling — starting callee spray`, type: 'success' })
+          this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Own ANS token detected via UTXO polling — starting callee spray`, type: 'success' })
           this.startCalleeSpray(id)
           return
         }
@@ -19888,8 +19888,8 @@ class CallManager extends EventEmitter {
     }
 
     if (session) {
-      this.emit('call:log', { msg: `[ANS] Token seen in mempool from ${data.callee || 'unknown'}`, type: 'info' })
-      console.log('[CallManager] ANS token seen in mempool from:', data.callee || 'unknown')
+      this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Token seen in mempool from ${data.callee || 'unknown'}`, type: 'info' })
+      console.log('[CallManager] ANS token seen in mempool from:', data.callee || 'unknown', 'at', new Date().toLocaleTimeString())
 
       // Identity exchange: save callee's fingerprint and end
       if (session.identityExchange && data.callerFingerprint) {
@@ -19910,7 +19910,7 @@ class CallManager extends EventEmitter {
       const calleePort = data.calleePort
       const calleeIp   = data.calleeIp4 || data.calleeIp6 || null
       if (calleePort && calleeIp) {
-        this.emit('call:log', { msg: `[ANS] Callee answer received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
+        this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Callee answer received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
         // Start targeted ±20 spray using fresh IP:port from PORT token.
         // Spray for up to 2 min — ISP TX propagation can delay the other side by 60s+.
@@ -20072,7 +20072,7 @@ class CallManager extends EventEmitter {
     )
     await Promise.all(tasks)
 
-    iceLog(`[Spray] #${batch} ${ok}/${ports.length} → ${remoteIp}:${ports[0]}-${ports[ports.length - 1]}`)
+    iceLog(`[Spray] ${new Date().toLocaleTimeString()} #${batch} ${ok}/${ports.length} → ${remoteIp}:${ports[0]}-${ports[ports.length - 1]}`)
     return ok
   }
 
