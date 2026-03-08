@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 23:19 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 23:19 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 23:19 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 23:48 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 23:48 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 23:48 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19293,6 +19293,10 @@ if (typeof module !== 'undefined' && module.exports) {
  * Manages the complete call lifecycle from initiation to termination.
  */
 
+const STUN_SERVER_HOST = 'stun.l.google.com'
+const STUN_SERVER_PORT = 19302
+const STUN_SERVER_URL  = `stun:${STUN_SERVER_HOST}:${STUN_SERVER_PORT}`
+
 class EventEmitter {
   constructor() {
     this.listeners = new Map()
@@ -19557,6 +19561,11 @@ class CallManager extends EventEmitter {
       this.activeCallSessions.set(broadcastResult.callTokenId, session)
       this.emit('call:initiated-session', session)
       console.log('[CallManager] 1-TX call initiated to:', calleeAddress)
+
+      // Keep the caller's STUN port binding alive while waiting for ANS token.
+      // The srflx binding goes idle after gathering and can expire on Cable
+      // routers (as short as 10s) before the callee's spray arrives.
+      this._startCallerNatKeepalive(calleeAddress)
 
       return session
     } catch (error) {
@@ -19929,6 +19938,9 @@ class CallManager extends EventEmitter {
       const calleePort = data.calleePort
       const calleeIp   = data.calleeIp4 || data.calleeIp6 || null
       if (calleePort && calleeIp) {
+        // Stop NAT keepalive — spray takes over from here
+        this._stopCallerNatKeepalive()
+
         this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Callee answer received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
         // Start targeted ±20 spray using fresh IP:port from PORT token.
@@ -20056,6 +20068,51 @@ class CallManager extends EventEmitter {
   onPeerConnectionFailed(data) {
     console.error('[CallManager] Peer connection failed:', data.peerId)
     this.emit('call:connection-failed', data)
+  }
+
+  /**
+   * Keep caller's STUN port binding alive by periodically injecting a remote
+   * ICE candidate pointing to the STUN server. The ICE agent sends STUN
+   * connectivity checks FROM the caller's bound port, refreshing the NAT
+   * binding. Each injection uses a unique foundation so Chrome treats it as
+   * a new candidate pair (prevents all pairs failing → ICE "failed").
+   * @private
+   */
+  _startCallerNatKeepalive(peerId) {
+    this._stopCallerNatKeepalive()
+
+    // Resolve STUN server IP via DNS (fallback to hostname)
+    // We use the well-known Google STUN IP to avoid async DNS lookup
+    const stunIp = '74.125.250.129'  // stun.l.google.com
+    let tick = 0
+
+    this.emit('call:log', { msg: `[Keepalive] Starting NAT keepalive to ${stunIp}:${STUN_SERVER_PORT} every 5s`, type: 'info' })
+
+    this._natKeepaliveInterval = setInterval(() => {
+      const pc = this.peerConnection.getPeerConnection(peerId)
+      if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
+        this._stopCallerNatKeepalive()
+        return
+      }
+
+      tick++
+      this.peerConnection.addIceCandidate(peerId, {
+        candidate: `candidate:keepalive${tick} 1 UDP ${2130706431 - tick} ${stunIp} ${STUN_SERVER_PORT} typ host`,
+        sdpMid: '0',
+        sdpMLineIndex: 0,
+      }).then(() => {
+        this.emit('call:log', { msg: `[Keepalive] ${new Date().toLocaleTimeString()} #${tick} → ${stunIp}:${STUN_SERVER_PORT}`, type: 'info' })
+      }).catch(() => {})
+    }, 5000)
+  }
+
+  /** @private */
+  _stopCallerNatKeepalive() {
+    if (this._natKeepaliveInterval) {
+      clearInterval(this._natKeepaliveInterval)
+      this._natKeepaliveInterval = null
+      this.emit('call:log', { msg: '[Keepalive] Stopped', type: 'info' })
+    }
   }
 
   /**
@@ -20394,7 +20451,8 @@ class CallManager extends EventEmitter {
         clearInterval(session.statsMonitor)
       }
 
-      // Stop ADF punch intervals and close punch channel
+      // Stop NAT keepalive and ADF punch intervals
+      this._stopCallerNatKeepalive()
       if (this._callerPunchInterval) {
         clearInterval(this._callerPunchInterval)
         this._callerPunchInterval = null
@@ -20512,7 +20570,7 @@ class PeerConnection extends EventEmitter {
     // Reflects each peer's real public UDP IP:port so ICE can build
     // srflx candidates and punch through carrier NAT.
     this.iceServers = options.iceServers || [
-      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: STUN_SERVER_URL },
     ]
 
     // Optional TURN server if caller provides one (for restricted networks)

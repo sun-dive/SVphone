@@ -16,7 +16,7 @@ class PeerConnection extends EventEmitter {
     // Reflects each peer's real public UDP IP:port so ICE can build
     // srflx candidates and punch through carrier NAT.
     this.iceServers = options.iceServers || [
-      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: STUN_SERVER_URL },
     ]
 
     // Optional TURN server if caller provides one (for restricted networks)
