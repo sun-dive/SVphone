@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 09:13 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 09:13 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 09:13 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 21:41 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 21:41 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 21:41 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19863,6 +19863,18 @@ class CallManager extends EventEmitter {
       }
     }
 
+    // Callee detecting its own ANS token via UTXO polling — start callee spray.
+    // This synchronizes both sides: caller also starts spray when it detects the ANS token.
+    if (!session && data.caller) {
+      for (const [id, s] of this.activeCallSessions) {
+        if (s.role === 'callee' && s.caller === data.caller) {
+          this.emit('call:log', { msg: `[ANS] Own ANS token detected via UTXO polling — starting callee spray`, type: 'success' })
+          this.startCalleeSpray(id)
+          return
+        }
+      }
+    }
+
     if (session) {
       this.emit('call:log', { msg: `[ANS] Token seen in mempool from ${data.callee || 'unknown'}`, type: 'info' })
       console.log('[CallManager] ANS token seen in mempool from:', data.callee || 'unknown')
@@ -24266,18 +24278,11 @@ class PhoneController {
                 // caller has sent anything outbound).
                 const ansTxId = portResult?.txId
                 if (ansTxId) {
-                    for (let attempt = 0; attempt < 10; attempt++) {
-                        try {
-                            await window.provider.getRawTransaction(ansTxId)
-                            this.ui.log(`[ANS] ANS TX confirmed in mempool — starting callee spray`, 'success')
-                            break
-                        } catch {
-                            this.ui.log(`[ANS] Waiting for mempool visibility... (${attempt + 1})`, 'info')
-                            await new Promise(r => setTimeout(r, 2000))
-                        }
-                    }
+                    this.ui.log(`[ANS] ANS TX broadcast (${ansTxId.slice(0,12)}…) — waiting for UTXO detection to start spray`, 'info')
                 }
-                this.callManager.startCalleeSpray(data.callTokenId)
+                // Spray is NOT started here. Both caller and callee start spray
+                // when they detect the ANS token via UTXO polling (onCallAnswered).
+                // This synchronizes both sides to within one polling interval.
             } catch (err) {
                 this.ui.log(`[ANS] Failed to broadcast answer: ${err.message}`, 'error')
             }
@@ -24452,7 +24457,7 @@ class PhoneController {
                             if (!attrs?.senderIp) continue
 
                             const isCall = (name.startsWith('CALL-') || name.startsWith('CXID-')) && attrs.callee === address
-                            const isAnswer = name.startsWith('ANS-') && attrs.caller === address
+                            const isAnswer = name.startsWith('ANS-') && (attrs.caller === address || attrs.callee === address)
                             if (!isCall && !isAnswer) continue
 
                             signal = {

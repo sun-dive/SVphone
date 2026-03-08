@@ -520,18 +520,11 @@ class PhoneController {
                 // caller has sent anything outbound).
                 const ansTxId = portResult?.txId
                 if (ansTxId) {
-                    for (let attempt = 0; attempt < 10; attempt++) {
-                        try {
-                            await window.provider.getRawTransaction(ansTxId)
-                            this.ui.log(`[ANS] ANS TX confirmed in mempool — starting callee spray`, 'success')
-                            break
-                        } catch {
-                            this.ui.log(`[ANS] Waiting for mempool visibility... (${attempt + 1})`, 'info')
-                            await new Promise(r => setTimeout(r, 2000))
-                        }
-                    }
+                    this.ui.log(`[ANS] ANS TX broadcast (${ansTxId.slice(0,12)}…) — waiting for UTXO detection to start spray`, 'info')
                 }
-                this.callManager.startCalleeSpray(data.callTokenId)
+                // Spray is NOT started here. Both caller and callee start spray
+                // when they detect the ANS token via UTXO polling (onCallAnswered).
+                // This synchronizes both sides to within one polling interval.
             } catch (err) {
                 this.ui.log(`[ANS] Failed to broadcast answer: ${err.message}`, 'error')
             }
@@ -706,7 +699,7 @@ class PhoneController {
                             if (!attrs?.senderIp) continue
 
                             const isCall = (name.startsWith('CALL-') || name.startsWith('CXID-')) && attrs.callee === address
-                            const isAnswer = name.startsWith('ANS-') && attrs.caller === address
+                            const isAnswer = name.startsWith('ANS-') && (attrs.caller === address || attrs.callee === address)
                             if (!isCall && !isAnswer) continue
 
                             signal = {

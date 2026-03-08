@@ -587,6 +587,18 @@ class CallManager extends EventEmitter {
       }
     }
 
+    // Callee detecting its own ANS token via UTXO polling — start callee spray.
+    // This synchronizes both sides: caller also starts spray when it detects the ANS token.
+    if (!session && data.caller) {
+      for (const [id, s] of this.activeCallSessions) {
+        if (s.role === 'callee' && s.caller === data.caller) {
+          this.emit('call:log', { msg: `[ANS] Own ANS token detected via UTXO polling — starting callee spray`, type: 'success' })
+          this.startCalleeSpray(id)
+          return
+        }
+      }
+    }
+
     if (session) {
       this.emit('call:log', { msg: `[ANS] Token seen in mempool from ${data.callee || 'unknown'}`, type: 'info' })
       console.log('[CallManager] ANS token seen in mempool from:', data.callee || 'unknown')
