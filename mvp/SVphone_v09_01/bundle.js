@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-08 00:30 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-08 00:30 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-08 00:30 UTC');
+window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-08 00:36 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-08 00:36 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-08 00:36 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19848,6 +19848,9 @@ class CallManager extends EventEmitter {
     }
 
     if (session) {
+      this.emit('call:log', { msg: `[ANS] Token seen in mempool from ${data.callee || 'unknown'}`, type: 'info' })
+      console.log('[CallManager] ANS token seen in mempool from:', data.callee || 'unknown')
+
       // Identity exchange: save callee's fingerprint and end
       if (session.identityExchange && data.callerFingerprint) {
         window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp4 || null)

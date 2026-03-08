@@ -591,6 +591,9 @@ class CallManager extends EventEmitter {
     }
 
     if (session) {
+      this.emit('call:log', { msg: `[ANS] Token seen in mempool from ${data.callee || 'unknown'}`, type: 'info' })
+      console.log('[CallManager] ANS token seen in mempool from:', data.callee || 'unknown')
+
       // Identity exchange: save callee's fingerprint and end
       if (session.identityExchange && data.callerFingerprint) {
         window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp4 || null)
