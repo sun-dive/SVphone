@@ -761,7 +761,7 @@ class CallManager extends EventEmitter {
     )
     await Promise.all(tasks)
 
-    iceLog(`[Spray] ${ok}/${ports.length} → ${remoteIp}${knownPort ? ` (±20 of port ${knownPort})` : ' (VoIP range)'}`)
+    iceLog(`[Spray] #${batch} ${ok}/${ports.length} → ${remoteIp}:${ports[0]}-${ports[ports.length - 1]}`)
     return ok
   }
 
