@@ -606,11 +606,11 @@ class CallManager extends EventEmitter {
         return
       }
 
-      // Port announcement (no SDP, just callee's srflx IP:port from STUN/host)
+      // ANS token with callee's srflx IP:port (+ SDP answer + fingerprint)
       const calleePort = data.calleePort
       const calleeIp   = data.calleeIp4 || data.calleeIp6 || null
-      if (!data.sdpAnswer && calleePort && calleeIp) {
-        this.emit('call:log', { msg: `[PORT] Callee port received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
+      if (calleePort && calleeIp) {
+        this.emit('call:log', { msg: `[ANS] Callee answer received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
         // Start targeted ±20 spray using fresh IP:port from PORT token.
         // Spray for up to 2 min — ISP TX propagation can delay the other side by 60s+.
@@ -625,7 +625,7 @@ class CallManager extends EventEmitter {
             clearInterval(this._callerPunchInterval)
             this._callerPunchInterval = null
             if (pc?.connectionState === 'connected') {
-              this.emit('call:log', { msg: '[PORT] Caller connected!', type: 'success' })
+              this.emit('call:log', { msg: '[ANS] Caller connected!', type: 'success' })
             } else if (elapsed > 120000) {
               this.emit('call:log', { msg: '[Spray] Caller spray timed out after 2 min', type: 'warn' })
             }
@@ -640,7 +640,7 @@ class CallManager extends EventEmitter {
           await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: sprayBatch++ })
         }, 10000)
 
-        console.log('[CallManager] Port announcement received — upgraded to targeted spray')
+        console.log('[CallManager] ANS token received — started targeted spray')
         return  // Don't emit call:answered-session for port announcements
       }
 
@@ -851,6 +851,8 @@ class CallManager extends EventEmitter {
           sessionKey: callToken.sessionKey,
           ip,
           port,
+          sdpAnswer: finalAns?.sdp || answer?.sdp || '',
+          calleeFingerprint: this.peerConnection._persistentCertFingerprint ?? '',
         })
       }
 

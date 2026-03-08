@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 08:49 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 08:49 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 08:49 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 09:13 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 09:13 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 09:13 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19882,11 +19882,11 @@ class CallManager extends EventEmitter {
         return
       }
 
-      // Port announcement (no SDP, just callee's srflx IP:port from STUN/host)
+      // ANS token with callee's srflx IP:port (+ SDP answer + fingerprint)
       const calleePort = data.calleePort
       const calleeIp   = data.calleeIp4 || data.calleeIp6 || null
-      if (!data.sdpAnswer && calleePort && calleeIp) {
-        this.emit('call:log', { msg: `[PORT] Callee port received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
+      if (calleePort && calleeIp) {
+        this.emit('call:log', { msg: `[ANS] Callee answer received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
         // Start targeted ±20 spray using fresh IP:port from PORT token.
         // Spray for up to 2 min — ISP TX propagation can delay the other side by 60s+.
@@ -19901,7 +19901,7 @@ class CallManager extends EventEmitter {
             clearInterval(this._callerPunchInterval)
             this._callerPunchInterval = null
             if (pc?.connectionState === 'connected') {
-              this.emit('call:log', { msg: '[PORT] Caller connected!', type: 'success' })
+              this.emit('call:log', { msg: '[ANS] Caller connected!', type: 'success' })
             } else if (elapsed > 120000) {
               this.emit('call:log', { msg: '[Spray] Caller spray timed out after 2 min', type: 'warn' })
             }
@@ -19916,7 +19916,7 @@ class CallManager extends EventEmitter {
           await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: sprayBatch++ })
         }, 10000)
 
-        console.log('[CallManager] Port announcement received — upgraded to targeted spray')
+        console.log('[CallManager] ANS token received — started targeted spray')
         return  // Don't emit call:answered-session for port announcements
       }
 
@@ -20127,6 +20127,8 @@ class CallManager extends EventEmitter {
           sessionKey: callToken.sessionKey,
           ip,
           port,
+          sdpAnswer: finalAns?.sdp || answer?.sdp || '',
+          calleeFingerprint: this.peerConnection._persistentCertFingerprint ?? '',
         })
       }
 
@@ -24241,42 +24243,43 @@ class PhoneController {
                 const myAddress = this.signaling.myAddress
                 if (!myAddress) return
                 const portFeePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
-                this.ui.log(`[PORT] Broadcasting port ${data.port} to caller... (fee ${portFeePerKb} sats/KB)`, 'info')
+                this.ui.log(`[ANS] Broadcasting answer + port ${data.port} to caller... (fee ${portFeePerKb} sats/KB)`, 'info')
                 const portResult = await this.callTokenManager.broadcastCallAnswer(data.callerAddress, {
-                    callee:      myAddress,
-                    senderIp:    data.ip,
-                    senderIp4:   data.ip,
-                    senderPort:  data.port,
-                    sessionKey:  data.sessionKey || '',
-                    codec:       'opus',
-                    quality:     'hd',
-                    mediaTypes:  ['audio'],
-                    sdpAnswer:   '',   // no SDP — port announcement only
-                    feePerKb:    portFeePerKb,
+                    callee:            myAddress,
+                    senderIp:          data.ip,
+                    senderIp4:         data.ip,
+                    senderPort:        data.port,
+                    sessionKey:        data.sessionKey || '',
+                    codec:             'opus',
+                    quality:           'hd',
+                    mediaTypes:        ['audio'],
+                    sdpAnswer:         data.sdpAnswer || '',
+                    calleeFingerprint: data.calleeFingerprint || '',
+                    feePerKb:          portFeePerKb,
                 })
-                this.ui.log(`[PORT] Port ${data.port} announced — waiting for mempool confirmation before spray`, 'info')
-                // Wait until PORT TX is visible on WoC before spraying.
+                this.ui.log(`[ANS] Answer + port ${data.port} announced — waiting for mempool confirmation before spray`, 'info')
+                // Wait until ANS TX is visible on WoC before spraying.
                 // The caller also waits for this TX via polling, so both sides
                 // start spraying at approximately the same time. This prevents
                 // the callee's early spray from triggering flood protection on
                 // the caller's router (unsolicited incoming packets before the
                 // caller has sent anything outbound).
-                const portTxId = portResult?.txId
-                if (portTxId) {
+                const ansTxId = portResult?.txId
+                if (ansTxId) {
                     for (let attempt = 0; attempt < 10; attempt++) {
                         try {
-                            await window.provider.getRawTransaction(portTxId)
-                            this.ui.log(`[PORT] PORT TX confirmed in mempool — starting callee spray`, 'success')
+                            await window.provider.getRawTransaction(ansTxId)
+                            this.ui.log(`[ANS] ANS TX confirmed in mempool — starting callee spray`, 'success')
                             break
                         } catch {
-                            this.ui.log(`[PORT] Waiting for mempool visibility... (${attempt + 1})`, 'info')
+                            this.ui.log(`[ANS] Waiting for mempool visibility... (${attempt + 1})`, 'info')
                             await new Promise(r => setTimeout(r, 2000))
                         }
                     }
                 }
                 this.callManager.startCalleeSpray(data.callTokenId)
             } catch (err) {
-                this.ui.log(`[PORT] Failed to announce port: ${err.message}`, 'error')
+                this.ui.log(`[ANS] Failed to broadcast answer: ${err.message}`, 'error')
             }
         })
 

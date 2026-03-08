@@ -497,42 +497,43 @@ class PhoneController {
                 const myAddress = this.signaling.myAddress
                 if (!myAddress) return
                 const portFeePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
-                this.ui.log(`[PORT] Broadcasting port ${data.port} to caller... (fee ${portFeePerKb} sats/KB)`, 'info')
+                this.ui.log(`[ANS] Broadcasting answer + port ${data.port} to caller... (fee ${portFeePerKb} sats/KB)`, 'info')
                 const portResult = await this.callTokenManager.broadcastCallAnswer(data.callerAddress, {
-                    callee:      myAddress,
-                    senderIp:    data.ip,
-                    senderIp4:   data.ip,
-                    senderPort:  data.port,
-                    sessionKey:  data.sessionKey || '',
-                    codec:       'opus',
-                    quality:     'hd',
-                    mediaTypes:  ['audio'],
-                    sdpAnswer:   '',   // no SDP — port announcement only
-                    feePerKb:    portFeePerKb,
+                    callee:            myAddress,
+                    senderIp:          data.ip,
+                    senderIp4:         data.ip,
+                    senderPort:        data.port,
+                    sessionKey:        data.sessionKey || '',
+                    codec:             'opus',
+                    quality:           'hd',
+                    mediaTypes:        ['audio'],
+                    sdpAnswer:         data.sdpAnswer || '',
+                    calleeFingerprint: data.calleeFingerprint || '',
+                    feePerKb:          portFeePerKb,
                 })
-                this.ui.log(`[PORT] Port ${data.port} announced — waiting for mempool confirmation before spray`, 'info')
-                // Wait until PORT TX is visible on WoC before spraying.
+                this.ui.log(`[ANS] Answer + port ${data.port} announced — waiting for mempool confirmation before spray`, 'info')
+                // Wait until ANS TX is visible on WoC before spraying.
                 // The caller also waits for this TX via polling, so both sides
                 // start spraying at approximately the same time. This prevents
                 // the callee's early spray from triggering flood protection on
                 // the caller's router (unsolicited incoming packets before the
                 // caller has sent anything outbound).
-                const portTxId = portResult?.txId
-                if (portTxId) {
+                const ansTxId = portResult?.txId
+                if (ansTxId) {
                     for (let attempt = 0; attempt < 10; attempt++) {
                         try {
-                            await window.provider.getRawTransaction(portTxId)
-                            this.ui.log(`[PORT] PORT TX confirmed in mempool — starting callee spray`, 'success')
+                            await window.provider.getRawTransaction(ansTxId)
+                            this.ui.log(`[ANS] ANS TX confirmed in mempool — starting callee spray`, 'success')
                             break
                         } catch {
-                            this.ui.log(`[PORT] Waiting for mempool visibility... (${attempt + 1})`, 'info')
+                            this.ui.log(`[ANS] Waiting for mempool visibility... (${attempt + 1})`, 'info')
                             await new Promise(r => setTimeout(r, 2000))
                         }
                     }
                 }
                 this.callManager.startCalleeSpray(data.callTokenId)
             } catch (err) {
-                this.ui.log(`[PORT] Failed to announce port: ${err.message}`, 'error')
+                this.ui.log(`[ANS] Failed to broadcast answer: ${err.message}`, 'error')
             }
         })
 
