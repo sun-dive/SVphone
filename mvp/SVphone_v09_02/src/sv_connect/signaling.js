@@ -202,6 +202,18 @@ class CallSignaling {
             this.handleIncomingCall(callId, inscription, callInfo)
           } else if (inscription.type === 'answer' && inscription.caller === this.myAddress) {
             this.handleCallResponse(callId, inscription, callInfo)
+          } else if (inscription.type === 'answer' && inscription.callee === this.myAddress) {
+            // Callee detected its own ANS token via UTXO polling (change output).
+            // Emit so call_manager can start callee spray, synchronized with caller.
+            this.emit('call:answered', {
+              callTokenId: callId,
+              caller: inscription.caller,
+              callee: inscription.callee,
+              calleeIp4: callInfo.senderIp4,
+              calleePort: callInfo.senderPort,
+              timestamp: Date.now()
+            })
+            console.log('[CallSignaling] Callee detected own ANS token:', callId.slice(0, 12))
           }
         }
       } catch (error) {

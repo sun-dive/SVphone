@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 21:41 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 21:41 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 21:41 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 21:54 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 21:54 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 21:54 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -17958,6 +17958,18 @@ class CallSignaling {
             this.handleIncomingCall(callId, inscription, callInfo)
           } else if (inscription.type === 'answer' && inscription.caller === this.myAddress) {
             this.handleCallResponse(callId, inscription, callInfo)
+          } else if (inscription.type === 'answer' && inscription.callee === this.myAddress) {
+            // Callee detected its own ANS token via UTXO polling (change output).
+            // Emit so call_manager can start callee spray, synchronized with caller.
+            this.emit('call:answered', {
+              callTokenId: callId,
+              caller: inscription.caller,
+              callee: inscription.callee,
+              calleeIp4: callInfo.senderIp4,
+              calleePort: callInfo.senderPort,
+              timestamp: Date.now()
+            })
+            console.log('[CallSignaling] Callee detected own ANS token:', callId.slice(0, 12))
           }
         }
       } catch (error) {
