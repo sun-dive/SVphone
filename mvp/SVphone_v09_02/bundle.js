@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 03:40 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 03:40 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 03:40 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 04:12 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 04:12 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 04:12 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -15287,6 +15287,7 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
       __publicField(this, "feePerKb", DEFAULT_FEE_PER_KB);
       __publicField(this, "key");
       __publicField(this, "myAddress");
+      __publicField(this, "autoImportAttempted", /* @__PURE__ */ new Set());
       this.key = key;
       this.myAddress = key.toAddress();
     }
@@ -15489,6 +15490,12 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
      */
     async tryAutoImport(u) {
       const utxoKey = `${u.txId}:${u.outputIndex}`;
+      if (this.autoImportAttempted.has(utxoKey)) return;
+      this.autoImportAttempted.add(utxoKey);
+      if (this.autoImportAttempted.size > 1e3) {
+        const oldest = this.autoImportAttempted.values().next().value;
+        this.autoImportAttempted.delete(oldest);
+      }
       const tokenKeys = await this.getTokenUtxoKeys();
       if (tokenKeys.has(utxoKey)) return;
       const tx = await this.provider.getSourceTransaction(u.txId);

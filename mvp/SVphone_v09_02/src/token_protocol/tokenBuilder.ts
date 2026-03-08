@@ -103,6 +103,7 @@ export class TokenBuilder {
   feePerKb = DEFAULT_FEE_PER_KB
   private key: PrivateKey
   private myAddress: string
+  private autoImportAttempted = new Set<string>()
 
   constructor(
     private provider: WalletProvider,
@@ -376,6 +377,13 @@ export class TokenBuilder {
    */
   private async tryAutoImport(u: Utxo): Promise<void> {
     const utxoKey = `${u.txId}:${u.outputIndex}`
+    if (this.autoImportAttempted.has(utxoKey)) return // already attempted this session
+    this.autoImportAttempted.add(utxoKey)
+    // Cap to prevent unbounded growth
+    if (this.autoImportAttempted.size > 1000) {
+      const oldest = this.autoImportAttempted.values().next().value
+      this.autoImportAttempted.delete(oldest)
+    }
     const tokenKeys = await this.getTokenUtxoKeys()
     if (tokenKeys.has(utxoKey)) return // already known
 
