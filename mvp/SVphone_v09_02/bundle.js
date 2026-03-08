@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 23:14 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 23:14 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 23:14 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 23:19 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 23:19 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 23:19 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19508,6 +19508,25 @@ class CallManager extends EventEmitter {
         )
         await this.peerConnection.setRemoteDescription(calleeAddress, { type: 'answer', sdp: syntheticSdp })
         this.emit('call:log', { msg: '[1-TX] ✓ Synthetic answer set — ICE listening for peer-reflexive', type: 'info' })
+
+        // Debug: log exact connection data on caller side
+        const callerPcDbg = this.peerConnection.getPeerConnection(calleeAddress)
+        const localDesc = callerPcDbg?.localDescription?.sdp || ''
+        const remoteDesc = callerPcDbg?.remoteDescription?.sdp || ''
+        const localUfrag = localDesc.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
+        const localPwd = localDesc.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
+        const remoteUfrag = remoteDesc.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
+        const remotePwd = remoteDesc.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
+        const localFp = localDesc.match(/a=fingerprint:(\S+ \S+)/)?.[1] || '?'
+        const remoteFp = remoteDesc.match(/a=fingerprint:(\S+ \S+)/)?.[1] || '?'
+        const localSetup = localDesc.match(/a=setup:(\S+)/)?.[1] || '?'
+        const remoteSetup = remoteDesc.match(/a=setup:(\S+)/)?.[1] || '?'
+        const localCands = (localDesc.match(/a=candidate:/g) || []).length
+        const remoteCands = (remoteDesc.match(/a=candidate:/g) || []).length
+        this.emit('call:log', { msg: `[CALLER-DBG] localUfrag=${localUfrag} localPwd=${localPwd.slice(0,4)}…${localPwd.slice(-4)}`, type: 'info' })
+        this.emit('call:log', { msg: `[CALLER-DBG] remoteUfrag=${remoteUfrag} remotePwd=${remotePwd.slice(0,4)}…${remotePwd.slice(-4)}`, type: 'info' })
+        this.emit('call:log', { msg: `[CALLER-DBG] localFP=…${localFp.slice(-20)} remoteFP=…${remoteFp.slice(-20)}`, type: 'info' })
+        this.emit('call:log', { msg: `[CALLER-DBG] localSetup=${localSetup} remoteSetup=${remoteSetup} localCands=${localCands} remoteCands=${remoteCands}`, type: 'info' })
       } catch (error) {
         console.warn('[CallManager] Failed to set synthetic remote answer:', error)
         throw error
@@ -20074,7 +20093,11 @@ class CallManager extends EventEmitter {
     )
     await Promise.all(tasks)
 
-    iceLog(`[Spray] ${new Date().toLocaleTimeString()} #${batch} ${ok}/${ports.length} → ${remoteIp}:${ports[0]}-${ports[ports.length - 1]}`)
+    const pc = this.peerConnection.getPeerConnection(peerId)
+    const iceState = pc?.iceConnectionState || '?'
+    const connState = pc?.connectionState || '?'
+    const sigState = pc?.signalingState || '?'
+    iceLog(`[Spray] ${new Date().toLocaleTimeString()} #${batch} ${ok}/${ports.length} → ${remoteIp}:${ports[0]}-${ports[ports.length - 1]} ice=${iceState} conn=${connState} sig=${sigState}`)
     return ok
   }
 
@@ -20231,6 +20254,25 @@ class CallManager extends EventEmitter {
       session.iceCreds = iceCreds
       session.mediaAnswer = finalAns || answer
       session.callerSprayTarget = { ip: callerIp4, port: callerPort, callerPeerId: callToken.caller }
+    }
+    // Debug: log exact connection data on callee side
+    if (rtcPc) {
+      const localDesc = rtcPc.localDescription?.sdp || ''
+      const remoteDesc = rtcPc.remoteDescription?.sdp || ''
+      const localUfrag = localDesc.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
+      const localPwd = localDesc.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
+      const remoteUfrag = remoteDesc.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
+      const remotePwd = remoteDesc.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
+      const localFp = localDesc.match(/a=fingerprint:(\S+ \S+)/)?.[1] || '?'
+      const remoteFp = remoteDesc.match(/a=fingerprint:(\S+ \S+)/)?.[1] || '?'
+      const localSetup = localDesc.match(/a=setup:(\S+)/)?.[1] || '?'
+      const remoteSetup = remoteDesc.match(/a=setup:(\S+)/)?.[1] || '?'
+      const localCands = (localDesc.match(/a=candidate:/g) || []).length
+      const remoteCands = (remoteDesc.match(/a=candidate:/g) || []).length
+      iceLog(`[CALLEE-DBG] localUfrag=${localUfrag} localPwd=${localPwd.slice(0,4)}…${localPwd.slice(-4)}`)
+      iceLog(`[CALLEE-DBG] remoteUfrag=${remoteUfrag} remotePwd=${remotePwd.slice(0,4)}…${remotePwd.slice(-4)}`)
+      iceLog(`[CALLEE-DBG] localFP=…${localFp.slice(-20)} remoteFP=…${remoteFp.slice(-20)}`)
+      iceLog(`[CALLEE-DBG] localSetup=${localSetup} remoteSetup=${remoteSetup} localCands=${localCands} remoteCands=${remoteCands}`)
     }
     iceLog('[PrePunch] ICE active — awaiting PORT TX broadcast before spraying')
   }
