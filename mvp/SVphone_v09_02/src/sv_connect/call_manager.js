@@ -490,7 +490,7 @@ class CallManager extends EventEmitter {
                 return
               }
               await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPunchPort, batch: sprayBatch++ })
-            }, 3000)
+            }, 10000)
           }
         } else {
           // 2-TX fallback: broadcast ANS token so caller can setRemoteDescription
@@ -638,7 +638,7 @@ class CallManager extends EventEmitter {
             return
           }
           await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: sprayBatch++ })
-        }, 3000)
+        }, 10000)
 
         console.log('[CallManager] Port announcement received — upgraded to targeted spray')
         return  // Don't emit call:answered-session for port announcements
@@ -754,9 +754,9 @@ class CallManager extends EventEmitter {
     const ports = []
 
     if (knownPort) {
-      for (let p = knownPort - 20; p <= knownPort + 20; p++) {
-        if (p > 0 && p <= 65535) ports.push(p)
-      }
+      // Target only the STUN-discovered port — no range spray.
+      // Spraying ±20 ports can trigger router flood protection.
+      ports.push(knownPort)
     } else {
       // Fallback: VoIP range
       for (let p = 3478; p <= 3497; p++) ports.push(p)
@@ -978,7 +978,7 @@ class CallManager extends EventEmitter {
         return
       }
       await this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: sprayBatch++ })
-    }, 3000)
+    }, 10000)
   }
 
   /**
