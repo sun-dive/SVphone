@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 04:58 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 04:58 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 04:58 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 06:13 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 06:13 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 06:13 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -24879,6 +24879,12 @@ class WalletUI {
     const btnVerify = document.getElementById('btn-verify');
     if (btnVerify) {
       btnVerify.onclick = () => handlers.verifyProofChain();
+    }
+
+    // New Wallet button
+    const btnNewWallet = document.getElementById('btn-new-wallet');
+    if (btnNewWallet) {
+      btnNewWallet.onclick = () => handlers.newWallet();
     }
 
     // ─── Mint Mode Buttons ──────────────────────────────────────────────

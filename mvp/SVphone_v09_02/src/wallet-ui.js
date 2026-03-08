@@ -325,6 +325,12 @@ class WalletUI {
       btnVerify.onclick = () => handlers.verifyProofChain();
     }
 
+    // New Wallet button
+    const btnNewWallet = document.getElementById('btn-new-wallet');
+    if (btnNewWallet) {
+      btnNewWallet.onclick = () => handlers.newWallet();
+    }
+
     // ─── Mint Mode Buttons ──────────────────────────────────────────────
 
     // Mint Mode toggle (Fungible ↔ NFT)
