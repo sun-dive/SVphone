@@ -643,10 +643,12 @@ class CallManager extends EventEmitter {
             }
             return
           }
-          // Pause spray while DTLS is in progress — injecting new candidates
-          // creates new pairs that compete with the ongoing handshake
-          if (pc.connectionState === 'connecting') {
-            this.emit('call:log', { msg: '[Spray] DTLS in progress — pausing spray', type: 'info' })
+          // Only pause spray when ICE has connected and DTLS is negotiating.
+          // connectionState 'connecting' also fires during ICE checking — we must
+          // keep spraying during that phase so the other side can receive our checks.
+          const iceState = pc.iceConnectionState
+          if (iceState === 'connected' || iceState === 'completed') {
+            this.emit('call:log', { msg: '[Spray] ICE connected, DTLS negotiating — pausing spray', type: 'info' })
             return
           }
           await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: sprayBatch++ })
@@ -985,10 +987,12 @@ class CallManager extends EventEmitter {
         }
         return
       }
-      // Pause spray while DTLS is in progress — injecting new candidates
-      // creates new pairs that compete with the ongoing handshake
-      if (pc.connectionState === 'connecting') {
-        this.emit('call:log', { msg: '[Spray] DTLS in progress — pausing spray', type: 'info' })
+      // Only pause spray when ICE has connected and DTLS is negotiating.
+      // connectionState 'connecting' also fires during ICE checking — we must
+      // keep spraying during that phase so the other side can receive our checks.
+      const iceState = pc.iceConnectionState
+      if (iceState === 'connected' || iceState === 'completed') {
+        this.emit('call:log', { msg: '[Spray] ICE connected, DTLS negotiating — pausing spray', type: 'info' })
         return
       }
       await this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: sprayBatch++ })
