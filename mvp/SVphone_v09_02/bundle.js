@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 06:13 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 06:13 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 06:13 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 07:11 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 07:11 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 07:11 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -15330,14 +15330,16 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
      * For any quarantined 1-sat UTXOs that contain P OP_RETURN data
      * addressed to this wallet, we auto-import them into the token store.
      */
-    async getSafeUtxos() {
+    async getSafeUtxos(skipImport = false) {
       const utxos = await this.provider.getUtxos();
       const safe = [];
       for (let i = utxos.length - 1; i >= 0; i--) {
         const u = utxos[i];
         if (u.satoshis <= TOKEN_SATS) {
-          this.tryAutoImport(u).catch(() => {
-          });
+          if (!skipImport) {
+            this.tryAutoImport(u).catch(() => {
+            });
+          }
           continue;
         }
         safe.push(u);
@@ -16726,7 +16728,7 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
      * @param feePerKb        sat/KB fee rate (default 1.1 — ephemeral signals)
      */
     async createCallSignalTx(tokenName, restrictions, tokenAttributes, recipientAddress, feePerKb = 1.1) {
-      const utxos = await this.getSafeUtxos();
+      const utxos = await this.getSafeUtxos(true);
       if (utxos.length === 0) {
         throw new Error("No spendable UTXOs. Fund your wallet address first.");
       }
@@ -23466,6 +23468,7 @@ class CallHandlers {
     async endCall() {
         try {
             if (this.app._unansweredTimeout) { clearTimeout(this.app._unansweredTimeout); this.app._unansweredTimeout = null }
+            if (this.app._incomingTimeout) { clearTimeout(this.app._incomingTimeout); this.app._incomingTimeout = null }
             this.ui.stopOutgoingRing()
             if (!this.app.currentCallToken) {
                 this.ui.log('Error: No active call to end', 'error')
@@ -23473,6 +23476,7 @@ class CallHandlers {
             }
 
             await this.app.callManager.endCall(this.app.currentCallToken)
+            this.app.currentCallToken = null
             this.ui.resetCallUI()
             this.ui.log('Call ended', 'info')
         } catch (error) {
@@ -24268,6 +24272,11 @@ class PhoneController {
             this.ui.log(`📞 Call ended. Duration: ${(data.duration/1000).toFixed(1)}s`, 'info')
             this.ui.resetCallUI()
             this.ui.stopDurationTimer()
+            // Clear call state so next call works cleanly
+            this.currentCallToken = null
+            this.currentRole = null
+            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
+            if (this._incomingTimeout) { clearTimeout(this._incomingTimeout); this._incomingTimeout = null }
             // Release screen wake lock
             if (this.wakeLock) { this.wakeLock.release(); this.wakeLock = null }
         })

@@ -250,6 +250,7 @@ class CallHandlers {
     async endCall() {
         try {
             if (this.app._unansweredTimeout) { clearTimeout(this.app._unansweredTimeout); this.app._unansweredTimeout = null }
+            if (this.app._incomingTimeout) { clearTimeout(this.app._incomingTimeout); this.app._incomingTimeout = null }
             this.ui.stopOutgoingRing()
             if (!this.app.currentCallToken) {
                 this.ui.log('Error: No active call to end', 'error')
@@ -257,6 +258,7 @@ class CallHandlers {
             }
 
             await this.app.callManager.endCall(this.app.currentCallToken)
+            this.app.currentCallToken = null
             this.ui.resetCallUI()
             this.ui.log('Call ended', 'info')
         } catch (error) {

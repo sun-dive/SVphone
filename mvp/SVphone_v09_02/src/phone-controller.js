@@ -545,6 +545,11 @@ class PhoneController {
             this.ui.log(`📞 Call ended. Duration: ${(data.duration/1000).toFixed(1)}s`, 'info')
             this.ui.resetCallUI()
             this.ui.stopDurationTimer()
+            // Clear call state so next call works cleanly
+            this.currentCallToken = null
+            this.currentRole = null
+            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
+            if (this._incomingTimeout) { clearTimeout(this._incomingTimeout); this._incomingTimeout = null }
             // Release screen wake lock
             if (this.wakeLock) { this.wakeLock.release(); this.wakeLock = null }
         })

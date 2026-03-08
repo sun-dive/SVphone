@@ -146,7 +146,7 @@ export class TokenBuilder {
    * For any quarantined 1-sat UTXOs that contain P OP_RETURN data
    * addressed to this wallet, we auto-import them into the token store.
    */
-  private async getSafeUtxos(): Promise<Utxo[]> {
+  private async getSafeUtxos(skipImport = false): Promise<Utxo[]> {
     const utxos = await this.provider.getUtxos()
     const safe: Utxo[] = []
 
@@ -158,8 +158,12 @@ export class TokenBuilder {
       const u = utxos[i]
       if (u.satoshis <= TOKEN_SATS) {
         // Quarantined: attempt P auto-import in background, but
-        // never allow spending regardless of result
-        this.tryAutoImport(u).catch(() => {})
+        // never allow spending regardless of result.
+        // skipImport=true during call signal TX creation to avoid
+        // flooding the fetch stack with auto-import requests.
+        if (!skipImport) {
+          this.tryAutoImport(u).catch(() => {})
+        }
         continue
       }
 
@@ -1940,7 +1944,10 @@ export class TokenBuilder {
     recipientAddress: string,
     feePerKb: number = 1.1,
   ): Promise<{ txId: string }> {
-    const utxos = await this.getSafeUtxos()
+    // skipImport=true: Don't fire tryAutoImport for quarantined UTXOs during
+    // call signal creation. With 60+ tokens, auto-import floods the LIFO fetch
+    // stack with getSourceTransaction requests, delaying the critical broadcast.
+    const utxos = await this.getSafeUtxos(true)
     if (utxos.length === 0) {
       throw new Error('No spendable UTXOs. Fund your wallet address first.')
     }
