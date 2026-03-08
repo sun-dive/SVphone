@@ -1,7 +1,7 @@
 import { build } from 'esbuild'
 import { readFileSync, writeFileSync, unlinkSync } from 'fs'
 
-const VERSION    = 'v09.01'
+const VERSION    = 'v09.02'
 const BUILD_TIME = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC'
 
 // Step 1: Build TypeScript/BSV SDK bundle

@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.01";window.SVPHONE_BUILD="2026-03-08 01:50 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.01'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.01 / 2026-03-08 01:50 UTC';});console.log('[SVphone] v09.01 Build: 2026-03-08 01:50 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-08 01:54 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-08 01:54 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-08 01:54 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
