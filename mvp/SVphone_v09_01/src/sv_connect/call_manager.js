@@ -867,9 +867,20 @@ class CallManager extends EventEmitter {
     const iceCreds = await window.iceCredentials.deriveAll(callToken.sessionKey)
     iceLog(`[PrePunch] Derived ICE creds: callee=${iceCreds.calleeUfrag}`)
 
+    // Strip ICE candidates from the offer before setting as remote description.
+    // The offer contains the caller's srflx candidate, which would cause the callee's
+    // ICE agent to immediately send connectivity checks to the caller. These checks
+    // ALWAYS fail (caller's NAT hasn't opened for callee yet) and put ICE into "failed"
+    // state. If spray starts before the keepalive can restart ICE, spray candidates
+    // are added but never checked — preventing connection.
+    // Stripping candidates keeps ICE in "new" state until spray provides the first
+    // remote candidates, ensuring fresh connectivity checks.
+    const strippedOffer = offerSdp.replace(/^a=candidate:.*$/gm, '')
+      .replace(/^a=end-of-candidates.*$/gm, '')
+
     // Create PC WITH STUN for port discovery (null = use default STUN servers)
     const answer   = await this.peerConnection.createAnswerMunged(
-      callToken.caller, offerSdp, iceCreds, { iceServers: null }
+      callToken.caller, strippedOffer, iceCreds, { iceServers: null }
     )
     const finalAns = await this.peerConnection.waitForIceGathering(callToken.caller)
 
