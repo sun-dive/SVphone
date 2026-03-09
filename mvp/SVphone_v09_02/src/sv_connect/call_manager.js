@@ -815,27 +815,37 @@ class CallManager extends EventEmitter {
     const sigState = pc?.signalingState || '?'
     iceLog(`[Spray] ${new Date().toLocaleTimeString()} #${batch} ${ok}/${ports.length} → ${remoteIp}:${ports[0]}-${ports[ports.length - 1]} ice=${iceState} conn=${connState} sig=${sigState}`)
 
-    // Diagnostic: dump ICE candidate pair states via getStats()
+    // Diagnostic: dump ICE candidate pair states + STUN check counts
     if (pc) {
       try {
         const stats = await pc.getStats()
         const pairs = []
         const candidates = {}
+        const allCandTypes = { local: [], remote: [] }
         stats.forEach(report => {
           if (report.type === 'local-candidate' || report.type === 'remote-candidate') {
-            candidates[report.id] = `${report.address || report.ip || '?'}:${report.port || '?'}(${report.candidateType || '?'})`
+            const addr = `${report.address || report.ip || '?'}:${report.port || '?'}(${report.candidateType || '?'})`
+            candidates[report.id] = addr
+            if (report.type === 'local-candidate') allCandTypes.local.push(addr)
+            else allCandTypes.remote.push(addr)
           }
         })
         stats.forEach(report => {
           if (report.type === 'candidate-pair') {
             const local = candidates[report.localCandidateId] || '?'
             const remote = candidates[report.remoteCandidateId] || '?'
-            pairs.push(`${report.state} ${local}↔${remote} tx=${report.bytesSent || 0} rx=${report.bytesReceived || 0}`)
+            const reqSent = report.requestsSent || 0
+            const resSent = report.responsesSent || 0
+            const reqRecv = report.requestsReceived || 0
+            const resRecv = report.responsesReceived || 0
+            pairs.push(`${report.state} ${local}↔${remote} stun:sent=${reqSent}/recv=${resRecv} stunIn:req=${reqRecv}/res=${resSent}`)
           }
         })
         if (pairs.length > 0) {
           iceLog(`[ICE-PAIRS] ${pairs.join(' | ')}`)
         }
+        // Show all candidates (especially look for prflx)
+        iceLog(`[ICE-CANDS] local=[${allCandTypes.local.join(', ')}] remote=[${allCandTypes.remote.join(', ')}]`)
       } catch {}
     }
 
