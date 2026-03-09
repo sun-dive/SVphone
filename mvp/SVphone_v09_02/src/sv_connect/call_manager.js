@@ -596,7 +596,7 @@ class CallManager extends EventEmitter {
    * Handle call answered event
    * @private
    */
-  onCallAnswered(data) {
+  async onCallAnswered(data) {
     let session = this.activeCallSessions.get(data.callTokenId)
 
     // Fallback: answer inscription txId ≠ call inscription txId. If direct lookup
@@ -647,8 +647,16 @@ class CallManager extends EventEmitter {
       if (calleePort && calleeIp) {
         this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Callee answer received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
-        // Start targeted ±20 spray using fresh IP:port from PORT token.
-        // Spray for up to 2 min — ISP TX propagation can delay the other side by 60s+.
+        // Alternating SPI pattern: caller delays on even batches (0,2,4...),
+        // callee delays on odd batches (1,3,5...). Delay increases with each
+        // retry pair to cover wider timing windows. This ensures both spray
+        // orderings are tried regardless of which side has a strict SPI firewall.
+        const spiDelay = (batch) => 1000 + Math.floor(batch / 2) * 1000 // 1s, 1s, 2s, 2s, 3s, 3s...
+
+        // Batch 0: caller delays (callee sprays first)
+        const d0 = spiDelay(0)
+        this.emit('call:log', { msg: `[Spray] Caller #0 delay ${d0}ms (callee first)`, type: 'info' })
+        await new Promise(r => setTimeout(r, d0))
         this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: 0 })
 
         let sprayBatch = 1
@@ -666,15 +674,19 @@ class CallManager extends EventEmitter {
             }
             return
           }
-          // Only pause spray when ICE has connected and DTLS is negotiating.
-          // connectionState 'connecting' also fires during ICE checking — we must
-          // keep spraying during that phase so the other side can receive our checks.
           const iceState = pc.iceConnectionState
           if (iceState === 'connected' || iceState === 'completed') {
             this.emit('call:log', { msg: '[Spray] ICE connected, DTLS negotiating — pausing spray', type: 'info' })
             return
           }
-          await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: sprayBatch++ })
+          const batch = sprayBatch++
+          // Even: caller delays (callee first). Odd: caller immediate (caller first).
+          if (batch % 2 === 0) {
+            const d = spiDelay(batch)
+            this.emit('call:log', { msg: `[Spray] Caller #${batch} delay ${d}ms (callee first)`, type: 'info' })
+            await new Promise(r => setTimeout(r, d))
+          }
+          await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch })
         }, 10000)
 
         console.log('[CallManager] ANS token received — started targeted spray')
@@ -1048,16 +1060,13 @@ class CallManager extends EventEmitter {
       return
     }
 
-    this.emit('call:log', { msg: `[Spray] PORT TX in mempool — delaying callee spray 5s to test SPI timing theory`, type: 'success' })
+    // Alternating SPI pattern (mirrors caller): callee delays on odd batches
+    // (1,3,5...), caller delays on even batches (0,2,4...). Delay grows with
+    // each retry pair to cover wider timing windows.
+    const spiDelay = (batch) => 1000 + Math.floor(batch / 2) * 1000
 
-    // TEMPORARY DIAGNOSTIC: Delay callee spray by 5s to test whether the caller
-    // spraying first (opening its SPI filter) fixes Cable→ADSL direction.
-    // If Cable→ADSL works AND ADSL→Cable breaks, SPI timing is confirmed.
-    await new Promise(resolve => setTimeout(resolve, 5000))
-
-    this.emit('call:log', { msg: `[Spray] Starting callee spray to ${ip}:${port} (up to 2 min)`, type: 'success' })
-
-    // Spray for up to 2 min — ISP TX propagation can delay the other side by 60s+.
+    // Batch 0: callee immediate (caller is delaying on batch 0)
+    this.emit('call:log', { msg: `[Spray] Callee #0 immediate to ${ip}:${port} (caller delays)`, type: 'success' })
     this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: 0 })
 
     let sprayBatch = 1
@@ -1075,15 +1084,19 @@ class CallManager extends EventEmitter {
         }
         return
       }
-      // Only pause spray when ICE has connected and DTLS is negotiating.
-      // connectionState 'connecting' also fires during ICE checking — we must
-      // keep spraying during that phase so the other side can receive our checks.
       const iceState = pc.iceConnectionState
       if (iceState === 'connected' || iceState === 'completed') {
         this.emit('call:log', { msg: '[Spray] ICE connected, DTLS negotiating — pausing spray', type: 'info' })
         return
       }
-      await this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: sprayBatch++ })
+      const batch = sprayBatch++
+      // Odd: callee delays (caller first). Even: callee immediate (callee first).
+      if (batch % 2 === 1) {
+        const d = spiDelay(batch)
+        this.emit('call:log', { msg: `[Spray] Callee #${batch} delay ${d}ms (caller first)`, type: 'info' })
+        await new Promise(r => setTimeout(r, d))
+      }
+      await this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch })
     }, 10000)
   }
 
