@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-09 00:21 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-09 00:21 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-09 00:21 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-09 01:07 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-09 01:07 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-09 01:07 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -20323,7 +20323,7 @@ class CallManager extends EventEmitter {
    * callee starts here after broadcasting it.
    * @param {string} callTokenId - Call token ID
    */
-  startCalleeSpray(callTokenId) {
+  async startCalleeSpray(callTokenId) {
     const session = this.activeCallSessions.get(callTokenId)
     if (!session?.callerSprayTarget) {
       this.emit('call:log', { msg: '[Spray] No caller spray target saved — skipping callee spray', type: 'warn' })
@@ -20336,7 +20336,14 @@ class CallManager extends EventEmitter {
       return
     }
 
-    this.emit('call:log', { msg: `[Spray] PORT TX in mempool — starting callee spray to ${ip}:${port} (up to 2 min)`, type: 'success' })
+    this.emit('call:log', { msg: `[Spray] PORT TX in mempool — delaying callee spray 5s to test SPI timing theory`, type: 'success' })
+
+    // TEMPORARY DIAGNOSTIC: Delay callee spray by 5s to test whether the caller
+    // spraying first (opening its SPI filter) fixes Cable→ADSL direction.
+    // If Cable→ADSL works AND ADSL→Cable breaks, SPI timing is confirmed.
+    await new Promise(resolve => setTimeout(resolve, 5000))
+
+    this.emit('call:log', { msg: `[Spray] Starting callee spray to ${ip}:${port} (up to 2 min)`, type: 'success' })
 
     // Spray for up to 2 min — ISP TX propagation can delay the other side by 60s+.
     this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: 0 })
