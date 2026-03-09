@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-09 01:28 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-09 01:28 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-09 01:28 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-09 01:55 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-09 01:55 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-09 01:55 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -20091,9 +20091,13 @@ class CallManager extends EventEmitter {
     const ports = []
 
     if (knownPort) {
-      // Target only the STUN-discovered port — no range spray.
-      // Spraying ±20 ports can trigger router flood protection.
-      ports.push(knownPort)
+      // Small spray: known port ± 5.  If the SPI firewall "poisons" the
+      // exact port after unsolicited inbound, nearby ports stay clean.
+      // 11 candidates total — well under flood-protection thresholds.
+      const spread = 5
+      for (let p = knownPort - spread; p <= knownPort + spread; p++) {
+        if (p > 0 && p <= 65535) ports.push(p)
+      }
     } else {
       // Fallback: VoIP range
       for (let p = 3478; p <= 3497; p++) ports.push(p)

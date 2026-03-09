@@ -803,9 +803,13 @@ class CallManager extends EventEmitter {
     const ports = []
 
     if (knownPort) {
-      // Target only the STUN-discovered port — no range spray.
-      // Spraying ±20 ports can trigger router flood protection.
-      ports.push(knownPort)
+      // Small spray: known port ± 5.  If the SPI firewall "poisons" the
+      // exact port after unsolicited inbound, nearby ports stay clean.
+      // 11 candidates total — well under flood-protection thresholds.
+      const spread = 5
+      for (let p = knownPort - spread; p <= knownPort + spread; p++) {
+        if (p > 0 && p <= 65535) ports.push(p)
+      }
     } else {
       // Fallback: VoIP range
       for (let p = 3478; p <= 3497; p++) ports.push(p)
