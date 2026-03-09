@@ -345,59 +345,11 @@ class PhoneController {
         this.assignedUdpPort = randomPort
         console.log(`[SVphone] Assigned UDP port: ${randomPort} (VoIP range 3478-3497)`)
 
-        // Detect both public IPv4 and IPv6 in parallel.
-        // svphone.com is IPv4-only (shared hosting) — fetching ip.php there forces IPv4.
-        // api6.ipify.org is AAAA-only — fetching it forces IPv6.
+        // Public IP is discovered via STUN during call setup
         myIpField.value = ''
-        myIpField.placeholder = 'Detecting public IP...'
-
-        const fetchIpv4 = async () => {
-            const urls = ['https://svphone.com/ip.php', 'https://api.ipify.org?format=json', 'https://ifconfig.me/ip']
-            for (const url of urls) {
-                try {
-                    const r = await fetch(url, { signal: AbortSignal.timeout(3000) })
-                    const ip = url.includes('ipify') ? (await r.json()).ip : (await r.text()).trim()
-                    if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) return ip
-                } catch { /* try next */ }
-            }
-            return null
-        }
-
-        const fetchIpv6 = async () => {
-            // api6.ipify.org has AAAA-only DNS — fetching it forces an IPv6 connection
-            const urls = ['https://api6.ipify.org?format=json']
-            for (const url of urls) {
-                try {
-                    const r = await fetch(url, { signal: AbortSignal.timeout(3000) })
-                    const ip = url.includes('ipify') ? (await r.json()).ip : (await r.text()).trim()
-                    if (ip && ip.includes(':')) return ip
-                } catch { /* try next */ }
-            }
-            return null
-        }
-
-        const [ip4Res, ip6Res] = await Promise.allSettled([fetchIpv4(), fetchIpv6()])
-        const myIp4 = ip4Res.status === 'fulfilled' ? ip4Res.value : null
-        const myIp6 = ip6Res.status === 'fulfilled' ? ip6Res.value : null
-
-        // Store on controller — signaling doesn't exist yet at this point in init()
-        this._detectedIp4 = myIp4
-        this._detectedIp6 = myIp6
-
-        const myIp6Field = document.getElementById('myIp6')
-        const displayIp = myIp4 || myIp6 || ''
-        if (displayIp) {
-            myIpField.value = myIp4 || ''
-            myIpField.placeholder = myIp4 ? '' : 'None detected'
-            if (myIp6Field) myIp6Field.value = myIp6 || ''
-            // this.signaling set after autoDetectNetworkConfig returns — assigned in init()
-            if (this.signaling) this.signaling.myIp = displayIp
-            const label = myIp4 && myIp6 ? ' (dual-stack)' : myIp6 ? ' (IPv6 only)' : ''
-            this.ui.log(`✓ Public IP: ${displayIp}${label}`, 'success')
-        } else {
-            myIpField.placeholder = 'Enter your public IP'
-            this.ui.log('⚠️  Could not detect public IP — enter manually', 'warning')
-        }
+        myIpField.placeholder = 'Detected via STUN'
+        this._detectedIp4 = null
+        this._detectedIp6 = null
     }
 
     /**

@@ -1,9 +1,16 @@
 ---
 deployment:
   tasks:
-    - /bin/cp mvp/SVphone_v09_03/index.html $HOME/svphone.com/index.html
-    - /bin/cp mvp/SVphone_v09_03/phone_interface.html $HOME/svphone.com/phone_interface.html
-    - /bin/cp mvp/SVphone_v09_03/wallet.html $HOME/svphone.com/wallet.html
-    - /bin/cp mvp/SVphone_v09_03/bundle.js $HOME/svphone.com/bundle.js
-    - test -f mvp/SVphone_v09_03/ring.mp3 && /bin/cp mvp/SVphone_v09_03/ring.mp3 $HOME/svphone.com/ring.mp3 || true
-    - /bin/cp mvp/SVphone_v09_03/ip.php $HOME/svphone.com/ip.php
+    # v09_02 → svphone.com (stable)
+    - /bin/cp mvp/SVphone_v09_02/index.html $HOME/svphone.com/index.html
+    - /bin/cp mvp/SVphone_v09_02/phone_interface.html $HOME/svphone.com/phone_interface.html
+    - /bin/cp mvp/SVphone_v09_02/wallet.html $HOME/svphone.com/wallet.html
+    - /bin/cp mvp/SVphone_v09_02/bundle.js $HOME/svphone.com/bundle.js
+    - test -f mvp/SVphone_v09_02/ring.mp3 && /bin/cp mvp/SVphone_v09_02/ring.mp3 $HOME/svphone.com/ring.mp3 || true
+    - /bin/cp mvp/SVphone_v09_02/ip.php $HOME/svphone.com/ip.php
+    # v09_03 → svphone.net (development)
+    - /bin/cp mvp/SVphone_v09_03/index.html $HOME/svphone.net/index.html
+    - /bin/cp mvp/SVphone_v09_03/phone_interface.html $HOME/svphone.net/phone_interface.html
+    - /bin/cp mvp/SVphone_v09_03/wallet.html $HOME/svphone.net/wallet.html
+    - /bin/cp mvp/SVphone_v09_03/bundle.js $HOME/svphone.net/bundle.js
+    - test -f mvp/SVphone_v09_03/ring.mp3 && /bin/cp mvp/SVphone_v09_03/ring.mp3 $HOME/svphone.net/ring.mp3 || true
