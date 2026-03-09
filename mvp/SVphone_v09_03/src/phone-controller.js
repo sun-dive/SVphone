@@ -702,6 +702,9 @@ class PhoneController {
                             const isAnswer = name.startsWith('ANS-') && (attrs.caller === address || attrs.callee === address)
                             if (!isCall && !isAnswer) continue
 
+                            // SDP is in stateData (P protocol conformant), not tokenAttributes
+                            const sdpStr = this.callTokenManager.decodeStateData(decoded.stateData)
+
                             signal = {
                                 type: isCall ? 'call' : 'answer',
                                 caller: attrs.caller,
@@ -716,9 +719,9 @@ class PhoneController {
                                 media: attrs.mediaTypes,
                                 callerFingerprint: attrs.callerFingerprint ?? null,
                                 // CALL: wrap as object so call_manager.js can access .sdp property
-                                // ANS:  plain string — phone-controller.js:314 wraps it with {type,sdp}
-                                sdp: isCall ? { type: 'offer', sdp: attrs.sdpOffer }
-                                            : attrs.sdpOffer,
+                                // ANS:  plain string — signaling.js wraps it
+                                sdp: isCall ? { type: 'offer', sdp: sdpStr }
+                                            : sdpStr,
                             }
                             break
                         }

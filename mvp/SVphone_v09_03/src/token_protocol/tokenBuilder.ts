@@ -1932,10 +1932,11 @@ export class TokenBuilder {
    *   Output 2: P2PKH change → caller
    *
    * @param tokenName       "CALL-{ident}" or "ANS-{ident}"
-   * @param restrictions    16-char hex (callerHash4 + calleeHash4, 8 bytes)
+   * @param restrictions    16-char hex tokenRules (8 bytes, standard P protocol format)
    * @param tokenAttributes binary hex from encodeCallAttributes()
    * @param recipientAddress callee (CALL) or caller (ANS) BSV address
    * @param feePerKb        sat/KB fee rate (default 1.1 — ephemeral signals)
+   * @param stateData       hex-encoded SDP or other payload (default empty)
    */
   async createCallSignalTx(
     tokenName: string,
@@ -1943,6 +1944,7 @@ export class TokenBuilder {
     tokenAttributes: string,
     recipientAddress: string,
     feePerKb: number = 1.1,
+    stateData: string = '',
   ): Promise<{ txId: string }> {
     // skipImport=true: Don't fire tryAutoImport for quarantined UTXOs during
     // call signal creation. With 60+ tokens, auto-import floods the LIFO fetch
@@ -1957,7 +1959,7 @@ export class TokenBuilder {
       tokenScript: '',
       tokenRules: restrictions,
       tokenAttributes,
-      stateData: '',
+      stateData: stateData || '',
     })
 
     const opReturnBytes = opReturnScript.toBinary()

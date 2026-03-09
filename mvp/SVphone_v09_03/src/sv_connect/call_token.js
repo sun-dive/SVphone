@@ -1,25 +1,26 @@
 /**
- * Call Token Manager (v08.02) - OP_RETURN Binary Format Implementation
+ * Call Token Manager (v09.03) - P Protocol Conformant Signal Tokens
  *
- * Uses the compact v07_00 binary format via P OP_RETURN in a single TX.
- * No genesis+transfer ceremony: signal goes directly from caller to callee.
+ * Signal tokens (CALL, ANS, CXID) use the standard P v03 OP_RETURN format
+ * with proper field separation:
+ *
+ *   tokenName:       "CALL-v1" | "ANS-v1" | "CXID-v1"
+ *   tokenScript:     "" (empty, P2PKH fallback)
+ *   tokenRules:      Standard 8-byte format (supply=1, div=0, restrictions=signal flags, version=1)
+ *   tokenAttributes: Compact connection metadata (IP, port, session key, codec, addresses, fingerprint)
+ *   stateData:       SDP offer/answer (the large payload)
  *
  * TX structure:
  *   Output 0: OP_RETURN (0 sats) — P v03 format
- *   Output 1: P2PKH 1-sat → callee (WoC address history indexing)
- *   Output 2: P2PKH change → caller
+ *   Output 1: P2PKH 1-sat → recipient (WoC address history indexing)
+ *   Output 2: P2PKH change → sender
  *
- * Binary tokenAttributes format (v07_00 compatible):
- *   [1]     version = 0x01
- *   [4|16]  IP (MSB of first byte = IPv6 flag)
- *   [2]     port (big-endian)
- *   [1+N]   session key (1-byte length + N bytes)
- *   [1]     codec: 0=opus, 1=pcm, 2=aac
- *   [1]     quality: 0=sd, 1=hd, 2=vhd
- *   [1]     media bitmask: bit0=audio, bit1=video
- *   [2+N]   SDP (2-byte length + N bytes)
- *   [1+N]   caller address (1-byte length + N bytes UTF-8)
- *   [1+N]   callee address (1-byte length + N bytes UTF-8)
+ * tokenRules restrictions bitfield:
+ *   bit 0 (0x0001): CALL signal
+ *   bit 1 (0x0002): ANS signal
+ *   bit 2 (0x0004): CXID signal
+ *   bit 3 (0x0008): audio
+ *   bit 4 (0x0010): video
  */
 
 const CODECS = { opus: 0, pcm: 1, aac: 2 }
@@ -27,34 +28,40 @@ const CODEC_IDS = ['opus', 'pcm', 'aac']
 const QUALITIES = { sd: 0, hd: 1, vhd: 2 }
 const QUALITY_IDS = ['sd', 'hd', 'vhd']
 
+// Signal type flags for tokenRules restrictions bitfield
+const SIGNAL_CALL = 0x0001
+const SIGNAL_ANS  = 0x0002
+const SIGNAL_CXID = 0x0004
+const MEDIA_AUDIO = 0x0008
+const MEDIA_VIDEO = 0x0010
+
 class CallTokenManager {
   constructor(uiLogger) {
     this.log = uiLogger
   }
 
   /**
-   * Encode call attributes into binary format (~45 bytes overhead + SDP + addresses).
-   * @param {Object} callToken - {senderIp, senderPort, sessionKey, codec, quality, mediaTypes, sdpOffer|sdpAnswer, caller, callee}
+   * Encode connection metadata into tokenAttributes (no SDP — that goes in stateData).
+   * @param {Object} callToken - {senderIp, senderPort, sessionKey, codec, quality, mediaTypes, caller, callee, senderIp4, senderIp6, callerFingerprint}
    * @returns {string} Hex-encoded binary
    */
   encodeCallAttributes(callToken) {
     try {
       const bytes = []
 
-      // Version marker (0x01 = binary format v1)
-      bytes.push(0x01)
+      // Version marker (0x02 = v09.03 format, SDP moved to stateData)
+      bytes.push(0x02)
 
-      // IP address and port
-      // Format: 1 byte type (0=IPv4, 1=IPv6) + 4 or 16 bytes IP (full, no bit masking)
+      // IP address: 1 byte type (0=IPv4, 1=IPv6) + 4 or 16 bytes
       const ip = callToken.senderIp || '0.0.0.0'
       const port = callToken.senderPort
       const isIPv6 = ip.includes(':')
 
       if (!isIPv6) {
-        bytes.push(0x00) // type = IPv4
+        bytes.push(0x00)
         bytes.push(...ip.split('.').map(p => parseInt(p, 10)))
       } else {
-        bytes.push(0x01) // type = IPv6
+        bytes.push(0x01)
         bytes.push(...this._ipv6ToBytes(ip))
       }
 
@@ -81,15 +88,6 @@ class CallTokenManager {
       if (callToken.mediaTypes?.includes('audio')) mediaBitmask |= 0x01
       if (callToken.mediaTypes?.includes('video')) mediaBitmask |= 0x02
       bytes.push(mediaBitmask)
-
-      // SDP offer or answer (2-byte length prefix + N bytes)
-      // sdpOffer/sdpAnswer may be an RTCSessionDescription object — extract the raw string
-      let sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
-      if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
-      const sdpBuf = new TextEncoder().encode(sdpData)
-      bytes.push((sdpBuf.length >> 8) & 0xFF)
-      bytes.push(sdpBuf.length & 0xFF)
-      bytes.push(...sdpBuf)
 
       // Caller address (1-byte length prefix + N bytes UTF-8)
       const callerBuf = new TextEncoder().encode(callToken.caller || '')
@@ -120,7 +118,6 @@ class CallTokenManager {
       }
 
       // callerFingerprint (1-byte length + N bytes UTF-8)
-      // Format: "sha-256 AB:CD:EF:..." — ~103 chars, fits in 1-byte length prefix
       const fpBuf = new TextEncoder().encode(callToken.callerFingerprint || '')
       bytes.push(fpBuf.length)
       bytes.push(...fpBuf)
@@ -133,9 +130,63 @@ class CallTokenManager {
   }
 
   /**
-   * Decode call attributes from binary hex string.
+   * Encode SDP into stateData hex string.
+   * @param {Object} callToken - {sdpOffer|sdpAnswer}
+   * @returns {string} Hex-encoded SDP string, or '00' if empty
+   */
+  encodeStateData(callToken) {
+    let sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
+    if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
+    if (!sdpData) return '00'
+    const sdpBuf = new TextEncoder().encode(sdpData)
+    return Array.from(sdpBuf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
+  }
+
+  /**
+   * Decode stateData hex string back to SDP string.
+   * @param {string} stateHex - Hex-encoded stateData from OP_RETURN
+   * @returns {string} SDP string, or '' if empty
+   */
+  decodeStateData(stateHex) {
+    if (!stateHex || stateHex === '00' || stateHex === '') return ''
+    const bytes = []
+    for (let i = 0; i < stateHex.length; i += 2) {
+      bytes.push(parseInt(stateHex.substring(i, i + 2), 16))
+    }
+    return new TextDecoder().decode(new Uint8Array(bytes))
+  }
+
+  /**
+   * Build standard 8-byte tokenRules for signal tokens.
+   * Format: supply(2) + divisibility(2) + restrictions(2) + version(2), all uint16 LE.
+   * @param {string} signalType - 'CALL' | 'ANS' | 'CXID'
+   * @param {string[]} mediaTypes - ['audio'] or ['audio', 'video']
+   * @returns {string} 16-char hex string (8 bytes)
+   */
+  encodeSignalRules(signalType, mediaTypes = ['audio']) {
+    const supply = 1
+    const divisibility = 0
+    let restrictions = 0
+    if (signalType === 'CALL') restrictions |= SIGNAL_CALL
+    else if (signalType === 'ANS') restrictions |= SIGNAL_ANS
+    else if (signalType === 'CXID') restrictions |= SIGNAL_CXID
+    if (mediaTypes?.includes('audio')) restrictions |= MEDIA_AUDIO
+    if (mediaTypes?.includes('video')) restrictions |= MEDIA_VIDEO
+    const version = 1
+
+    // uint16 LE encoding
+    const buf = new Uint8Array(8)
+    buf[0] = supply & 0xFF;       buf[1] = (supply >> 8) & 0xFF
+    buf[2] = divisibility & 0xFF; buf[3] = (divisibility >> 8) & 0xFF
+    buf[4] = restrictions & 0xFF; buf[5] = (restrictions >> 8) & 0xFF
+    buf[6] = version & 0xFF;      buf[7] = (version >> 8) & 0xFF
+    return Array.from(buf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
+  }
+
+  /**
+   * Decode connection metadata from tokenAttributes (no SDP — that's in stateData).
    * @param {string} hexStr - Hex-encoded binary tokenAttributes
-   * @returns {Object} {senderIp, senderPort, sessionKey, codec, quality, mediaTypes, sdpOffer, caller, callee}
+   * @returns {Object|null} {senderIp, senderPort, sessionKey, codec, quality, mediaTypes, caller, callee, senderIp4, senderIp6, callerFingerprint}
    */
   decodeCallAttributes(hexStr) {
     if (!hexStr || hexStr === '00') return null
@@ -179,13 +230,6 @@ class CallTokenManager {
       const mediaTypes = []
       if (mediaBitmask & 0x01) mediaTypes.push('audio')
       if (mediaBitmask & 0x02) mediaTypes.push('video')
-
-      // SDP
-      const sdpLen = (bytes[offset] << 8) | bytes[offset + 1]
-      offset += 2
-      const sdpBuf = bytes.slice(offset, offset + sdpLen)
-      const sdpOffer = new TextDecoder().decode(new Uint8Array(sdpBuf))
-      offset += sdpLen
 
       // Caller address
       let caller = ''
@@ -236,27 +280,10 @@ class CallTokenManager {
         }
       }
 
-      return { senderIp, senderPort, sessionKey, codec, quality, mediaTypes, sdpOffer, caller, callee, senderIp4, senderIp6, callerFingerprint }
+      return { senderIp, senderPort, sessionKey, codec, quality, mediaTypes, caller, callee, senderIp4, senderIp6, callerFingerprint }
     } catch (error) {
       console.error('[CallToken] Failed to decode attributes:', error)
       return null
-    }
-  }
-
-  /**
-   * Compute 32-bit truncated SHA256 hash of an address (returns 8 hex chars = 4 bytes).
-   * @param {string} address - BSV address
-   * @returns {Promise<string>} 8-character hex string
-   */
-  async hashAddress(address) {
-    try {
-      const data = new TextEncoder().encode(address)
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-      const hashArray = Array.from(new Uint8Array(hashBuffer))
-      return hashArray.map(b => ('0' + b.toString(16)).slice(-2)).join('').substring(0, 8)
-    } catch (error) {
-      console.error('[CallToken] Failed to hash address:', error)
-      return '00000000'
     }
   }
 
@@ -291,19 +318,21 @@ class CallTokenManager {
   async createAndBroadcastCallToken(callToken) {
     this.log(`Sending call signal to ${callToken.callee}`, 'info')
     try {
-      const callerHash = await this.hashAddress(callToken.caller)
-      const calleeHash = await this.hashAddress(callToken.callee)
-      const attrs = this.encodeCallAttributes(callToken)
-      const callerIdent = callToken.caller?.slice(0, 5) || 'unkn'
-
       const prefix = callToken.tokenPrefix || 'CALL'
+      const signalType = prefix === 'CXID' ? 'CXID' : 'CALL'
+      const tokenName = `${prefix}-v1`
+      const rules = this.encodeSignalRules(signalType, callToken.mediaTypes)
+      const attrs = this.encodeCallAttributes(callToken)
+      const stateData = this.encodeStateData(callToken)
+
       const feePerKb = callToken.feePerKb || 1.1
       const result = await window.tokenBuilder.createCallSignalTx(
-        `${prefix}-${callerIdent}`,
-        callerHash + calleeHash,
+        tokenName,
+        rules,
         attrs,
         callToken.callee,
         feePerKb,
+        stateData,
       )
 
       this.log(`✓ Call signal sent: ${result.txId}`, 'success')
@@ -327,31 +356,33 @@ class CallTokenManager {
   async broadcastCallAnswer(callerAddress, answerData) {
     this.log('Sending answer signal to caller...', 'info')
     try {
-      const callerHash = await this.hashAddress(callerAddress)
-      const calleeHash = await this.hashAddress(answerData.callee || '')
-      const attrs = this.encodeCallAttributes({
+      const ansToken = {
         senderIp:    answerData.senderIp || '0.0.0.0',
         senderPort:  answerData.senderPort || 0,
         sessionKey:  answerData.sessionKey || '',
         codec:       answerData.codec || 'opus',
         quality:     answerData.quality || 'hd',
         mediaTypes:  answerData.mediaTypes || ['audio'],
-        sdpAnswer:   answerData.sdpAnswer || '',
         caller:      callerAddress,
         callee:      answerData.callee || '',
         senderIp4:   answerData.senderIp4 || null,
         senderIp6:   answerData.senderIp6 || null,
         callerFingerprint: answerData.calleeFingerprint || '',
-      })
-      const calleeIdent = answerData.callee?.slice(0, 5) || 'unkn'
+        sdpAnswer:   answerData.sdpAnswer || '',
+      }
+
+      const rules = this.encodeSignalRules('ANS', ansToken.mediaTypes)
+      const attrs = this.encodeCallAttributes(ansToken)
+      const stateData = this.encodeStateData(ansToken)
 
       const feePerKb = answerData.feePerKb || 1.1
       const result = await window.tokenBuilder.createCallSignalTx(
-        `ANS-${calleeIdent}`,
-        callerHash + calleeHash,
+        'ANS-v1',
+        rules,
         attrs,
         callerAddress,
         feePerKb,
+        stateData,
       )
 
       this.log(`✓ Answer sent: ${result.txId}`, 'success')
