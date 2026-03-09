@@ -647,16 +647,14 @@ class CallManager extends EventEmitter {
       if (calleePort && calleeIp) {
         this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Callee answer received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
-        // Alternating SPI pattern: caller delays on even batches (0,2,4...),
-        // callee delays on odd batches (1,3,5...). Delay increases with each
+        // Alternating SPI pattern: caller first on even batches (0,2,4...),
+        // callee first on odd batches (1,3,5...). Delay increases with each
         // retry pair to cover wider timing windows. This ensures both spray
         // orderings are tried regardless of which side has a strict SPI firewall.
         const spiDelay = (batch) => 3000 + Math.floor(batch / 2) * 3000 // 3s, 3s, 6s, 6s, 9s, 9s...
 
-        // Batch 0: caller delays (callee sprays first)
-        const d0 = spiDelay(0)
-        this.emit('call:log', { msg: `[Spray] Caller #0 delay ${d0}ms (callee first)`, type: 'info' })
-        await new Promise(r => setTimeout(r, d0))
+        // Batch 0: caller immediate (caller sprays first)
+        this.emit('call:log', { msg: `[Spray] Caller #0 immediate (caller first)`, type: 'info' })
         this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: 0 })
 
         let sprayBatch = 1
@@ -680,8 +678,8 @@ class CallManager extends EventEmitter {
             return
           }
           const batch = sprayBatch++
-          // Even: caller delays (callee first). Odd: caller immediate (caller first).
-          if (batch % 2 === 0) {
+          // Even: caller immediate (caller first). Odd: caller delays (callee first).
+          if (batch % 2 === 1) {
             const d = spiDelay(batch)
             this.emit('call:log', { msg: `[Spray] Caller #${batch} delay ${d}ms (callee first)`, type: 'info' })
             await new Promise(r => setTimeout(r, d))
@@ -1064,13 +1062,14 @@ class CallManager extends EventEmitter {
       return
     }
 
-    // Alternating SPI pattern (mirrors caller): callee delays on odd batches
-    // (1,3,5...), caller delays on even batches (0,2,4...). Delay grows with
-    // each retry pair to cover wider timing windows.
+    // Alternating SPI pattern (mirrors caller): callee delays on even batches
+    // (0,2,4...), caller first on even batches. Delay grows with each retry pair.
     const spiDelay = (batch) => 3000 + Math.floor(batch / 2) * 3000
 
-    // Batch 0: callee immediate (caller is delaying on batch 0)
-    this.emit('call:log', { msg: `[Spray] Callee #0 immediate to ${ip}:${port} (caller delays)`, type: 'success' })
+    // Batch 0: callee delays (caller sprays first)
+    const d0 = spiDelay(0)
+    this.emit('call:log', { msg: `[Spray] Callee #0 delay ${d0}ms (caller first) to ${ip}:${port}`, type: 'info' })
+    await new Promise(r => setTimeout(r, d0))
     this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: 0 })
 
     let sprayBatch = 1
@@ -1094,8 +1093,8 @@ class CallManager extends EventEmitter {
         return
       }
       const batch = sprayBatch++
-      // Odd: callee delays (caller first). Even: callee immediate (callee first).
-      if (batch % 2 === 1) {
+      // Even: callee delays (caller first). Odd: callee immediate (callee first).
+      if (batch % 2 === 0) {
         const d = spiDelay(batch)
         this.emit('call:log', { msg: `[Spray] Callee #${batch} delay ${d}ms (caller first)`, type: 'info' })
         await new Promise(r => setTimeout(r, d))
