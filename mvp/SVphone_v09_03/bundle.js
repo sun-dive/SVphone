@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-09 10:54 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-09 10:54 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-09 10:54 UTC');
+window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-09 22:31 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-09 22:31 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-09 22:31 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19490,11 +19490,15 @@ class CallManager extends EventEmitter {
         callToken.sdpOffer        = mediaOffer
         callToken.callerFingerprint = myFingerprint
 
-        // Extract caller's srflx port from gathered SDP so callee knows where to punch
+        // Extract caller's srflx IP:port from gathered SDP so callee knows where to punch
         const srflxMatch = (mediaOffer.sdp || '').match(/(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+srflx/)
         if (srflxMatch) {
+          const srflxIp = srflxMatch[1]
           callToken.senderPort = parseInt(srflxMatch[2], 10)
-          this.emit('call:log', { msg: `[1-TX] ✓ srflx port: ${srflxMatch[2]} (included in CALL token for callee punch target)`, type: 'info' })
+          // Use STUN-discovered IP as our public IP
+          this.signaling.myIp = srflxIp
+          this.signaling.myIp4 = srflxIp
+          this.emit('call:log', { msg: `[1-TX] ✓ srflx ${srflxIp}:${srflxMatch[2]} (included in CALL token for callee punch target)`, type: 'info' })
         }
 
         this.emit('call:log', { msg: '[1-TX] ✓ Offer ready (ICE gathered)', type: 'info' })
@@ -20224,6 +20228,9 @@ class CallManager extends EventEmitter {
         srflxAnnounced = true
         iceLog(`[PrePunch] STUN discovered (${source}): ${ip}:${port}`, 'success')
         if (session) session.calleeSrflx = { ip, port }
+        // Set callee's public IP from STUN (no HTTP detection needed)
+        this.signaling.myIp = ip
+        this.signaling.myIp4 = ip
         this.emit('call:port-discovered', {
           callTokenId,
           callerAddress: callToken.caller,
