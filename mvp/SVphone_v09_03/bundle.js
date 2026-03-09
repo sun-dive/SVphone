@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-09 22:31 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-09 22:31 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-09 22:31 UTC');
+window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-09 22:49 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-09 22:49 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-09 22:49 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19495,7 +19495,9 @@ class CallManager extends EventEmitter {
         if (srflxMatch) {
           const srflxIp = srflxMatch[1]
           callToken.senderPort = parseInt(srflxMatch[2], 10)
-          // Use STUN-discovered IP as our public IP
+          callToken.senderIp = srflxIp
+          callToken.senderIp4 = srflxIp
+          // Update signaling for any later use
           this.signaling.myIp = srflxIp
           this.signaling.myIp4 = srflxIp
           this.emit('call:log', { msg: `[1-TX] ✓ srflx ${srflxIp}:${srflxMatch[2]} (included in CALL token for callee punch target)`, type: 'info' })

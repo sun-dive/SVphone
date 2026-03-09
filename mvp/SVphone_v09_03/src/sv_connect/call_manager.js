@@ -206,7 +206,9 @@ class CallManager extends EventEmitter {
         if (srflxMatch) {
           const srflxIp = srflxMatch[1]
           callToken.senderPort = parseInt(srflxMatch[2], 10)
-          // Use STUN-discovered IP as our public IP
+          callToken.senderIp = srflxIp
+          callToken.senderIp4 = srflxIp
+          // Update signaling for any later use
           this.signaling.myIp = srflxIp
           this.signaling.myIp4 = srflxIp
           this.emit('call:log', { msg: `[1-TX] ✓ srflx ${srflxIp}:${srflxMatch[2]} (included in CALL token for callee punch target)`, type: 'info' })
