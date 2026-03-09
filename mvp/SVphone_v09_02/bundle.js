@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-09 01:17 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-09 01:17 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-09 01:17 UTC');
+window.SVPHONE_VERSION="v09.02";window.SVPHONE_BUILD="2026-03-09 01:28 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.02'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.02 / 2026-03-09 01:28 UTC';});console.log('[SVphone] v09.02 Build: 2026-03-09 01:28 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19939,7 +19939,7 @@ class CallManager extends EventEmitter {
         // callee delays on odd batches (1,3,5...). Delay increases with each
         // retry pair to cover wider timing windows. This ensures both spray
         // orderings are tried regardless of which side has a strict SPI firewall.
-        const spiDelay = (batch) => 1000 + Math.floor(batch / 2) * 1000 // 1s, 1s, 2s, 2s, 3s, 3s...
+        const spiDelay = (batch) => 3000 + Math.floor(batch / 2) * 3000 // 3s, 3s, 6s, 6s, 9s, 9s...
 
         // Batch 0: caller delays (callee sprays first)
         const d0 = spiDelay(0)
@@ -20351,7 +20351,7 @@ class CallManager extends EventEmitter {
     // Alternating SPI pattern (mirrors caller): callee delays on odd batches
     // (1,3,5...), caller delays on even batches (0,2,4...). Delay grows with
     // each retry pair to cover wider timing windows.
-    const spiDelay = (batch) => 1000 + Math.floor(batch / 2) * 1000
+    const spiDelay = (batch) => 3000 + Math.floor(batch / 2) * 3000
 
     // Batch 0: callee immediate (caller is delaying on batch 0)
     this.emit('call:log', { msg: `[Spray] Callee #0 immediate to ${ip}:${port} (caller delays)`, type: 'success' })

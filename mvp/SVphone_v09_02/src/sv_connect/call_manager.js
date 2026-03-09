@@ -651,7 +651,7 @@ class CallManager extends EventEmitter {
         // callee delays on odd batches (1,3,5...). Delay increases with each
         // retry pair to cover wider timing windows. This ensures both spray
         // orderings are tried regardless of which side has a strict SPI firewall.
-        const spiDelay = (batch) => 1000 + Math.floor(batch / 2) * 1000 // 1s, 1s, 2s, 2s, 3s, 3s...
+        const spiDelay = (batch) => 3000 + Math.floor(batch / 2) * 3000 // 3s, 3s, 6s, 6s, 9s, 9s...
 
         // Batch 0: caller delays (callee sprays first)
         const d0 = spiDelay(0)
@@ -1063,7 +1063,7 @@ class CallManager extends EventEmitter {
     // Alternating SPI pattern (mirrors caller): callee delays on odd batches
     // (1,3,5...), caller delays on even batches (0,2,4...). Delay grows with
     // each retry pair to cover wider timing windows.
-    const spiDelay = (batch) => 1000 + Math.floor(batch / 2) * 1000
+    const spiDelay = (batch) => 3000 + Math.floor(batch / 2) * 3000
 
     // Batch 0: callee immediate (caller is delaying on batch 0)
     this.emit('call:log', { msg: `[Spray] Callee #0 immediate to ${ip}:${port} (caller delays)`, type: 'success' })
