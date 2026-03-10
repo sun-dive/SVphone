@@ -209,6 +209,7 @@ class PhoneUI {
     resetCallUI() {
         this.stopRingtone()
         this.stopOutgoingRing()
+        this.stopConnectingTone()
         this.statusElements.callStatus.style.display = 'none'
         this.buttonElements.acceptBtn.style.display = 'none'
         this.buttonElements.rejectBtn.style.display = 'none'
@@ -348,6 +349,55 @@ class PhoneUI {
     /** Outgoing ring tone — caller hears this while waiting for answer */
     startOutgoingRing() { this._startRing('outgoing') }
     stopOutgoingRing()  { this._stopRing('outgoing') }
+
+    /** Connecting tone — short beeps while ICE negotiates after ANS received */
+    playConnectingTone() {
+        this.stopConnectingTone()
+        if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
+        this._ringtoneCtx.resume().then(() => {
+            this._connectingPlaying = true
+            this._connectingPulse()
+        })
+    }
+
+    _connectingPulse() {
+        if (!this._connectingPlaying) return
+        const ctx = this._ringtoneCtx
+        const gain = ctx.createGain()
+        gain.gain.value = 0.15
+        gain.connect(ctx.destination)
+        const osc = ctx.createOscillator()
+        osc.frequency.value = 440
+        osc.connect(gain)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.15)
+        this._connectingTimer = setTimeout(() => this._connectingPulse(), 1000)
+    }
+
+    stopConnectingTone() {
+        this._connectingPlaying = false
+        if (this._connectingTimer) { clearTimeout(this._connectingTimer); this._connectingTimer = null }
+    }
+
+    /** Connection failed tone — three descending beeps */
+    playFailedTone() {
+        if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
+        this._ringtoneCtx.resume().then(() => {
+            const ctx = this._ringtoneCtx
+            const now = ctx.currentTime
+            const freqs = [480, 400, 320]
+            freqs.forEach((freq, i) => {
+                const gain = ctx.createGain()
+                gain.gain.value = 0.25
+                gain.connect(ctx.destination)
+                const osc = ctx.createOscillator()
+                osc.frequency.value = freq
+                osc.connect(gain)
+                osc.start(now + i * 0.25)
+                osc.stop(now + i * 0.25 + 0.2)
+            })
+        })
+    }
 
     /**
      * Classic disconnected / reorder tone: 480Hz + 620Hz, 0.25s on / 0.25s off.

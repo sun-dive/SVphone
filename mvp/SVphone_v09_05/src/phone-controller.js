@@ -459,9 +459,21 @@ class PhoneController {
             }
         })
 
+        this.callManager.on('call:connecting', () => {
+            this.ui.stopOutgoingRing()
+            this.ui.playConnectingTone()
+            this.ui.updateCallStatus('connecting', 'Connecting...')
+        })
+
+        this.callManager.on('call:connection-failed', () => {
+            this.ui.stopConnectingTone()
+            this.ui.playFailedTone()
+        })
+
         this.callManager.on('call:connected', () => {
             console.debug('[call:connected] Event listener fired!')
             this.ui.stopOutgoingRing()
+            this.ui.stopConnectingTone()
             this.ui.stopRingtone()
             if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
             this.ui.log('📞 Call connected! Media stream established', 'success')
