@@ -35,8 +35,8 @@ class CallTokenManager {
     try {
       const bytes = []
 
-      // Version marker (0x02 = v09.03 format, SDP moved to stateData)
-      bytes.push(0x02)
+      // Version marker (0x03 = binary sessionKey, saves 12 bytes over base64)
+      bytes.push(0x03)
 
       // IP address: 1 byte type (0=IPv4, 1=IPv6) + 4 or 16 bytes
       const ip = callToken.senderIp || '0.0.0.0'
@@ -55,11 +55,12 @@ class CallTokenManager {
       bytes.push((port >> 8) & 0xFF)
       bytes.push(port & 0xFF)
 
-      // Session key (1-byte length prefix + N bytes)
-      const keyData = callToken.sessionKey
-      const keyBuf = typeof keyData === 'string'
-        ? new TextEncoder().encode(keyData)
-        : keyData
+      // Session key (1-byte length prefix + raw binary bytes)
+      // Base64 string → raw bytes (32 bytes instead of 44-char base64 string)
+      const keyB64 = callToken.sessionKey || ''
+      const keyBin = atob(keyB64)
+      const keyBuf = new Uint8Array(keyBin.length)
+      for (let i = 0; i < keyBin.length; i++) keyBuf[i] = keyBin.charCodeAt(i)
       bytes.push(keyBuf.length)
       bytes.push(...keyBuf)
 
@@ -172,10 +173,10 @@ class CallTokenManager {
       const senderPort = (bytes[offset] << 8) | bytes[offset + 1]
       offset += 2
 
-      // Session key
+      // Session key (raw binary bytes → base64 string)
       const keyLen = bytes[offset++]
       const keyBuf = bytes.slice(offset, offset + keyLen)
-      const sessionKey = new TextDecoder().decode(new Uint8Array(keyBuf))
+      const sessionKey = btoa(String.fromCharCode(...keyBuf))
       offset += keyLen
 
       // Codec and Quality
