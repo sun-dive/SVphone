@@ -85,10 +85,10 @@ class CallTokenManager {
       bytes.push(fpBuf.length)
       bytes.push(...fpBuf)
 
-      // callerName (1-byte length + N bytes UTF-8) — appended for backward compat
-      const nameBuf = new TextEncoder().encode(callToken.callerName || '')
-      bytes.push(nameBuf.length)
-      bytes.push(...nameBuf)
+      // NOTE: callerName encoding temporarily disabled for connectivity debugging
+      // const nameBuf = new TextEncoder().encode(callToken.callerName || '')
+      // bytes.push(nameBuf.length)
+      // bytes.push(...nameBuf)
 
       return bytes.map(b => ('0' + b.toString(16)).slice(-2)).join('')
     } catch (error) {

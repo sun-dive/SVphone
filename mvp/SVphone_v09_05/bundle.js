@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.05";window.SVPHONE_BUILD="2026-03-10 21:45 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.05'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.05 / 2026-03-10 21:45 UTC';});console.log('[SVphone] v09.05 Build: 2026-03-10 21:45 UTC');
+window.SVPHONE_VERSION="v09.05";window.SVPHONE_BUILD="2026-03-10 22:26 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.05'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.05 / 2026-03-10 22:26 UTC';});console.log('[SVphone] v09.05 Build: 2026-03-10 22:26 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -22580,10 +22580,10 @@ class CallTokenManager {
       bytes.push(fpBuf.length)
       bytes.push(...fpBuf)
 
-      // callerName (1-byte length + N bytes UTF-8) — appended for backward compat
-      const nameBuf = new TextEncoder().encode(callToken.callerName || '')
-      bytes.push(nameBuf.length)
-      bytes.push(...nameBuf)
+      // NOTE: callerName encoding temporarily disabled for connectivity debugging
+      // const nameBuf = new TextEncoder().encode(callToken.callerName || '')
+      // bytes.push(nameBuf.length)
+      // bytes.push(...nameBuf)
 
       return bytes.map(b => ('0' + b.toString(16)).slice(-2)).join('')
     } catch (error) {
