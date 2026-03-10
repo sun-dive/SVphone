@@ -93,38 +93,56 @@ class CallTokenManager {
   }
 
   /**
-   * Encode SDP into stateData hex string.
+   * Encode SDP into stateData hex string (gzip compressed).
+   * Format: 0x1f 0x8b header (standard gzip magic bytes) followed by compressed data.
    * @param {Object} callToken - {sdpOffer|sdpAnswer}
-   * @returns {string} Hex-encoded SDP string, or '00' if empty
+   * @returns {Promise<string>} Hex-encoded gzip SDP, or '00' if empty
    */
-  encodeStateData(callToken) {
+  async encodeStateData(callToken) {
     let sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
     if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
     if (!sdpData) return '00'
     const sdpBuf = new TextEncoder().encode(sdpData)
-    const hex = Array.from(sdpBuf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
+    // Gzip compress
+    const cs = new CompressionStream('gzip')
+    const writer = cs.writable.getWriter()
+    writer.write(sdpBuf)
+    writer.close()
+    const compressed = new Uint8Array(await new Response(cs.readable).arrayBuffer())
+    const hex = Array.from(compressed).map(b => ('0' + b.toString(16)).slice(-2)).join('')
     // Self-test: decode immediately and verify round-trip
-    const rt = this.decodeStateData(hex)
+    const rt = await this.decodeStateData(hex)
     if (rt !== sdpData) {
-      console.error('[CallToken] ❌ SDP round-trip MISMATCH! encoded:', sdpData.length, 'decoded:', rt.length)
+      console.error('[CallToken] SDP round-trip MISMATCH! encoded:', sdpData.length, 'decoded:', rt.length)
     } else {
-      console.log(`[CallToken] ✓ SDP round-trip OK (${sdpData.length} chars, ${hex.length/2} bytes)`)
+      console.log(`[CallToken] SDP gzip OK (${sdpData.length} chars → ${compressed.length} bytes, ${Math.round(100 - compressed.length/sdpBuf.length*100)}% saved)`)
     }
     return hex
   }
 
   /**
    * Decode stateData hex string back to SDP string.
+   * Detects gzip (0x1f 0x8b magic) vs raw UTF-8 for backward compatibility.
    * @param {string} stateHex - Hex-encoded stateData from OP_RETURN
-   * @returns {string} SDP string, or '' if empty
+   * @returns {Promise<string>} SDP string, or '' if empty
    */
-  decodeStateData(stateHex) {
+  async decodeStateData(stateHex) {
     if (!stateHex || stateHex === '00' || stateHex === '') return ''
-    const bytes = []
+    const bytes = new Uint8Array(stateHex.length / 2)
     for (let i = 0; i < stateHex.length; i += 2) {
-      bytes.push(parseInt(stateHex.substring(i, i + 2), 16))
+      bytes[i / 2] = parseInt(stateHex.substring(i, i + 2), 16)
     }
-    return new TextDecoder().decode(new Uint8Array(bytes))
+    // Detect gzip magic bytes (0x1f 0x8b)
+    if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+      const ds = new DecompressionStream('gzip')
+      const writer = ds.writable.getWriter()
+      writer.write(bytes)
+      writer.close()
+      const decompressed = new Uint8Array(await new Response(ds.readable).arrayBuffer())
+      return new TextDecoder().decode(decompressed)
+    }
+    // Fallback: raw UTF-8 (backward compat with pre-gzip tokens)
+    return new TextDecoder().decode(bytes)
   }
 
   /**
@@ -254,7 +272,7 @@ class CallTokenManager {
       const tokenName = `${prefix}-v1`
       const rules = this.encodeSignalRules()
       const attrs = this.encodeCallAttributes(callToken)
-      const stateData = this.encodeStateData(callToken)
+      const stateData = await this.encodeStateData(callToken)
 
       const feePerKb = callToken.feePerKb || 1.1
       const result = await window.tokenBuilder.createCallSignalTx(
@@ -301,7 +319,7 @@ class CallTokenManager {
 
       const rules = this.encodeSignalRules()
       const attrs = this.encodeCallAttributes(ansToken)
-      const stateData = this.encodeStateData(ansToken)
+      const stateData = await this.encodeStateData(ansToken)
 
       const feePerKb = answerData.feePerKb || 1.1
       const result = await window.tokenBuilder.createCallSignalTx(

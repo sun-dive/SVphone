@@ -633,7 +633,7 @@ class PhoneController {
                             if (!isCall && !isAnswer) continue
 
                             // SDP is in stateData (P protocol conformant), not tokenAttributes
-                            const sdpStr = this.callTokenManager.decodeStateData(decoded.stateData)
+                            const sdpStr = await this.callTokenManager.decodeStateData(decoded.stateData)
 
                             signal = {
                                 type: isCall ? 'call' : 'answer',
