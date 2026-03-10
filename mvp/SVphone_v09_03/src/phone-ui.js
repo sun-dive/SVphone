@@ -181,17 +181,17 @@ class PhoneUI {
     /**
      * Show incoming call UI
      */
-    showIncomingCall(caller, identityExchange = false) {
-        console.debug(`[RECV] ✅ INCOMING ${identityExchange ? 'IDENTITY EXCHANGE' : 'CALL'} DETECTED! Caller: ${caller}`)
+    showIncomingCall(caller, isNewCaller = false) {
+        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${caller}`)
         this.displayElements.incomingCall.style.display = 'block'
         this.displayElements.incomingFrom.textContent = caller
         this.buttonElements.acceptBtn.style.display = 'inline-block'
         this.buttonElements.rejectBtn.style.display = 'inline-block'
         const titleEl = document.getElementById('incomingTitle')
-        if (identityExchange) {
-            if (titleEl) titleEl.textContent = 'Identity Exchange Request'
-            this.updateCallStatus('ringing', 'Identity exchange request')
-            this.log(`Identity exchange request from: ${caller}`, 'info')
+        if (isNewCaller) {
+            if (titleEl) titleEl.textContent = 'New Caller'
+            this.updateCallStatus('ringing', 'New caller...')
+            this.log(`New caller: ${caller}`, 'info')
         } else {
             if (titleEl) titleEl.textContent = 'Incoming Call'
             this.updateCallStatus('ringing', 'Incoming call...')

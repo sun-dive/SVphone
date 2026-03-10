@@ -366,13 +366,12 @@ class PhoneController {
         })
 
         this.callManager.on('call:incoming-session', (session) => {
-            if (session.identityExchange) {
-                this.ui.log(`Incoming identity exchange request from ${session.caller}`, 'info')
-                this.showIncomingCall(session.caller, session.callTokenId, true)
+            if (session.isNewCaller) {
+                this.ui.log(`Incoming call from NEW caller: ${session.caller}`, 'info')
             } else {
                 this.ui.log(`Incoming call from ${session.caller}`, 'info')
-                this.showIncomingCall(session.caller, session.callTokenId, false)
             }
+            this.showIncomingCall(session.caller, session.callTokenId, session.isNewCaller)
             this.currentCallToken = session.callTokenId
             this.currentRole = 'callee'
         })
@@ -420,24 +419,6 @@ class PhoneController {
                     sessionKey: session.calleeSessionKey
                 }
             }
-        })
-
-        this.callManager.on('call:identity-exchanged', (data) => {
-            this.ui.stopOutgoingRing()
-            this.ui.stopRingtone()
-            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
-            if (this._incomingTimeout) { clearTimeout(this._incomingTimeout); this._incomingTimeout = null }
-            document.getElementById('incomingCall').style.display = 'none'
-            document.getElementById('acceptBtn').style.display = 'none'
-            document.getElementById('rejectBtn').style.display = 'none'
-            if (data.role === 'caller') {
-                this.ui.log(`✓ Contact saved for ${data.address}! You can now call them.`, 'success')
-            } else {
-                this.ui.log(`✓ Identity exchanged with ${data.address}. Contact saved.`, 'success')
-            }
-            this.ui.updateCallStatus('ended', 'Identity exchanged')
-            this.ui.updateCallButtonStatus('idle')
-            this.refreshContactsList()
         })
 
         // Port discovery: callee's STUN found its srflx — broadcast PORT token to caller
@@ -642,12 +623,12 @@ class PhoneController {
                             const decoded = window.decodeOpReturn(output.lockingScript)
                             if (!decoded) continue
                             const name = decoded.tokenName
-                            if (!name?.startsWith('CALL-') && !name?.startsWith('ANS-') && !name?.startsWith('CXID-')) continue
+                            if (!name?.startsWith('CALL-') && !name?.startsWith('ANS-')) continue
 
                             const attrs = this.callTokenManager.decodeCallAttributes(decoded.tokenAttributes)
                             if (!attrs?.senderIp) continue
 
-                            const isCall = (name.startsWith('CALL-') || name.startsWith('CXID-')) && attrs.callee === address
+                            const isCall = name.startsWith('CALL-') && attrs.callee === address
                             const isAnswer = name.startsWith('ANS-') && (attrs.caller === address || attrs.callee === address)
                             if (!isCall && !isAnswer) continue
 
@@ -712,10 +693,10 @@ class PhoneController {
     /**
      * Show incoming call UI
      */
-    showIncomingCall(caller, callTokenId, identityExchange = false) {
-        console.debug(`[RECV] ✅ INCOMING ${identityExchange ? 'IDENTITY EXCHANGE' : 'CALL'} DETECTED! Caller: ${caller}`)
+    showIncomingCall(caller, callTokenId, isNewCaller = false) {
+        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${caller}`)
         this.currentCallToken = callTokenId
-        this.ui.showIncomingCall(caller, identityExchange)
+        this.ui.showIncomingCall(caller, isNewCaller)
 
         // Auto-return to standby if not answered within 3 minutes
         this._incomingTimeout = setTimeout(() => {

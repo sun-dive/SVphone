@@ -1,10 +1,10 @@
 /**
  * Call Token Manager (v09.03) - P Protocol Conformant Signal Tokens
  *
- * Signal tokens (CALL, ANS, CXID) use the standard P v03 OP_RETURN format
+ * Signal tokens (CALL, ANS) use the standard P v03 OP_RETURN format
  * with proper field separation:
  *
- *   tokenName:       "CALL-v1" | "ANS-v1" | "CXID-v1"
+ *   tokenName:       "CALL-v1" | "ANS-v1"
  *   tokenScript:     "" (empty, P2PKH fallback)
  *   tokenRules:      4-byte format (supply=1, divisibility=0)
  *   tokenAttributes: Compact connection metadata (IP, port, session key, codec, addresses, fingerprint)

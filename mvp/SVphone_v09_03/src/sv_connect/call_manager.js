@@ -109,48 +109,6 @@ class CallManager extends EventEmitter {
         throw new Error('Persistent DTLS cert not yet loaded — try again in a moment.')
       }
 
-      // ── Identity exchange: callee not in contacts ──
-      if (!calleeFingerprint) {
-        this.emit('call:log', { msg: '[Identity] Callee not in contacts — sending identity exchange...', type: 'info' })
-
-        const sessionKey = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
-        const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
-          codec:   'opus',
-          quality: 'hd',
-        })
-        callToken.sdpOffer          = ''   // empty SDP signals identity exchange
-        callToken.callerFingerprint = myFingerprint
-        callToken.tokenPrefix       = 'CXID'  // contact exchange ID
-
-        const broadcastResult = await this.signaling.broadcastCallToken(callToken, options.mintTokenFn)
-
-        const session = {
-          callTokenId:      broadcastResult.callTokenId,
-          txId:             broadcastResult.txId,
-          calleeAddress,
-          role:             'caller',
-          status:           'identity-exchange',
-          createdAt:        Date.now(),
-          sessionKey,
-          iceCreds:         null,
-          mediaOffer:       null,
-          mediaAnswer:      null,
-          iceCandidates:    [],
-          stats:            {},
-          oneTxMode:        false,
-          identityExchange: true,
-        }
-
-        this.activeCallSessions.set(broadcastResult.callTokenId, session)
-        this.emit('call:initiated-session', session)
-        this.emit('call:log', { msg: '[Identity] Exchange request sent — waiting for response...', type: 'info' })
-        console.log('[CallManager] Identity exchange initiated to:', calleeAddress)
-
-        return session
-      }
-
-      // ── 1-TX call: callee fingerprint is in contacts ──
-
       // Initialize media stream, or re-initialize if video requirement changed
       const needsVideo = options.video !== false
       const hasVideo   = (this.peerConnection.mediaStream?.getVideoTracks().length ?? 0) > 0
@@ -216,38 +174,24 @@ class CallManager extends EventEmitter {
         throw error
       }
 
-      // Build synthetic callee answer and set as remote description
-      try {
-        const syntheticSdp = window.syntheticSdp.build(
-          mediaOffer.sdp,
-          iceCreds.calleeUfrag,
-          iceCreds.calleePwd,
-          calleeFingerprint
-        )
-        await this.peerConnection.setRemoteDescription(calleeAddress, { type: 'answer', sdp: syntheticSdp })
-        this.emit('call:log', { msg: '[1-TX] ✓ Synthetic answer set — ICE listening for peer-reflexive', type: 'info' })
-
-        // Debug: log exact connection data on caller side
-        const callerPcDbg = this.peerConnection.getPeerConnection(calleeAddress)
-        const localDesc = callerPcDbg?.localDescription?.sdp || ''
-        const remoteDesc = callerPcDbg?.remoteDescription?.sdp || ''
-        const localUfrag = localDesc.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
-        const localPwd = localDesc.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
-        const remoteUfrag = remoteDesc.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
-        const remotePwd = remoteDesc.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
-        const localFp = localDesc.match(/a=fingerprint:(\S+ \S+)/)?.[1] || '?'
-        const remoteFp = remoteDesc.match(/a=fingerprint:(\S+ \S+)/)?.[1] || '?'
-        const localSetup = localDesc.match(/a=setup:(\S+)/)?.[1] || '?'
-        const remoteSetup = remoteDesc.match(/a=setup:(\S+)/)?.[1] || '?'
-        const localCands = (localDesc.match(/a=candidate:/g) || []).length
-        const remoteCands = (remoteDesc.match(/a=candidate:/g) || []).length
-        this.emit('call:log', { msg: `[CALLER-DBG] localUfrag=${localUfrag} localPwd=${localPwd.slice(0,4)}…${localPwd.slice(-4)}`, type: 'info' })
-        this.emit('call:log', { msg: `[CALLER-DBG] remoteUfrag=${remoteUfrag} remotePwd=${remotePwd.slice(0,4)}…${remotePwd.slice(-4)}`, type: 'info' })
-        this.emit('call:log', { msg: `[CALLER-DBG] localFP=…${localFp.slice(-20)} remoteFP=…${remoteFp.slice(-20)}`, type: 'info' })
-        this.emit('call:log', { msg: `[CALLER-DBG] localSetup=${localSetup} remoteSetup=${remoteSetup} localCands=${localCands} remoteCands=${remoteCands}`, type: 'info' })
-      } catch (error) {
-        console.warn('[CallManager] Failed to set synthetic remote answer:', error)
-        throw error
+      // Build synthetic callee answer if we have callee's fingerprint (known contact)
+      // For first-time calls (no fingerprint), caller waits for ANS token with real SDP answer
+      if (calleeFingerprint) {
+        try {
+          const syntheticSdp = window.syntheticSdp.build(
+            mediaOffer.sdp,
+            iceCreds.calleeUfrag,
+            iceCreds.calleePwd,
+            calleeFingerprint
+          )
+          await this.peerConnection.setRemoteDescription(calleeAddress, { type: 'answer', sdp: syntheticSdp })
+          this.emit('call:log', { msg: '[1-TX] ✓ Synthetic answer set — ICE listening for peer-reflexive', type: 'info' })
+        } catch (error) {
+          console.warn('[CallManager] Failed to set synthetic remote answer:', error)
+          throw error
+        }
+      } else {
+        this.emit('call:log', { msg: '[Call] First-time call — waiting for ANS with callee fingerprint + SDP answer', type: 'info' })
       }
 
       // Broadcast CALL TX — no spray yet. Contact IP may be stale.
@@ -269,7 +213,8 @@ class CallManager extends EventEmitter {
         mediaAnswer:  null,
         iceCandidates: [],
         stats: {},
-        oneTxMode: true,
+        oneTxMode: !!calleeFingerprint,
+        firstTimeCall: !calleeFingerprint,
       }
 
       this.activeCallSessions.set(broadcastResult.callTokenId, session)
@@ -302,10 +247,12 @@ class CallManager extends EventEmitter {
    * @private
    */
   onIncomingCall(data) {
-    // Detect identity exchange: caller sent fingerprint but no SDP
     const callToken = this.signaling.getCallToken(data.callTokenId)
     const sdpContent = typeof callToken?.sdpOffer === 'object' ? callToken?.sdpOffer?.sdp : callToken?.sdpOffer
-    const isIdentityExchange = callToken?.callerFingerprint && !sdpContent
+
+    // Check if caller is a known contact
+    const callerContact = window.contactsStore?.get(data.caller) ?? null
+    const isNewCaller = !callerContact
 
     const session = {
       callTokenId: data.callTokenId,
@@ -317,14 +264,14 @@ class CallManager extends EventEmitter {
       mediaAnswer: null,
       iceCandidates: [],
       stats: {},
-      identityExchange: isIdentityExchange,
+      isNewCaller,
     }
 
     this.activeCallSessions.set(data.callTokenId, session)
 
-    // For 1-TX calls with caller's IP, start ICE pre-punch IMMEDIATELY
+    // For calls with caller's IP and SDP, start ICE pre-punch IMMEDIATELY
     // (before user clicks Accept) so both sides punch simultaneously.
-    if (!isIdentityExchange && sdpContent && callToken?.senderIp) {
+    if (sdpContent && callToken?.senderIp) {
       this._startPrePunch(data.callTokenId, callToken).catch(err => {
         console.warn('[CallManager] Pre-punch failed:', err)
         this.emit('call:log', { msg: `[PrePunch] Failed: ${err.message}`, type: 'error' })
@@ -360,44 +307,10 @@ class CallManager extends EventEmitter {
       const callToken = this.signaling.getCallToken(callTokenId)
       const iceLog    = (msg, type = 'info') => this.emit('call:log', { msg, type })
 
-      // ── Identity exchange: caller sent fingerprint but no SDP ──
-      const sdpContent = typeof callToken?.sdpOffer === 'object' ? callToken?.sdpOffer?.sdp : callToken?.sdpOffer
-      const isIdentityExchange = callToken?.callerFingerprint && !sdpContent
-      if (isIdentityExchange) {
-        // Save caller's identity to contacts (include IP for ADF pre-punch)
+      // ── Save caller's fingerprint if this is a first-time call ──
+      if (session.isNewCaller && callToken?.callerFingerprint) {
         window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp || null)
-        iceLog(`[Identity] Saved contact for ${callToken.caller}`, 'success')
-
-        // Broadcast ANS with our fingerprint
-        const myFingerprint = this.peerConnection._persistentCertFingerprint ?? null
-        if (myFingerprint && options.broadcastAnswerFn) {
-          try {
-            await options.broadcastAnswerFn(callTokenId, callToken.caller, {
-              sdpAnswer:        '',
-              senderIp:         this.signaling.myIp || '0.0.0.0',
-              senderPort:       this.signaling.myPort || 0,
-              sessionKey:       callToken.sessionKey || '',
-              codec:            'opus',
-              quality:          'hd',
-              callee:           this.signaling.myAddress,
-              calleeFingerprint: myFingerprint,
-            })
-            iceLog('[Identity] Your identity sent back to caller', 'success')
-          } catch (err) {
-            console.warn('[CallManager] Identity ANS broadcast failed:', err.message)
-          }
-        }
-
-        session.status = 'ended'
-        session.identityExchange = true
-        this.emit('call:identity-exchanged', {
-          callTokenId,
-          address:     callToken.caller,
-          fingerprint: callToken.callerFingerprint,
-          role:        'callee',
-        })
-        console.log('[CallManager] Identity exchange accepted — caller fingerprint saved')
-        return session
+        iceLog(`[Contact] New caller — saved fingerprint for ${callToken.caller}`, 'success')
       }
 
       // ── Normal call accept flow ──
@@ -622,19 +535,29 @@ class CallManager extends EventEmitter {
       this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Token seen in mempool from ${data.callee || 'unknown'}`, type: 'info' })
       console.log('[CallManager] ANS token seen in mempool from:', data.callee || 'unknown', 'at', new Date().toLocaleTimeString())
 
-      // Identity exchange: save callee's fingerprint and end
-      if (session.identityExchange && data.callerFingerprint) {
+      // Save callee fingerprint from ANS (first-time call or fingerprint update)
+      if (data.callerFingerprint) {
         window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp || null)
-        session.status = 'ended'
-        this.emit('call:identity-exchanged', {
-          callTokenId: session.callTokenId,
-          address:     session.calleeAddress,
-          fingerprint: data.callerFingerprint,
-          role:        'caller',
-        })
-        this.emit('call:log', { msg: `[Identity] Contact saved for ${session.calleeAddress}! You can now call them.`, type: 'success' })
-        console.log('[CallManager] Identity exchange complete — callee fingerprint saved')
-        return
+        this.emit('call:log', { msg: `[Contact] Saved callee fingerprint for ${session.calleeAddress}`, type: 'success' })
+      }
+
+      // First-time call: caller didn't have callee fingerprint, so no synthetic answer was set.
+      // Use the real SDP answer from the ANS token to set remote description.
+      if (session.firstTimeCall && data.sdpAnswer) {
+        try {
+          const answerSdp = typeof data.sdpAnswer === 'object' ? data.sdpAnswer.sdp : data.sdpAnswer
+          if (answerSdp) {
+            // Strip candidates — spray handles candidate injection
+            const cleanAnswer = answerSdp.replace(/^a=candidate:.*\r?\n/gm, '')
+              .replace(/^a=end-of-candidates.*\r?\n/gm, '')
+            await this.peerConnection.setRemoteDescription(session.calleeAddress, { type: 'answer', sdp: cleanAnswer })
+            this.emit('call:log', { msg: '[ANS] ✓ Remote description set from ANS SDP answer', type: 'success' })
+            session.firstTimeCall = false  // connection setup complete
+          }
+        } catch (err) {
+          console.warn('[CallManager] Failed to set remote description from ANS:', err.message)
+          this.emit('call:log', { msg: `[ANS] Failed to set remote SDP: ${err.message}`, type: 'error' })
+        }
       }
 
       // ANS token with callee's srflx IP:port (+ SDP answer + fingerprint)

@@ -60,16 +60,8 @@ class CallHandlers {
 
             this.app.currentCallToken = session.callTokenId
 
-            // Identity exchange: no media, just waiting for ANS with fingerprint
-            if (session.identityExchange) {
-                this.ui.log('Exchanging identities — waiting for response...', 'info')
-                this.ui.updateCallStatus('identity-exchange', 'Exchanging identities...')
-                this.app._unansweredTimeout = setTimeout(() => {
-                    this.ui.log('⏱ No response — identity exchange timed out', 'warning')
-                    this.ui.updateCallStatus('ended', 'No response')
-                    this.ui.updateCallButtonStatus('idle')
-                }, 3 * 60 * 1000)
-                return
+            if (session.firstTimeCall) {
+                this.ui.log('First-time call — waiting for callee to accept...', 'info')
             }
 
             this.ui.log('✓ Call initiated successfully', 'success')
@@ -202,7 +194,7 @@ class CallHandlers {
                 return result
             }
 
-            const result = await this.app.callManager.acceptCall(callTokenId, {
+            await this.app.callManager.acceptCall(callTokenId, {
                 audio: true,
                 video: true,
                 broadcastAnswerFn,
@@ -212,11 +204,6 @@ class CallHandlers {
             document.getElementById('incomingCall').style.display = 'none'
             document.getElementById('acceptBtn').style.display = 'none'
             document.getElementById('rejectBtn').style.display = 'none'
-
-            // Identity exchange ends immediately — no ongoing call
-            if (result?.identityExchange) {
-                return
-            }
 
             document.getElementById('endCallBtn').style.display = 'inline-block'
             this.ui.log('✓ Call accepted', 'success')
