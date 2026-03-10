@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.04";window.SVPHONE_BUILD="2026-03-10 11:10 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.04'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.04 / 2026-03-10 11:10 UTC';});console.log('[SVphone] v09.04 Build: 2026-03-10 11:10 UTC');
+window.SVPHONE_VERSION="v09.04";window.SVPHONE_BUILD="2026-03-10 11:31 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.04'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.04 / 2026-03-10 11:31 UTC';});console.log('[SVphone] v09.04 Build: 2026-03-10 11:31 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -22576,8 +22576,6 @@ class CallTokenManager {
     let sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
     if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
     if (!sdpData) return '00'
-    // Strip ICE candidates + end-of-candidates — callee gets IP:port from tokenAttributes via spray
-    sdpData = sdpData.split(/\r?\n/).filter(l => !l.startsWith('a=candidate:') && !l.startsWith('a=end-of-candidates')).join('\r\n')
     const sdpBuf = new TextEncoder().encode(sdpData)
     const hex = Array.from(sdpBuf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
     // Self-test: decode immediately and verify round-trip

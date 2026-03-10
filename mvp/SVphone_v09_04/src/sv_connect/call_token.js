@@ -101,8 +101,6 @@ class CallTokenManager {
     let sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
     if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
     if (!sdpData) return '00'
-    // Strip ICE candidates + end-of-candidates — callee gets IP:port from tokenAttributes via spray
-    sdpData = sdpData.split(/\r?\n/).filter(l => !l.startsWith('a=candidate:') && !l.startsWith('a=end-of-candidates')).join('\r\n')
     const sdpBuf = new TextEncoder().encode(sdpData)
     const hex = Array.from(sdpBuf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
     // Self-test: decode immediately and verify round-trip
