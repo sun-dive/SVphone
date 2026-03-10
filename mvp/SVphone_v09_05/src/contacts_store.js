@@ -53,25 +53,31 @@ class ContactsStore {
     return str
   }
 
-  /** Save a contact (fingerprint + optional IP) */
-  save(address, fingerprint, ip = null) {
+  /** Save a contact (fingerprint + optional IP + optional name) */
+  save(address, fingerprint, ip = null, name = null) {
     if (!address || !fingerprint) return
-    localStorage.setItem(ContactsStore.PREFIX + address, JSON.stringify({ fingerprint, ip: ip || null }))
+    const existing = this.get(address)
+    // Preserve existing name if not provided in this call
+    const finalName = name || existing?.name || null
+    localStorage.setItem(ContactsStore.PREFIX + address, JSON.stringify({ fingerprint, ip: ip || null, name: finalName }))
   }
 
-  /** Look up contact by address → { fingerprint, ip } or null */
+  /** Look up contact by address → { fingerprint, ip, name } or null */
   get(address) {
     const raw = localStorage.getItem(ContactsStore.PREFIX + address)
     if (!raw) return null
     // JSON format (new)
     if (raw.startsWith('{')) {
-      try { return JSON.parse(raw) } catch { /* fall through */ }
+      try {
+        const obj = JSON.parse(raw)
+        return { fingerprint: obj.fingerprint, ip: obj.ip || null, name: obj.name || null }
+      } catch { /* fall through */ }
     }
     // Plain fingerprint string (old backward-compat)
-    return { fingerprint: raw, ip: null }
+    return { fingerprint: raw, ip: null, name: null }
   }
 
-  /** Return all contacts as [{ address, fingerprint, ip }] */
+  /** Return all contacts as [{ address, fingerprint, ip, name }] */
   getAll() {
     const out = []
     for (let i = 0; i < localStorage.length; i++) {
@@ -81,12 +87,12 @@ class ContactsStore {
         const raw = localStorage.getItem(key)
         if (raw?.startsWith('{')) {
           try {
-            const { fingerprint, ip } = JSON.parse(raw)
-            out.push({ address, fingerprint, ip: ip || null })
+            const { fingerprint, ip, name } = JSON.parse(raw)
+            out.push({ address, fingerprint, ip: ip || null, name: name || null })
             continue
           } catch { /* fall through */ }
         }
-        out.push({ address, fingerprint: raw, ip: null })
+        out.push({ address, fingerprint: raw, ip: null, name: null })
       }
     }
     return out

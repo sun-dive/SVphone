@@ -703,6 +703,12 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="myDisplayName">Your Display Name <span style="opacity:0.7;">(shown to callers)</span></label>
+                    <input type="text" id="myDisplayName" placeholder="Enter your name" maxlength="16"
+                           oninput="app.saveDisplayName(this.value)">
+                </div>
+
+                <div class="form-group">
                     <label for="myIp">Public IPv4</label>
                     <input type="text" id="myIp" placeholder="Will be auto-detected">
                 </div>
@@ -877,10 +883,11 @@
                 <div class="form-group">
                     <label for="calleeAddress">CALL BSV Address</label>
                     <input type="text" id="calleeAddress" placeholder="Enter address to call" style="width: 100%; padding: 10px 12px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px; background: rgba(30, 60, 114, 0.6); color: #fff; font-size: 0.95em; font-weight: 500; display: block; box-sizing: border-box; margin-bottom: 8px;">
-                    <button id="lastCalledBtn" style="background: #30363d; padding: 8px 12px; border-radius: 4px; color: #8b949e; cursor: pointer; display: none; white-space: nowrap; margin-bottom: 8px;" onclick="app.quickDial()">↲ Redial: <span id="lastCalledBtnText"></span></button>
-                    <div id="lastCalledInfo" style="font-size: 0.85em; color: #8b949e; display: none;">
-                        Last called: <strong id="lastCalledAddress"></strong>
-                    </div>
+                    <button id="lastCalledBtn" style="background: #30363d; padding: 8px 12px; border-radius: 4px; color: #c9d1d9; cursor: pointer; display: none; margin-bottom: 8px; text-align: left; line-height: 1.4;" onclick="app.quickDial()">
+                        <span style="font-size:0.8em;color:#8b949e;">↲ Redial</span><br>
+                        <span id="lastCalledBtnName" style="font-weight:bold;display:none;"></span>
+                        <span id="lastCalledBtnText" style="font-size:0.85em;color:#8b949e;"></span>
+                    </button>
                 </div>
 
                 <!-- 1-TX Contacts — share identity strings to enable 1-TX calls -->
@@ -921,7 +928,8 @@
 
                 <div id="incomingCall" class="incoming-call" style="display:none;">
                     <h3 id="incomingTitle">Incoming Call</h3>
-                    <p>From: <strong id="incomingFrom"></strong></p>
+                    <p id="incomingCallerName" style="font-size:1.3em;font-weight:bold;margin:0 0 4px 0;display:none;"></p>
+                    <p style="margin:0;"><span style="font-size:0.85em;color:#8b949e;">From:</span> <strong id="incomingFrom" style="font-size:0.9em;"></strong></p>
                     <div class="button-group">
                         <button class="btn-success" onclick="app.acceptCall()">Accept</button>
                         <button class="btn-danger" onclick="app.rejectCall()">Reject</button>

@@ -181,21 +181,32 @@ class PhoneUI {
     /**
      * Show incoming call UI
      */
-    showIncomingCall(caller, isNewCaller = false) {
-        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${caller}`)
+    showIncomingCall(caller, isNewCaller = false, callerName = null) {
+        const displayLabel = callerName || caller
+        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${displayLabel}`)
         this.displayElements.incomingCall.style.display = 'block'
         this.displayElements.incomingFrom.textContent = caller
+        // Show caller name prominently if available
+        const nameEl = document.getElementById('incomingCallerName')
+        if (nameEl) {
+            if (callerName) {
+                nameEl.textContent = callerName
+                nameEl.style.display = 'block'
+            } else {
+                nameEl.style.display = 'none'
+            }
+        }
         this.buttonElements.acceptBtn.style.display = 'inline-block'
         this.buttonElements.rejectBtn.style.display = 'inline-block'
         const titleEl = document.getElementById('incomingTitle')
         if (isNewCaller) {
             if (titleEl) titleEl.textContent = 'New Caller'
-            this.updateCallStatus('ringing', 'New caller...')
-            this.log(`New caller: ${caller}`, 'info')
+            this.updateCallStatus('ringing', callerName ? `${callerName} calling...` : 'New caller...')
+            this.log(`New caller: ${displayLabel}`, 'info')
         } else {
             if (titleEl) titleEl.textContent = 'Incoming Call'
-            this.updateCallStatus('ringing', 'Incoming call...')
-            this.log(`Incoming call from: ${caller}`, 'info')
+            this.updateCallStatus('ringing', callerName ? `${callerName} calling...` : 'Incoming call...')
+            this.log(`Incoming call from: ${displayLabel}`, 'info')
         }
         // Pre-fill callee field so user can call back after the call ends
         const calleeField = this.addressElements.calleeAddress
@@ -210,6 +221,8 @@ class PhoneUI {
         this.stopRingtone()
         this.stopOutgoingRing()
         this.stopConnectingTone()
+        const nameEl = document.getElementById('incomingCallerName')
+        if (nameEl) { nameEl.style.display = 'none'; nameEl.textContent = '' }
         this.statusElements.callStatus.style.display = 'none'
         this.buttonElements.acceptBtn.style.display = 'none'
         this.buttonElements.rejectBtn.style.display = 'none'

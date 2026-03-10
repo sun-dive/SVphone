@@ -250,6 +250,7 @@ class CallSignaling {
       quality: callInfo.quality,
       sdpOffer: callInfo.sdpOffer,
       callerFingerprint: callInfo.callerFingerprint ?? null,
+      callerName: callInfo.callerName ?? null,
       status: 'ringing',
       receivedAt: Date.now()
     }
@@ -264,6 +265,7 @@ class CallSignaling {
       codec: callInfo.codec,
       quality: callInfo.quality,
       sdpOffer: callInfo.sdpOffer,
+      callerName: callInfo.callerName ?? null,
       timestamp: Date.now()
     })
 
@@ -289,6 +291,7 @@ class CallSignaling {
       calleeSessionKey: callInfo.sessionKey,
       sdpAnswer: callInfo.sdpAnswer,
       callerFingerprint: callInfo.callerFingerprint,
+      callerName: callInfo.callerName ?? null,
       codec: callInfo.codec,
       quality: callInfo.quality,
       timestamp: Date.now()

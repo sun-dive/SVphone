@@ -156,6 +156,7 @@ class CallManager extends EventEmitter {
         mediaOffer = finalOffer
         callToken.sdpOffer        = mediaOffer
         callToken.callerFingerprint = myFingerprint
+        callToken.callerName        = localStorage.getItem('svphone_my_display_name') || ''
 
         // Extract caller's srflx IP:port from gathered SDP so callee knows where to punch
         const srflxMatch = (mediaOffer.sdp || '').match(/(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+srflx/)
@@ -257,6 +258,7 @@ class CallManager extends EventEmitter {
     const session = {
       callTokenId: data.callTokenId,
       caller: data.caller,
+      callerName: data.callerName ?? null,
       role: 'callee',
       status: 'incoming',
       createdAt: Date.now(),
@@ -307,10 +309,13 @@ class CallManager extends EventEmitter {
       const callToken = this.signaling.getCallToken(callTokenId)
       const iceLog    = (msg, type = 'info') => this.emit('call:log', { msg, type })
 
-      // ── Save caller's fingerprint if this is a first-time call ──
+      // ── Save caller's fingerprint (and name) if this is a first-time call ──
       if (session.isNewCaller && callToken?.callerFingerprint) {
-        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp || null)
+        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp || null, callToken.callerName || null)
         iceLog(`[Contact] New caller — saved fingerprint for ${callToken.caller}`, 'success')
+      } else if (callToken?.callerName) {
+        // Update name for existing contact if provided
+        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint || window.contactsStore?.get(callToken.caller)?.fingerprint, callToken.senderIp || null, callToken.callerName)
       }
 
       // ── Normal call accept flow ──
@@ -444,6 +449,7 @@ class CallManager extends EventEmitter {
                   codec:      callToken.codec,
                   quality:    callToken.quality,
                   callee:     this.signaling.myAddress,
+                  calleeName: localStorage.getItem('svphone_my_display_name') || '',
                 },
                 options.broadcastAnswerFn
               )
@@ -535,10 +541,13 @@ class CallManager extends EventEmitter {
       this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Token seen in mempool from ${data.callee || 'unknown'}`, type: 'info' })
       console.log('[CallManager] ANS token seen in mempool from:', data.callee || 'unknown', 'at', new Date().toLocaleTimeString())
 
-      // Save callee fingerprint from ANS (first-time call or fingerprint update)
+      // Save callee fingerprint + name from ANS (first-time call or fingerprint update)
       if (data.callerFingerprint) {
-        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp || null)
+        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp || null, data.callerName || null)
         this.emit('call:log', { msg: `[Contact] Saved callee fingerprint for ${session.calleeAddress}`, type: 'success' })
+      } else if (data.callerName) {
+        const existing = window.contactsStore?.get(session.calleeAddress)
+        if (existing) window.contactsStore?.save(session.calleeAddress, existing.fingerprint, data.calleeIp || existing.ip, data.callerName)
       }
 
       // First-time call: caller didn't have callee fingerprint, so no synthetic answer was set.
@@ -607,7 +616,7 @@ class CallManager extends EventEmitter {
         }, 10000)
 
         console.log('[CallManager] ANS token received — started targeted spray')
-        this.emit('call:connecting', { callTokenId: data.callTokenId, callee: data.callee, calleeIp, calleePort })
+        this.emit('call:connecting', { callTokenId: data.callTokenId, callee: data.callee, calleeName: data.callerName ?? null, calleeIp, calleePort })
         return  // Don't emit call:answered-session for port announcements
       }
 

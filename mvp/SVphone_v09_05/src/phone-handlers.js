@@ -36,7 +36,8 @@ class CallHandlers {
                 return
             }
 
-            this.app.saveLastCalled(calleeAddress)
+            const calleeName = this.app.contactsStore?.get(calleeAddress)?.name || null
+            this.app.saveLastCalled(calleeAddress, calleeName)
             const callMode = document.getElementById('callMode')?.value || 'video-hd'
             const video    = callMode.startsWith('video')
             const quality  = callMode.endsWith('hd') ? 'hd' : 'ld'
@@ -188,6 +189,7 @@ class CallHandlers {
                 const answerWithCallee = {
                     ...answerData,
                     callee: this.app.signaling.myAddress,
+                    calleeName: localStorage.getItem('svphone_my_display_name') || '',
                     feePerKb: ansFeePerKb,
                 }
                 const result = await this.app.callTokenManager.broadcastCallAnswer(callerAddress, answerWithCallee)

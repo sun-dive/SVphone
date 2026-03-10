@@ -65,8 +65,9 @@ class PhoneController {
                 this.ui.log(`⚠️  Wallet sync error: ${e.message}`, 'error')
             }
 
-            // Load last called address (phone UI local history)
+            // Load display name and last called address
             try {
+                this.loadDisplayName()
                 this.loadLastCalled()
             } catch (e) {
                 this.ui.log(`⚠️  Last called load error: ${e.message}`, 'error')
@@ -214,35 +215,52 @@ class PhoneController {
     }
 
     /**
+     * Load display name from storage
+     */
+    loadDisplayName() {
+        const name = localStorage.getItem('svphone_my_display_name') || ''
+        const el = document.getElementById('myDisplayName')
+        if (el) el.value = name
+    }
+
+    /**
+     * Save display name to storage (called from HTML oninput)
+     */
+    saveDisplayName(name) {
+        localStorage.setItem('svphone_my_display_name', (name || '').slice(0, 16))
+    }
+
+    /**
      * Load last called address from storage
      */
     loadLastCalled() {
         const lastCalledAddress = localStorage.getItem('svphone_phone_last_called_address')
+        const lastCalledName = localStorage.getItem('svphone_phone_last_called_name')
         const lastCalledBtn = document.getElementById('lastCalledBtn')
+        const lastCalledBtnName = document.getElementById('lastCalledBtnName')
         const lastCalledBtnText = document.getElementById('lastCalledBtnText')
-        const lastCalledInfo = document.getElementById('lastCalledInfo')
-        const lastCalledAddressEl = document.getElementById('lastCalledAddress')
 
         if (lastCalledAddress && lastCalledAddress.trim()) {
-            // Show the redial button with the address
-            lastCalledBtnText.textContent = lastCalledAddress.slice(0, 10) + '...'
+            if (lastCalledName) {
+                lastCalledBtnName.textContent = lastCalledName
+                lastCalledBtnName.style.display = 'inline'
+            } else {
+                lastCalledBtnName.style.display = 'none'
+            }
+            lastCalledBtnText.textContent = lastCalledAddress.slice(0, 20) + '...'
             lastCalledBtn.style.display = 'block'
-
-            // Show the info text
-            lastCalledAddressEl.textContent = lastCalledAddress
-            lastCalledInfo.style.display = 'block'
         } else {
             lastCalledBtn.style.display = 'none'
-            lastCalledInfo.style.display = 'none'
         }
     }
 
     /**
-     * Save last called address
+     * Save last called address and optional name
      */
-    saveLastCalled(address) {
+    saveLastCalled(address, name = null) {
         if (address && address.trim()) {
             localStorage.setItem('svphone_phone_last_called_address', address.trim())
+            if (name) localStorage.setItem('svphone_phone_last_called_name', name)
             this.loadLastCalled()
         }
     }
@@ -300,8 +318,8 @@ class PhoneController {
         }
         el.innerHTML = contacts.map(c => `
             <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-              <span style="flex:1;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                    title="${c.address}">${c.address.slice(0, 20)}...
+              <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.address}">
+                ${c.name ? `<span style="color:#c9d1d9;font-weight:bold;">${c.name}</span> <span style="color:#6e7681;font-size:0.8em;">${c.address.slice(0, 12)}...</span>` : `<span style="color:#c9d1d9;">${c.address.slice(0, 20)}...</span>`}
               </span>
               <span style="color:#3fb950;font-size:0.75em;">1-TX</span>
               ${c.ip ? '<span style="color:#8b949e;font-size:0.65em;" title="ADF pre-punch IP: ' + c.ip + '">IP</span>' : ''}
@@ -331,7 +349,8 @@ class PhoneController {
         const lastCalledAddress = localStorage.getItem('svphone_phone_last_called_address')
         if (lastCalledAddress) {
             document.getElementById('calleeAddress').value = lastCalledAddress
-            this.ui.log(`📞 Quick dial: ${lastCalledAddress}`, 'info')
+            const lastCalledName = localStorage.getItem('svphone_phone_last_called_name')
+            this.ui.log(`📞 Quick dial: ${lastCalledName || lastCalledAddress}`, 'info')
             this.callHandlers.initializeCall()
         }
     }
@@ -367,20 +386,23 @@ class PhoneController {
         this.callManager.on('call:log', ({ msg, type }) => this.ui.log(msg, type))
 
         this.callManager.on('call:initiated-session', (session) => {
-            this.ui.log(`📞 Call initiated to ${session.calleeAddress}`, 'info')
+            const calleeName = this.contactsStore?.get(session.calleeAddress)?.name || null
+            const callLabel = calleeName || session.calleeAddress?.slice(0, 16)
+            this.ui.log(`📞 Call initiated to ${calleeName || session.calleeAddress}`, 'info')
             this.currentCallToken = session.callTokenId
             this.currentRole = 'caller'
-            this.ui.updateCallStatus('ringing', 'Call ringing...')
+            this.ui.updateCallStatus('ringing', `Calling ${callLabel}...`)
             this.playRingtone()  // Play ring sound when calling
         })
 
         this.callManager.on('call:incoming-session', (session) => {
+            const displayLabel = session.callerName || session.caller
             if (session.isNewCaller) {
-                this.ui.log(`Incoming call from NEW caller: ${session.caller}`, 'info')
+                this.ui.log(`Incoming call from NEW caller: ${displayLabel}`, 'info')
             } else {
-                this.ui.log(`Incoming call from ${session.caller}`, 'info')
+                this.ui.log(`Incoming call from ${displayLabel}`, 'info')
             }
-            this.showIncomingCall(session.caller, session.callTokenId, session.isNewCaller)
+            this.showIncomingCall(session.caller, session.callTokenId, session.isNewCaller, session.callerName)
             this.currentCallToken = session.callTokenId
             this.currentRole = 'callee'
         })
@@ -468,10 +490,15 @@ class PhoneController {
             }
         })
 
-        this.callManager.on('call:connecting', () => {
+        this.callManager.on('call:connecting', (data) => {
             this.ui.stopOutgoingRing()
             this.ui.playConnectingTone()
-            this.ui.updateCallStatus('connecting', 'Connecting...')
+            const label = data?.calleeName || data?.callee?.slice(0, 16) || ''
+            this.ui.updateCallStatus('connecting', label ? `Connecting to ${label}...` : 'Connecting...')
+            // Save callee name for redial if we got it from the ANS token
+            if (data?.calleeName && data?.callee) {
+                this.saveLastCalled(data.callee, data.calleeName)
+            }
         })
 
         this.callManager.on('call:connection-failed', () => {
@@ -675,6 +702,7 @@ class PhoneController {
                                 codec: attrs.codec,
                                 quality: attrs.quality,
                                 callerFingerprint: attrs.callerFingerprint ?? null,
+                                callerName: attrs.callerName ?? null,
                                 // CALL: wrap as object so call_manager.js can access .sdp property
                                 // ANS:  plain string — signaling.js wraps it
                                 sdp: isCall ? { type: 'offer', sdp: sdpStr }
@@ -723,10 +751,10 @@ class PhoneController {
     /**
      * Show incoming call UI
      */
-    showIncomingCall(caller, callTokenId, isNewCaller = false) {
-        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${caller}`)
+    showIncomingCall(caller, callTokenId, isNewCaller = false, callerName = null) {
+        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${callerName || caller}`)
         this.currentCallToken = callTokenId
-        this.ui.showIncomingCall(caller, isNewCaller)
+        this.ui.showIncomingCall(caller, isNewCaller, callerName)
 
         // Auto-return to standby if not answered within 3 minutes
         this._incomingTimeout = setTimeout(() => {

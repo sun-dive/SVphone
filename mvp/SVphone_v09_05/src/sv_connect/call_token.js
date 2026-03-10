@@ -85,6 +85,11 @@ class CallTokenManager {
       bytes.push(fpBuf.length)
       bytes.push(...fpBuf)
 
+      // callerName (1-byte length + N bytes UTF-8) — appended for backward compat
+      const nameBuf = new TextEncoder().encode(callToken.callerName || '')
+      bytes.push(nameBuf.length)
+      bytes.push(...nameBuf)
+
       return bytes.map(b => ('0' + b.toString(16)).slice(-2)).join('')
     } catch (error) {
       console.error('[CallToken] Failed to encode attributes:', error)
@@ -230,7 +235,18 @@ class CallTokenManager {
         }
       }
 
-      return { senderIp, senderPort, sessionKey, codec, quality, caller, callee, callerFingerprint }
+      // callerName (1-byte length + N bytes UTF-8) — optional for backward compat
+      let callerName = null
+      if (offset < bytes.length) {
+        const nameLen = bytes[offset++]
+        if (nameLen > 0 && offset + nameLen <= bytes.length) {
+          const nameBuf = bytes.slice(offset, offset + nameLen)
+          callerName = new TextDecoder().decode(new Uint8Array(nameBuf))
+          offset += nameLen
+        }
+      }
+
+      return { senderIp, senderPort, sessionKey, codec, quality, caller, callee, callerFingerprint, callerName }
     } catch (error) {
       console.error('[CallToken] Failed to decode attributes:', error)
       return null
@@ -314,6 +330,7 @@ class CallTokenManager {
         caller:      callerAddress,
         callee:      answerData.callee || '',
         callerFingerprint: answerData.calleeFingerprint || '',
+        callerName:  answerData.calleeName || '',
         sdpAnswer:   answerData.sdpAnswer || '',
       }
 

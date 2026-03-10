@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.05";window.SVPHONE_BUILD="2026-03-10 15:30 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.05'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.05 / 2026-03-10 15:30 UTC';});console.log('[SVphone] v09.05 Build: 2026-03-10 15:30 UTC');
+window.SVPHONE_VERSION="v09.05";window.SVPHONE_BUILD="2026-03-10 16:04 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.05'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.05 / 2026-03-10 16:04 UTC';});console.log('[SVphone] v09.05 Build: 2026-03-10 16:04 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -17514,25 +17514,31 @@ class ContactsStore {
     return str
   }
 
-  /** Save a contact (fingerprint + optional IP) */
-  save(address, fingerprint, ip = null) {
+  /** Save a contact (fingerprint + optional IP + optional name) */
+  save(address, fingerprint, ip = null, name = null) {
     if (!address || !fingerprint) return
-    localStorage.setItem(ContactsStore.PREFIX + address, JSON.stringify({ fingerprint, ip: ip || null }))
+    const existing = this.get(address)
+    // Preserve existing name if not provided in this call
+    const finalName = name || existing?.name || null
+    localStorage.setItem(ContactsStore.PREFIX + address, JSON.stringify({ fingerprint, ip: ip || null, name: finalName }))
   }
 
-  /** Look up contact by address → { fingerprint, ip } or null */
+  /** Look up contact by address → { fingerprint, ip, name } or null */
   get(address) {
     const raw = localStorage.getItem(ContactsStore.PREFIX + address)
     if (!raw) return null
     // JSON format (new)
     if (raw.startsWith('{')) {
-      try { return JSON.parse(raw) } catch { /* fall through */ }
+      try {
+        const obj = JSON.parse(raw)
+        return { fingerprint: obj.fingerprint, ip: obj.ip || null, name: obj.name || null }
+      } catch { /* fall through */ }
     }
     // Plain fingerprint string (old backward-compat)
-    return { fingerprint: raw, ip: null }
+    return { fingerprint: raw, ip: null, name: null }
   }
 
-  /** Return all contacts as [{ address, fingerprint, ip }] */
+  /** Return all contacts as [{ address, fingerprint, ip, name }] */
   getAll() {
     const out = []
     for (let i = 0; i < localStorage.length; i++) {
@@ -17542,12 +17548,12 @@ class ContactsStore {
         const raw = localStorage.getItem(key)
         if (raw?.startsWith('{')) {
           try {
-            const { fingerprint, ip } = JSON.parse(raw)
-            out.push({ address, fingerprint, ip: ip || null })
+            const { fingerprint, ip, name } = JSON.parse(raw)
+            out.push({ address, fingerprint, ip: ip || null, name: name || null })
             continue
           } catch { /* fall through */ }
         }
-        out.push({ address, fingerprint: raw, ip: null })
+        out.push({ address, fingerprint: raw, ip: null, name: null })
       }
     }
     return out
@@ -18007,6 +18013,7 @@ class CallSignaling {
       quality: callInfo.quality,
       sdpOffer: callInfo.sdpOffer,
       callerFingerprint: callInfo.callerFingerprint ?? null,
+      callerName: callInfo.callerName ?? null,
       status: 'ringing',
       receivedAt: Date.now()
     }
@@ -18021,6 +18028,7 @@ class CallSignaling {
       codec: callInfo.codec,
       quality: callInfo.quality,
       sdpOffer: callInfo.sdpOffer,
+      callerName: callInfo.callerName ?? null,
       timestamp: Date.now()
     })
 
@@ -18046,6 +18054,7 @@ class CallSignaling {
       calleeSessionKey: callInfo.sessionKey,
       sdpAnswer: callInfo.sdpAnswer,
       callerFingerprint: callInfo.callerFingerprint,
+      callerName: callInfo.callerName ?? null,
       codec: callInfo.codec,
       quality: callInfo.quality,
       timestamp: Date.now()
@@ -19429,6 +19438,7 @@ class CallManager extends EventEmitter {
         mediaOffer = finalOffer
         callToken.sdpOffer        = mediaOffer
         callToken.callerFingerprint = myFingerprint
+        callToken.callerName        = localStorage.getItem('svphone_my_display_name') || ''
 
         // Extract caller's srflx IP:port from gathered SDP so callee knows where to punch
         const srflxMatch = (mediaOffer.sdp || '').match(/(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+srflx/)
@@ -19530,6 +19540,7 @@ class CallManager extends EventEmitter {
     const session = {
       callTokenId: data.callTokenId,
       caller: data.caller,
+      callerName: data.callerName ?? null,
       role: 'callee',
       status: 'incoming',
       createdAt: Date.now(),
@@ -19580,10 +19591,13 @@ class CallManager extends EventEmitter {
       const callToken = this.signaling.getCallToken(callTokenId)
       const iceLog    = (msg, type = 'info') => this.emit('call:log', { msg, type })
 
-      // ── Save caller's fingerprint if this is a first-time call ──
+      // ── Save caller's fingerprint (and name) if this is a first-time call ──
       if (session.isNewCaller && callToken?.callerFingerprint) {
-        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp || null)
+        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp || null, callToken.callerName || null)
         iceLog(`[Contact] New caller — saved fingerprint for ${callToken.caller}`, 'success')
+      } else if (callToken?.callerName) {
+        // Update name for existing contact if provided
+        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint || window.contactsStore?.get(callToken.caller)?.fingerprint, callToken.senderIp || null, callToken.callerName)
       }
 
       // ── Normal call accept flow ──
@@ -19717,6 +19731,7 @@ class CallManager extends EventEmitter {
                   codec:      callToken.codec,
                   quality:    callToken.quality,
                   callee:     this.signaling.myAddress,
+                  calleeName: localStorage.getItem('svphone_my_display_name') || '',
                 },
                 options.broadcastAnswerFn
               )
@@ -19808,10 +19823,13 @@ class CallManager extends EventEmitter {
       this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Token seen in mempool from ${data.callee || 'unknown'}`, type: 'info' })
       console.log('[CallManager] ANS token seen in mempool from:', data.callee || 'unknown', 'at', new Date().toLocaleTimeString())
 
-      // Save callee fingerprint from ANS (first-time call or fingerprint update)
+      // Save callee fingerprint + name from ANS (first-time call or fingerprint update)
       if (data.callerFingerprint) {
-        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp || null)
+        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp || null, data.callerName || null)
         this.emit('call:log', { msg: `[Contact] Saved callee fingerprint for ${session.calleeAddress}`, type: 'success' })
+      } else if (data.callerName) {
+        const existing = window.contactsStore?.get(session.calleeAddress)
+        if (existing) window.contactsStore?.save(session.calleeAddress, existing.fingerprint, data.calleeIp || existing.ip, data.callerName)
       }
 
       // First-time call: caller didn't have callee fingerprint, so no synthetic answer was set.
@@ -19880,7 +19898,7 @@ class CallManager extends EventEmitter {
         }, 10000)
 
         console.log('[CallManager] ANS token received — started targeted spray')
-        this.emit('call:connecting', { callTokenId: data.callTokenId, callee: data.callee, calleeIp, calleePort })
+        this.emit('call:connecting', { callTokenId: data.callTokenId, callee: data.callee, calleeName: data.callerName ?? null, calleeIp, calleePort })
         return  // Don't emit call:answered-session for port announcements
       }
 
@@ -22561,6 +22579,11 @@ class CallTokenManager {
       bytes.push(fpBuf.length)
       bytes.push(...fpBuf)
 
+      // callerName (1-byte length + N bytes UTF-8) — appended for backward compat
+      const nameBuf = new TextEncoder().encode(callToken.callerName || '')
+      bytes.push(nameBuf.length)
+      bytes.push(...nameBuf)
+
       return bytes.map(b => ('0' + b.toString(16)).slice(-2)).join('')
     } catch (error) {
       console.error('[CallToken] Failed to encode attributes:', error)
@@ -22706,7 +22729,18 @@ class CallTokenManager {
         }
       }
 
-      return { senderIp, senderPort, sessionKey, codec, quality, caller, callee, callerFingerprint }
+      // callerName (1-byte length + N bytes UTF-8) — optional for backward compat
+      let callerName = null
+      if (offset < bytes.length) {
+        const nameLen = bytes[offset++]
+        if (nameLen > 0 && offset + nameLen <= bytes.length) {
+          const nameBuf = bytes.slice(offset, offset + nameLen)
+          callerName = new TextDecoder().decode(new Uint8Array(nameBuf))
+          offset += nameLen
+        }
+      }
+
+      return { senderIp, senderPort, sessionKey, codec, quality, caller, callee, callerFingerprint, callerName }
     } catch (error) {
       console.error('[CallToken] Failed to decode attributes:', error)
       return null
@@ -22790,6 +22824,7 @@ class CallTokenManager {
         caller:      callerAddress,
         callee:      answerData.callee || '',
         callerFingerprint: answerData.calleeFingerprint || '',
+        callerName:  answerData.calleeName || '',
         sdpAnswer:   answerData.sdpAnswer || '',
       }
 
@@ -23012,21 +23047,32 @@ class PhoneUI {
     /**
      * Show incoming call UI
      */
-    showIncomingCall(caller, isNewCaller = false) {
-        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${caller}`)
+    showIncomingCall(caller, isNewCaller = false, callerName = null) {
+        const displayLabel = callerName || caller
+        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${displayLabel}`)
         this.displayElements.incomingCall.style.display = 'block'
         this.displayElements.incomingFrom.textContent = caller
+        // Show caller name prominently if available
+        const nameEl = document.getElementById('incomingCallerName')
+        if (nameEl) {
+            if (callerName) {
+                nameEl.textContent = callerName
+                nameEl.style.display = 'block'
+            } else {
+                nameEl.style.display = 'none'
+            }
+        }
         this.buttonElements.acceptBtn.style.display = 'inline-block'
         this.buttonElements.rejectBtn.style.display = 'inline-block'
         const titleEl = document.getElementById('incomingTitle')
         if (isNewCaller) {
             if (titleEl) titleEl.textContent = 'New Caller'
-            this.updateCallStatus('ringing', 'New caller...')
-            this.log(`New caller: ${caller}`, 'info')
+            this.updateCallStatus('ringing', callerName ? `${callerName} calling...` : 'New caller...')
+            this.log(`New caller: ${displayLabel}`, 'info')
         } else {
             if (titleEl) titleEl.textContent = 'Incoming Call'
-            this.updateCallStatus('ringing', 'Incoming call...')
-            this.log(`Incoming call from: ${caller}`, 'info')
+            this.updateCallStatus('ringing', callerName ? `${callerName} calling...` : 'Incoming call...')
+            this.log(`Incoming call from: ${displayLabel}`, 'info')
         }
         // Pre-fill callee field so user can call back after the call ends
         const calleeField = this.addressElements.calleeAddress
@@ -23041,6 +23087,8 @@ class PhoneUI {
         this.stopRingtone()
         this.stopOutgoingRing()
         this.stopConnectingTone()
+        const nameEl = document.getElementById('incomingCallerName')
+        if (nameEl) { nameEl.style.display = 'none'; nameEl.textContent = '' }
         this.statusElements.callStatus.style.display = 'none'
         this.buttonElements.acceptBtn.style.display = 'none'
         this.buttonElements.rejectBtn.style.display = 'none'
@@ -23339,7 +23387,8 @@ class CallHandlers {
                 return
             }
 
-            this.app.saveLastCalled(calleeAddress)
+            const calleeName = this.app.contactsStore?.get(calleeAddress)?.name || null
+            this.app.saveLastCalled(calleeAddress, calleeName)
             const callMode = document.getElementById('callMode')?.value || 'video-hd'
             const video    = callMode.startsWith('video')
             const quality  = callMode.endsWith('hd') ? 'hd' : 'ld'
@@ -23491,6 +23540,7 @@ class CallHandlers {
                 const answerWithCallee = {
                     ...answerData,
                     callee: this.app.signaling.myAddress,
+                    calleeName: localStorage.getItem('svphone_my_display_name') || '',
                     feePerKb: ansFeePerKb,
                 }
                 const result = await this.app.callTokenManager.broadcastCallAnswer(callerAddress, answerWithCallee)
@@ -23865,8 +23915,9 @@ class PhoneController {
                 this.ui.log(`⚠️  Wallet sync error: ${e.message}`, 'error')
             }
 
-            // Load last called address (phone UI local history)
+            // Load display name and last called address
             try {
+                this.loadDisplayName()
                 this.loadLastCalled()
             } catch (e) {
                 this.ui.log(`⚠️  Last called load error: ${e.message}`, 'error')
@@ -24014,35 +24065,52 @@ class PhoneController {
     }
 
     /**
+     * Load display name from storage
+     */
+    loadDisplayName() {
+        const name = localStorage.getItem('svphone_my_display_name') || ''
+        const el = document.getElementById('myDisplayName')
+        if (el) el.value = name
+    }
+
+    /**
+     * Save display name to storage (called from HTML oninput)
+     */
+    saveDisplayName(name) {
+        localStorage.setItem('svphone_my_display_name', (name || '').slice(0, 16))
+    }
+
+    /**
      * Load last called address from storage
      */
     loadLastCalled() {
         const lastCalledAddress = localStorage.getItem('svphone_phone_last_called_address')
+        const lastCalledName = localStorage.getItem('svphone_phone_last_called_name')
         const lastCalledBtn = document.getElementById('lastCalledBtn')
+        const lastCalledBtnName = document.getElementById('lastCalledBtnName')
         const lastCalledBtnText = document.getElementById('lastCalledBtnText')
-        const lastCalledInfo = document.getElementById('lastCalledInfo')
-        const lastCalledAddressEl = document.getElementById('lastCalledAddress')
 
         if (lastCalledAddress && lastCalledAddress.trim()) {
-            // Show the redial button with the address
-            lastCalledBtnText.textContent = lastCalledAddress.slice(0, 10) + '...'
+            if (lastCalledName) {
+                lastCalledBtnName.textContent = lastCalledName
+                lastCalledBtnName.style.display = 'inline'
+            } else {
+                lastCalledBtnName.style.display = 'none'
+            }
+            lastCalledBtnText.textContent = lastCalledAddress.slice(0, 20) + '...'
             lastCalledBtn.style.display = 'block'
-
-            // Show the info text
-            lastCalledAddressEl.textContent = lastCalledAddress
-            lastCalledInfo.style.display = 'block'
         } else {
             lastCalledBtn.style.display = 'none'
-            lastCalledInfo.style.display = 'none'
         }
     }
 
     /**
-     * Save last called address
+     * Save last called address and optional name
      */
-    saveLastCalled(address) {
+    saveLastCalled(address, name = null) {
         if (address && address.trim()) {
             localStorage.setItem('svphone_phone_last_called_address', address.trim())
+            if (name) localStorage.setItem('svphone_phone_last_called_name', name)
             this.loadLastCalled()
         }
     }
@@ -24100,8 +24168,8 @@ class PhoneController {
         }
         el.innerHTML = contacts.map(c => `
             <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-              <span style="flex:1;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                    title="${c.address}">${c.address.slice(0, 20)}...
+              <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.address}">
+                ${c.name ? `<span style="color:#c9d1d9;font-weight:bold;">${c.name}</span> <span style="color:#6e7681;font-size:0.8em;">${c.address.slice(0, 12)}...</span>` : `<span style="color:#c9d1d9;">${c.address.slice(0, 20)}...</span>`}
               </span>
               <span style="color:#3fb950;font-size:0.75em;">1-TX</span>
               ${c.ip ? '<span style="color:#8b949e;font-size:0.65em;" title="ADF pre-punch IP: ' + c.ip + '">IP</span>' : ''}
@@ -24131,7 +24199,8 @@ class PhoneController {
         const lastCalledAddress = localStorage.getItem('svphone_phone_last_called_address')
         if (lastCalledAddress) {
             document.getElementById('calleeAddress').value = lastCalledAddress
-            this.ui.log(`📞 Quick dial: ${lastCalledAddress}`, 'info')
+            const lastCalledName = localStorage.getItem('svphone_phone_last_called_name')
+            this.ui.log(`📞 Quick dial: ${lastCalledName || lastCalledAddress}`, 'info')
             this.callHandlers.initializeCall()
         }
     }
@@ -24167,20 +24236,23 @@ class PhoneController {
         this.callManager.on('call:log', ({ msg, type }) => this.ui.log(msg, type))
 
         this.callManager.on('call:initiated-session', (session) => {
-            this.ui.log(`📞 Call initiated to ${session.calleeAddress}`, 'info')
+            const calleeName = this.contactsStore?.get(session.calleeAddress)?.name || null
+            const callLabel = calleeName || session.calleeAddress?.slice(0, 16)
+            this.ui.log(`📞 Call initiated to ${calleeName || session.calleeAddress}`, 'info')
             this.currentCallToken = session.callTokenId
             this.currentRole = 'caller'
-            this.ui.updateCallStatus('ringing', 'Call ringing...')
+            this.ui.updateCallStatus('ringing', `Calling ${callLabel}...`)
             this.playRingtone()  // Play ring sound when calling
         })
 
         this.callManager.on('call:incoming-session', (session) => {
+            const displayLabel = session.callerName || session.caller
             if (session.isNewCaller) {
-                this.ui.log(`Incoming call from NEW caller: ${session.caller}`, 'info')
+                this.ui.log(`Incoming call from NEW caller: ${displayLabel}`, 'info')
             } else {
-                this.ui.log(`Incoming call from ${session.caller}`, 'info')
+                this.ui.log(`Incoming call from ${displayLabel}`, 'info')
             }
-            this.showIncomingCall(session.caller, session.callTokenId, session.isNewCaller)
+            this.showIncomingCall(session.caller, session.callTokenId, session.isNewCaller, session.callerName)
             this.currentCallToken = session.callTokenId
             this.currentRole = 'callee'
         })
@@ -24268,10 +24340,15 @@ class PhoneController {
             }
         })
 
-        this.callManager.on('call:connecting', () => {
+        this.callManager.on('call:connecting', (data) => {
             this.ui.stopOutgoingRing()
             this.ui.playConnectingTone()
-            this.ui.updateCallStatus('connecting', 'Connecting...')
+            const label = data?.calleeName || data?.callee?.slice(0, 16) || ''
+            this.ui.updateCallStatus('connecting', label ? `Connecting to ${label}...` : 'Connecting...')
+            // Save callee name for redial if we got it from the ANS token
+            if (data?.calleeName && data?.callee) {
+                this.saveLastCalled(data.callee, data.calleeName)
+            }
         })
 
         this.callManager.on('call:connection-failed', () => {
@@ -24475,6 +24552,7 @@ class PhoneController {
                                 codec: attrs.codec,
                                 quality: attrs.quality,
                                 callerFingerprint: attrs.callerFingerprint ?? null,
+                                callerName: attrs.callerName ?? null,
                                 // CALL: wrap as object so call_manager.js can access .sdp property
                                 // ANS:  plain string — signaling.js wraps it
                                 sdp: isCall ? { type: 'offer', sdp: sdpStr }
@@ -24523,10 +24601,10 @@ class PhoneController {
     /**
      * Show incoming call UI
      */
-    showIncomingCall(caller, callTokenId, isNewCaller = false) {
-        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${caller}`)
+    showIncomingCall(caller, callTokenId, isNewCaller = false, callerName = null) {
+        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${callerName || caller}`)
         this.currentCallToken = callTokenId
-        this.ui.showIncomingCall(caller, isNewCaller)
+        this.ui.showIncomingCall(caller, isNewCaller, callerName)
 
         // Auto-return to standby if not answered within 3 minutes
         this._incomingTimeout = setTimeout(() => {
