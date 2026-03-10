@@ -705,11 +705,12 @@ function renderTokenActions(t) {
 }
 
 function renderRules(rulesHex) {
-  if (!rulesHex || rulesHex.length !== 16) return `<code>${escHtml(rulesHex || '(none)')}</code>`;
+  if (!rulesHex || (rulesHex.length !== 16 && rulesHex.length !== 8)) return `<code>${escHtml(rulesHex || '(none)')}</code>`;
   const r = window.decodeTokenRules(rulesHex);
   const divLabel = r.divisibility > 0
     ? `Divisibility=${r.divisibility} (${r.supply}×${r.divisibility}=${r.supply * r.divisibility} fragments)`
     : `Divisibility=0`;
+  if (rulesHex.length === 8) return `Supply=${r.supply}, ${divLabel}`;
   return `Supply=${r.supply}, ${divLabel}, Restrictions=0x${r.restrictions.toString(16).padStart(4, '0')}, Version=${r.version}`;
 }
 

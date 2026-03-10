@@ -409,12 +409,13 @@ export function decodeTokenRules(rulesHex: string): {
 } {
   const bytes = hexToBytes(rulesHex)
   const view = new DataView(new Uint8Array(bytes).buffer)
-  const restrictions = view.getUint16(4, true)
+  // Support both 4-byte (supply + divisibility only) and 8-byte (full) tokenRules
+  const restrictions = bytes.length >= 6 ? view.getUint16(4, true) : 0
   return {
     supply: view.getUint16(0, true),
     divisibility: view.getUint16(2, true),
     restrictions,
-    version: view.getUint16(6, true),
+    version: bytes.length >= 8 ? view.getUint16(6, true) : 0,
     isFungible: (restrictions & RESTRICTION_FUNGIBLE) !== 0,
   }
 }

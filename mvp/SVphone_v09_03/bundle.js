@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 00:17 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-10 00:17 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-10 00:17 UTC');
+window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 01:44 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-10 01:44 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-10 01:44 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -15273,12 +15273,12 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
   function decodeTokenRules(rulesHex) {
     const bytes2 = hexToBytes2(rulesHex);
     const view = new DataView(new Uint8Array(bytes2).buffer);
-    const restrictions = view.getUint16(4, true);
+    const restrictions = bytes2.length >= 6 ? view.getUint16(4, true) : 0;
     return {
       supply: view.getUint16(0, true),
       divisibility: view.getUint16(2, true),
       restrictions,
-      version: view.getUint16(6, true),
+      version: bytes2.length >= 8 ? view.getUint16(6, true) : 0,
       isFungible: (restrictions & RESTRICTION_FUNGIBLE) !== 0
     };
   }
@@ -17792,8 +17792,6 @@ class CallSignaling {
     this.pollHandle = null
     this.myAddress = null
     this.myIp = null
-    this.myIp4 = null
-    this.myIp6 = null
     this.myPort = null
   }
 
@@ -17805,13 +17803,10 @@ class CallSignaling {
   inscriptionToCallInfo(inscription) {
     return {
       senderIp: inscription.ip,
-      senderIp4: inscription.ip4 ?? null,
-      senderIp6: inscription.ip6 ?? null,
       senderPort: inscription.port,
       sessionKey: inscription.key,
       codec: inscription.codec ?? 'opus',
       quality: inscription.quality ?? 'hd',
-      mediaTypes: inscription.media ?? ['audio'],
       sdpOffer: inscription.type === 'call' ? inscription.sdp : undefined,
       sdpAnswer: inscription.type === 'answer' ? inscription.sdp : undefined,
       callerFingerprint: inscription.callerFingerprint ?? null,
@@ -17837,7 +17832,7 @@ class CallSignaling {
    * Create call initiation token with connection info
    * @param {string} calleeAddress - Recipient BSV address
    * @param {string} sessionKey - Ephemeral DH key (base64)
-   * @param {Object} options - {codec, quality, mediaTypes}
+   * @param {Object} options - {codec, quality}
    * @returns {Object} Call token ready to broadcast
    */
   createCallToken(calleeAddress, sessionKey, options = {}) {
@@ -17846,15 +17841,12 @@ class CallSignaling {
       caller: this.myAddress,
       callee: calleeAddress,
       senderIp: this.myIp,
-      senderIp4: this.myIp4,
-      senderIp6: this.myIp6,
       senderPort: this.myPort,
       sessionKey: sessionKey, // Ephemeral DH key for encryption
 
       // Call options
       codec: options.codec || 'opus',
       quality: options.quality || 'hd',
-      mediaTypes: options.mediaTypes || ['audio', 'video'],
 
       // State (mutable, stored in stateData)
       status: 'ringing', // ringing → answered → connected → ended
@@ -17966,7 +17958,7 @@ class CallSignaling {
               callTokenId: callId,
               caller: inscription.caller,
               callee: inscription.callee,
-              calleeIp4: callInfo.senderIp4,
+              calleeIp: callInfo.senderIp,
               calleePort: callInfo.senderPort,
               timestamp: Date.now()
             })
@@ -18009,13 +18001,10 @@ class CallSignaling {
       caller: inscription.caller,
       callee: inscription.callee,
       senderIp: callInfo.senderIp,
-      senderIp4: callInfo.senderIp4,
-      senderIp6: callInfo.senderIp6,
       senderPort: callInfo.senderPort,
       sessionKey: callInfo.sessionKey,
       codec: callInfo.codec,
       quality: callInfo.quality,
-      mediaTypes: callInfo.mediaTypes,
       sdpOffer: callInfo.sdpOffer,
       callerFingerprint: callInfo.callerFingerprint ?? null,
       status: 'ringing',
@@ -18028,8 +18017,6 @@ class CallSignaling {
       callTokenId: callId,
       caller: inscription.caller,
       callerIp: callInfo.senderIp,
-      callerIp4: callInfo.senderIp4,
-      callerIp6: callInfo.senderIp6,
       callerPort: callInfo.senderPort,
       codec: callInfo.codec,
       quality: callInfo.quality,
@@ -18055,15 +18042,12 @@ class CallSignaling {
       caller: inscription.caller,
       callee: inscription.callee,
       calleeIp: callInfo.senderIp,
-      calleeIp4: callInfo.senderIp4,
-      calleeIp6: callInfo.senderIp6,
       calleePort: callInfo.senderPort,
       calleeSessionKey: callInfo.sessionKey,
       sdpAnswer: callInfo.sdpAnswer,
       callerFingerprint: callInfo.callerFingerprint,
       codec: callInfo.codec,
       quality: callInfo.quality,
-      mediaTypes: callInfo.mediaTypes,
       timestamp: Date.now()
     })
 
@@ -18120,7 +18104,7 @@ class CallSignaling {
    * Broadcast call answer token back to caller
    * @param {string} callTokenId - Call token ID
    * @param {string} callerAddress - Caller's address (recipient)
-   * @param {Object} answerData - {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
+   * @param {Object} answerData - {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality}
    * @param {Function} broadcastFn - Optional broadcast function
    */
   async broadcastCallAnswer(callTokenId, callerAddress, answerData, broadcastFn) {
@@ -19406,7 +19390,6 @@ class CallManager extends EventEmitter {
         const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
           codec:   'opus',
           quality: 'hd',
-          mediaTypes: ['audio']
         })
         callToken.sdpOffer          = ''   // empty SDP signals identity exchange
         callToken.callerFingerprint = myFingerprint
@@ -19468,7 +19451,6 @@ class CallManager extends EventEmitter {
       const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
         codec:      options.codec  || 'opus',
         quality:    options.quality || 'hd',
-        mediaTypes: options.mediaTypes || (needsVideo ? ['audio', 'video'] : ['audio'])
       })
 
       // Create offer with munged ICE credentials + DataChannel for punch signaling
@@ -19496,10 +19478,8 @@ class CallManager extends EventEmitter {
           const srflxIp = srflxMatch[1]
           callToken.senderPort = parseInt(srflxMatch[2], 10)
           callToken.senderIp = srflxIp
-          callToken.senderIp4 = srflxIp
           // Update signaling for any later use
           this.signaling.myIp = srflxIp
-          this.signaling.myIp4 = srflxIp
           this.emit('call:log', { msg: `[1-TX] ✓ srflx ${srflxIp}:${srflxMatch[2]} (included in CALL token for callee punch target)`, type: 'info' })
         }
 
@@ -19617,7 +19597,7 @@ class CallManager extends EventEmitter {
 
     // For 1-TX calls with caller's IP, start ICE pre-punch IMMEDIATELY
     // (before user clicks Accept) so both sides punch simultaneously.
-    if (!isIdentityExchange && sdpContent && callToken?.senderIp4) {
+    if (!isIdentityExchange && sdpContent && callToken?.senderIp) {
       this._startPrePunch(data.callTokenId, callToken).catch(err => {
         console.warn('[CallManager] Pre-punch failed:', err)
         this.emit('call:log', { msg: `[PrePunch] Failed: ${err.message}`, type: 'error' })
@@ -19658,7 +19638,7 @@ class CallManager extends EventEmitter {
       const isIdentityExchange = callToken?.callerFingerprint && !sdpContent
       if (isIdentityExchange) {
         // Save caller's identity to contacts (include IP for ADF pre-punch)
-        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp4 || null)
+        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp || null)
         iceLog(`[Identity] Saved contact for ${callToken.caller}`, 'success')
 
         // Broadcast ANS with our fingerprint
@@ -19668,13 +19648,10 @@ class CallManager extends EventEmitter {
             await options.broadcastAnswerFn(callTokenId, callToken.caller, {
               sdpAnswer:        '',
               senderIp:         this.signaling.myIp || '0.0.0.0',
-              senderIp4:        this.signaling.myIp4 ?? null,
-              senderIp6:        this.signaling.myIp6 ?? null,
               senderPort:       this.signaling.myPort || 0,
               sessionKey:       callToken.sessionKey || '',
               codec:            'opus',
               quality:          'hd',
-              mediaTypes:       ['audio'],
               callee:           this.signaling.myAddress,
               calleeFingerprint: myFingerprint,
             })
@@ -19786,10 +19763,10 @@ class CallManager extends EventEmitter {
           iceLog('[Accept] ✓ 1-TX: ICE active. Callee firing checks to caller — waiting for peer-reflexive...')
 
           // Targeted callee spray to caller's known srflx port ±20
-          const callerIp4 = callToken.senderIp4 ?? null
+          const callerIp = callToken.senderIp ?? null
           const callerPunchPort = callToken.senderPort || null
-          if (callerIp4 && callerPunchPort) {
-            await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPunchPort, batch: 0 })
+          if (callerIp && callerPunchPort) {
+            await this._injectPortSpray(callToken.caller, callerIp, { knownPort: callerPunchPort, batch: 0 })
 
             let sprayBatch = 1
             this._calleePunchInterval = setInterval(async () => {
@@ -19807,7 +19784,7 @@ class CallManager extends EventEmitter {
                 iceLog('[Spray] DTLS in progress — pausing spray')
                 return
               }
-              await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPunchPort, batch: sprayBatch++ })
+              await this._injectPortSpray(callToken.caller, callerIp, { knownPort: callerPunchPort, batch: sprayBatch++ })
             }, 10000)
           }
         } else {
@@ -19822,13 +19799,10 @@ class CallManager extends EventEmitter {
                 {
                   sdpAnswer:  answerSdp,
                   senderIp:   this.signaling.myIp,
-                  senderIp4:  this.signaling.myIp4 ?? null,
-                  senderIp6:  this.signaling.myIp6 ?? null,
                   senderPort: this.signaling.myPort,
                   sessionKey: callToken.sessionKey,
                   codec:      callToken.codec,
                   quality:    callToken.quality,
-                  mediaTypes: callToken.mediaTypes,
                   callee:     this.signaling.myAddress,
                 },
                 options.broadcastAnswerFn
@@ -19923,7 +19897,7 @@ class CallManager extends EventEmitter {
 
       // Identity exchange: save callee's fingerprint and end
       if (session.identityExchange && data.callerFingerprint) {
-        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp4 || null)
+        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp || null)
         session.status = 'ended'
         this.emit('call:identity-exchanged', {
           callTokenId: session.callTokenId,
@@ -19938,7 +19912,7 @@ class CallManager extends EventEmitter {
 
       // ANS token with callee's srflx IP:port (+ SDP answer + fingerprint)
       const calleePort = data.calleePort
-      const calleeIp   = data.calleeIp4 || data.calleeIp6 || null
+      const calleeIp   = data.calleeIp || null
       if (calleePort && calleeIp) {
         this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Callee answer received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
@@ -20232,7 +20206,6 @@ class CallManager extends EventEmitter {
         if (session) session.calleeSrflx = { ip, port }
         // Set callee's public IP from STUN (no HTTP detection needed)
         this.signaling.myIp = ip
-        this.signaling.myIp4 = ip
         this.emit('call:port-discovered', {
           callTokenId,
           callerAddress: callToken.caller,
@@ -20268,7 +20241,7 @@ class CallManager extends EventEmitter {
       //  2. STUN didn't respond → only host candidates available
       // Chrome uses mDNS hostnames (xxx.local) instead of IPs, so match any address with \S+
       if (!srflxAnnounced) {
-        const myPublicIp = this.signaling.myIp4
+        const myPublicIp = this.signaling.myIp
         if (myPublicIp) {
           // Try matching our public IP directly in host candidates
           const escapedIp = myPublicIp.replace(/\./g, '\\.')
@@ -20308,7 +20281,7 @@ class CallManager extends EventEmitter {
 
     // Save caller spray target — spray deferred until PORT TX is in mempool
     // so both sides punch simultaneously (caller waits for PORT TX too).
-    const callerIp4 = callToken.senderIp4 ?? null
+    const callerIp = callToken.senderIp ?? null
     const callerPort = callToken.senderPort || null
 
     // Update session so acceptCall() can reuse this PC
@@ -20316,7 +20289,7 @@ class CallManager extends EventEmitter {
       session.prePunchActive = true
       session.iceCreds = iceCreds
       session.mediaAnswer = finalAns || answer
-      session.callerSprayTarget = { ip: callerIp4, port: callerPort, callerPeerId: callToken.caller }
+      session.callerSprayTarget = { ip: callerIp, port: callerPort, callerPeerId: callToken.caller }
     }
     // Debug: log exact connection data on callee side
     if (rtcPc) {
@@ -22584,7 +22557,7 @@ if (typeof module !== 'undefined' && module.exports) {
  *
  *   tokenName:       "CALL-v1" | "ANS-v1" | "CXID-v1"
  *   tokenScript:     "" (empty, P2PKH fallback)
- *   tokenRules:      Standard 8-byte format (supply=1, div=0, restrictions=signal flags, version=1)
+ *   tokenRules:      4-byte format (supply=1, divisibility=0)
  *   tokenAttributes: Compact connection metadata (IP, port, session key, codec, addresses, fingerprint)
  *   stateData:       SDP offer/answer (the large payload)
  *
@@ -22592,26 +22565,12 @@ if (typeof module !== 'undefined' && module.exports) {
  *   Output 0: OP_RETURN (0 sats) — P v03 format
  *   Output 1: P2PKH 1-sat → recipient (WoC address history indexing)
  *   Output 2: P2PKH change → sender
- *
- * tokenRules restrictions bitfield:
- *   bit 0 (0x0001): CALL signal
- *   bit 1 (0x0002): ANS signal
- *   bit 2 (0x0004): CXID signal
- *   bit 3 (0x0008): audio
- *   bit 4 (0x0010): video
  */
 
 const CODECS = { opus: 0, pcm: 1, aac: 2 }
 const CODEC_IDS = ['opus', 'pcm', 'aac']
 const QUALITIES = { sd: 0, hd: 1, vhd: 2 }
 const QUALITY_IDS = ['sd', 'hd', 'vhd']
-
-// Signal type flags for tokenRules restrictions bitfield
-const SIGNAL_CALL = 0x0001
-const SIGNAL_ANS  = 0x0002
-const SIGNAL_CXID = 0x0004
-const MEDIA_AUDIO = 0x0008
-const MEDIA_VIDEO = 0x0010
 
 class CallTokenManager {
   constructor(uiLogger) {
@@ -22620,7 +22579,7 @@ class CallTokenManager {
 
   /**
    * Encode connection metadata into tokenAttributes (no SDP — that goes in stateData).
-   * @param {Object} callToken - {senderIp, senderPort, sessionKey, codec, quality, mediaTypes, caller, callee, senderIp4, senderIp6, callerFingerprint}
+   * @param {Object} callToken - {senderIp, senderPort, sessionKey, codec, quality, caller, callee, callerFingerprint}
    * @returns {string} Hex-encoded binary
    */
   encodeCallAttributes(callToken) {
@@ -22661,12 +22620,6 @@ class CallTokenManager {
       // Quality (1 byte enum)
       bytes.push(QUALITIES[callToken.quality] ?? 1)
 
-      // Media types (1 byte bitmask: bit0=audio, bit1=video)
-      let mediaBitmask = 0
-      if (callToken.mediaTypes?.includes('audio')) mediaBitmask |= 0x01
-      if (callToken.mediaTypes?.includes('video')) mediaBitmask |= 0x02
-      bytes.push(mediaBitmask)
-
       // Caller address (1-byte length prefix + N bytes UTF-8)
       const callerBuf = new TextEncoder().encode(callToken.caller || '')
       bytes.push(callerBuf.length)
@@ -22676,24 +22629,6 @@ class CallTokenManager {
       const calleeBuf = new TextEncoder().encode(callToken.callee || '')
       bytes.push(calleeBuf.length)
       bytes.push(...calleeBuf)
-
-      // senderIp4 (1-byte length: 4=present, 0=absent + 0|4 bytes)
-      const ip4 = callToken.senderIp4 || null
-      if (ip4 && /^\d+\.\d+\.\d+\.\d+$/.test(ip4)) {
-        bytes.push(4)
-        bytes.push(...ip4.split('.').map(p => parseInt(p, 10)))
-      } else {
-        bytes.push(0)
-      }
-
-      // senderIp6 (1-byte length: 16=present, 0=absent + 0|16 bytes)
-      const ip6 = callToken.senderIp6 || null
-      if (ip6 && ip6.includes(':')) {
-        bytes.push(16)
-        bytes.push(...this._ipv6ToBytes(ip6))
-      } else {
-        bytes.push(0)
-      }
 
       // callerFingerprint (1-byte length + N bytes UTF-8)
       const fpBuf = new TextEncoder().encode(callToken.callerFingerprint || '')
@@ -22743,36 +22678,23 @@ class CallTokenManager {
   }
 
   /**
-   * Build standard 8-byte tokenRules for signal tokens.
-   * Format: supply(2) + divisibility(2) + restrictions(2) + version(2), all uint16 LE.
-   * @param {string} signalType - 'CALL' | 'ANS' | 'CXID'
-   * @param {string[]} mediaTypes - ['audio'] or ['audio', 'video']
-   * @returns {string} 16-char hex string (8 bytes)
+   * Build 4-byte tokenRules for signal tokens.
+   * Format: supply(2) + divisibility(2), uint16 LE.
+   * @returns {string} 8-char hex string (4 bytes)
    */
-  encodeSignalRules(signalType, mediaTypes = ['audio']) {
+  encodeSignalRules() {
     const supply = 1
     const divisibility = 0
-    let restrictions = 0
-    if (signalType === 'CALL') restrictions |= SIGNAL_CALL
-    else if (signalType === 'ANS') restrictions |= SIGNAL_ANS
-    else if (signalType === 'CXID') restrictions |= SIGNAL_CXID
-    if (mediaTypes?.includes('audio')) restrictions |= MEDIA_AUDIO
-    if (mediaTypes?.includes('video')) restrictions |= MEDIA_VIDEO
-    const version = 1
-
-    // uint16 LE encoding
-    const buf = new Uint8Array(8)
+    const buf = new Uint8Array(4)
     buf[0] = supply & 0xFF;       buf[1] = (supply >> 8) & 0xFF
     buf[2] = divisibility & 0xFF; buf[3] = (divisibility >> 8) & 0xFF
-    buf[4] = restrictions & 0xFF; buf[5] = (restrictions >> 8) & 0xFF
-    buf[6] = version & 0xFF;      buf[7] = (version >> 8) & 0xFF
     return Array.from(buf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
   }
 
   /**
    * Decode connection metadata from tokenAttributes (no SDP — that's in stateData).
    * @param {string} hexStr - Hex-encoded binary tokenAttributes
-   * @returns {Object|null} {senderIp, senderPort, sessionKey, codec, quality, mediaTypes, caller, callee, senderIp4, senderIp6, callerFingerprint}
+   * @returns {Object|null} {senderIp, senderPort, sessionKey, codec, quality, caller, callee, callerFingerprint}
    */
   decodeCallAttributes(hexStr) {
     if (!hexStr || hexStr === '00') return null
@@ -22811,12 +22733,6 @@ class CallTokenManager {
       const codec = CODEC_IDS[bytes[offset++]] || 'opus'
       const quality = QUALITY_IDS[bytes[offset++]] || 'hd'
 
-      // Media types
-      const mediaBitmask = bytes[offset++]
-      const mediaTypes = []
-      if (mediaBitmask & 0x01) mediaTypes.push('audio')
-      if (mediaBitmask & 0x02) mediaTypes.push('video')
-
       // Caller address
       let caller = ''
       if (offset < bytes.length) {
@@ -22835,26 +22751,6 @@ class CallTokenManager {
         offset += calleeLen
       }
 
-      // senderIp4 (1-byte len: 4=present, 0=absent)
-      let senderIp4 = null
-      if (offset < bytes.length) {
-        const ip4Len = bytes[offset++]
-        if (ip4Len === 4) {
-          senderIp4 = `${bytes[offset]}.${bytes[offset+1]}.${bytes[offset+2]}.${bytes[offset+3]}`
-          offset += 4
-        }
-      }
-
-      // senderIp6 (1-byte len: 16=present, 0=absent)
-      let senderIp6 = null
-      if (offset < bytes.length) {
-        const ip6Len = bytes[offset++]
-        if (ip6Len === 16) {
-          senderIp6 = this._bytesToIPv6(bytes.slice(offset, offset + 16))
-          offset += 16
-        }
-      }
-
       // callerFingerprint (1-byte length + N bytes UTF-8)
       let callerFingerprint = null
       if (offset < bytes.length) {
@@ -22866,7 +22762,7 @@ class CallTokenManager {
         }
       }
 
-      return { senderIp, senderPort, sessionKey, codec, quality, mediaTypes, caller, callee, senderIp4, senderIp6, callerFingerprint }
+      return { senderIp, senderPort, sessionKey, codec, quality, caller, callee, callerFingerprint }
     } catch (error) {
       console.error('[CallToken] Failed to decode attributes:', error)
       return null
@@ -22898,16 +22794,15 @@ class CallTokenManager {
   /**
    * Create and broadcast a CALL signal to the callee.
    * Single TX: OP_RETURN (call data) + 1-sat to callee + change.
-   * @param {Object} callToken - {caller, callee, senderIp, senderPort, sessionKey, codec, quality, mediaTypes, sdpOffer}
+   * @param {Object} callToken - {caller, callee, senderIp, senderPort, sessionKey, codec, quality, sdpOffer}
    * @returns {Promise<{txId: string}>}
    */
   async createAndBroadcastCallToken(callToken) {
     this.log(`Sending call signal to ${callToken.callee}`, 'info')
     try {
       const prefix = callToken.tokenPrefix || 'CALL'
-      const signalType = prefix === 'CXID' ? 'CXID' : 'CALL'
       const tokenName = `${prefix}-v1`
-      const rules = this.encodeSignalRules(signalType, callToken.mediaTypes)
+      const rules = this.encodeSignalRules()
       const attrs = this.encodeCallAttributes(callToken)
       const stateData = this.encodeStateData(callToken)
 
@@ -22936,7 +22831,7 @@ class CallTokenManager {
    * Same TX structure as CALL but with ANS- prefix.
    * The callerFingerprint field carries the callee's fingerprint in this direction.
    * @param {string} callerAddress - Caller's BSV address (recipient)
-   * @param {Object} answerData - {callee, senderIp, senderPort, sessionKey, codec, quality, mediaTypes, sdpAnswer, calleeFingerprint}
+   * @param {Object} answerData - {callee, senderIp, senderPort, sessionKey, codec, quality, sdpAnswer, calleeFingerprint}
    * @returns {Promise<{txId: string}>}
    */
   async broadcastCallAnswer(callerAddress, answerData) {
@@ -22948,16 +22843,13 @@ class CallTokenManager {
         sessionKey:  answerData.sessionKey || '',
         codec:       answerData.codec || 'opus',
         quality:     answerData.quality || 'hd',
-        mediaTypes:  answerData.mediaTypes || ['audio'],
         caller:      callerAddress,
         callee:      answerData.callee || '',
-        senderIp4:   answerData.senderIp4 || null,
-        senderIp6:   answerData.senderIp6 || null,
         callerFingerprint: answerData.calleeFingerprint || '',
         sdpAnswer:   answerData.sdpAnswer || '',
       }
 
-      const rules = this.encodeSignalRules('ANS', ansToken.mediaTypes)
+      const rules = this.encodeSignalRules()
       const attrs = this.encodeCallAttributes(ansToken)
       const stateData = this.encodeStateData(ansToken)
 
@@ -24008,8 +23900,6 @@ class PhoneController {
             // Create all component modules
             this.signaling = new CallSignaling()
             // Apply IPs detected before signaling was created
-            this.signaling.myIp4 = this._detectedIp4 ?? null
-            this.signaling.myIp6 = this._detectedIp6 ?? null
             this.peerConnection = new PeerConnection({
                 // Direct P2P with no centralized STUN servers
                 // Uses mDNS discovery and standard VoIP ports (3478-3497)
@@ -24379,12 +24269,10 @@ class PhoneController {
                 const portResult = await this.callTokenManager.broadcastCallAnswer(data.callerAddress, {
                     callee:            myAddress,
                     senderIp:          data.ip,
-                    senderIp4:         data.ip,
                     senderPort:        data.port,
                     sessionKey:        data.sessionKey || '',
                     codec:             'opus',
                     quality:           'hd',
-                    mediaTypes:        ['audio'],
                     sdpAnswer:         data.sdpAnswer || '',
                     calleeFingerprint: data.calleeFingerprint || '',
                     feePerKb:          portFeePerKb,
@@ -24589,13 +24477,10 @@ class PhoneController {
                                 caller: attrs.caller,
                                 callee: attrs.callee,
                                 ip: attrs.senderIp,
-                                ip4: attrs.senderIp4 ?? null,
-                                ip6: attrs.senderIp6 ?? null,
                                 port: attrs.senderPort,
                                 key: attrs.sessionKey,
                                 codec: attrs.codec,
                                 quality: attrs.quality,
-                                media: attrs.mediaTypes,
                                 callerFingerprint: attrs.callerFingerprint ?? null,
                                 // CALL: wrap as object so call_manager.js can access .sdp property
                                 // ANS:  plain string — signaling.js wraps it
@@ -24615,8 +24500,7 @@ class PhoneController {
                             const sdpUfrag = sdpStr.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
                             const sdpPwd = sdpStr.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
                             this.ui.log(
-                                `[Token] ${signal.type.toUpperCase()}: ip4=${signal.ip4 ?? 'none'} ` +
-                                `ip6=${signal.ip6 ? signal.ip6.slice(0,16)+'…' : 'none'} ` +
+                                `[Token] ${signal.type.toUpperCase()}: ip=${signal.ip ?? 'none'} ` +
                                 `port=${signal.port ?? 0} sdp=${sdpLen}B (${sdpCands} cands) ` +
                                 `ufrag=${sdpUfrag} key=${(signal.key || '').slice(0,8)}…`,
                                 'info'
@@ -25442,11 +25326,12 @@ function renderTokenActions(t) {
 }
 
 function renderRules(rulesHex) {
-  if (!rulesHex || rulesHex.length !== 16) return `<code>${escHtml(rulesHex || '(none)')}</code>`;
+  if (!rulesHex || (rulesHex.length !== 16 && rulesHex.length !== 8)) return `<code>${escHtml(rulesHex || '(none)')}</code>`;
   const r = window.decodeTokenRules(rulesHex);
   const divLabel = r.divisibility > 0
     ? `Divisibility=${r.divisibility} (${r.supply}×${r.divisibility}=${r.supply * r.divisibility} fragments)`
     : `Divisibility=0`;
+  if (rulesHex.length === 8) return `Supply=${r.supply}, ${divLabel}`;
   return `Supply=${r.supply}, ${divLabel}, Restrictions=0x${r.restrictions.toString(16).padStart(4, '0')}, Version=${r.version}`;
 }
 

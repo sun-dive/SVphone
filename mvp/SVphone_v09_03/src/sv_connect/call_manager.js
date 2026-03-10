@@ -117,7 +117,6 @@ class CallManager extends EventEmitter {
         const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
           codec:   'opus',
           quality: 'hd',
-          mediaTypes: ['audio']
         })
         callToken.sdpOffer          = ''   // empty SDP signals identity exchange
         callToken.callerFingerprint = myFingerprint
@@ -179,7 +178,6 @@ class CallManager extends EventEmitter {
       const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
         codec:      options.codec  || 'opus',
         quality:    options.quality || 'hd',
-        mediaTypes: options.mediaTypes || (needsVideo ? ['audio', 'video'] : ['audio'])
       })
 
       // Create offer with munged ICE credentials + DataChannel for punch signaling
@@ -207,10 +205,8 @@ class CallManager extends EventEmitter {
           const srflxIp = srflxMatch[1]
           callToken.senderPort = parseInt(srflxMatch[2], 10)
           callToken.senderIp = srflxIp
-          callToken.senderIp4 = srflxIp
           // Update signaling for any later use
           this.signaling.myIp = srflxIp
-          this.signaling.myIp4 = srflxIp
           this.emit('call:log', { msg: `[1-TX] ✓ srflx ${srflxIp}:${srflxMatch[2]} (included in CALL token for callee punch target)`, type: 'info' })
         }
 
@@ -328,7 +324,7 @@ class CallManager extends EventEmitter {
 
     // For 1-TX calls with caller's IP, start ICE pre-punch IMMEDIATELY
     // (before user clicks Accept) so both sides punch simultaneously.
-    if (!isIdentityExchange && sdpContent && callToken?.senderIp4) {
+    if (!isIdentityExchange && sdpContent && callToken?.senderIp) {
       this._startPrePunch(data.callTokenId, callToken).catch(err => {
         console.warn('[CallManager] Pre-punch failed:', err)
         this.emit('call:log', { msg: `[PrePunch] Failed: ${err.message}`, type: 'error' })
@@ -369,7 +365,7 @@ class CallManager extends EventEmitter {
       const isIdentityExchange = callToken?.callerFingerprint && !sdpContent
       if (isIdentityExchange) {
         // Save caller's identity to contacts (include IP for ADF pre-punch)
-        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp4 || null)
+        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp || null)
         iceLog(`[Identity] Saved contact for ${callToken.caller}`, 'success')
 
         // Broadcast ANS with our fingerprint
@@ -379,13 +375,10 @@ class CallManager extends EventEmitter {
             await options.broadcastAnswerFn(callTokenId, callToken.caller, {
               sdpAnswer:        '',
               senderIp:         this.signaling.myIp || '0.0.0.0',
-              senderIp4:        this.signaling.myIp4 ?? null,
-              senderIp6:        this.signaling.myIp6 ?? null,
               senderPort:       this.signaling.myPort || 0,
               sessionKey:       callToken.sessionKey || '',
               codec:            'opus',
               quality:          'hd',
-              mediaTypes:       ['audio'],
               callee:           this.signaling.myAddress,
               calleeFingerprint: myFingerprint,
             })
@@ -497,10 +490,10 @@ class CallManager extends EventEmitter {
           iceLog('[Accept] ✓ 1-TX: ICE active. Callee firing checks to caller — waiting for peer-reflexive...')
 
           // Targeted callee spray to caller's known srflx port ±20
-          const callerIp4 = callToken.senderIp4 ?? null
+          const callerIp = callToken.senderIp ?? null
           const callerPunchPort = callToken.senderPort || null
-          if (callerIp4 && callerPunchPort) {
-            await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPunchPort, batch: 0 })
+          if (callerIp && callerPunchPort) {
+            await this._injectPortSpray(callToken.caller, callerIp, { knownPort: callerPunchPort, batch: 0 })
 
             let sprayBatch = 1
             this._calleePunchInterval = setInterval(async () => {
@@ -518,7 +511,7 @@ class CallManager extends EventEmitter {
                 iceLog('[Spray] DTLS in progress — pausing spray')
                 return
               }
-              await this._injectPortSpray(callToken.caller, callerIp4, { knownPort: callerPunchPort, batch: sprayBatch++ })
+              await this._injectPortSpray(callToken.caller, callerIp, { knownPort: callerPunchPort, batch: sprayBatch++ })
             }, 10000)
           }
         } else {
@@ -533,13 +526,10 @@ class CallManager extends EventEmitter {
                 {
                   sdpAnswer:  answerSdp,
                   senderIp:   this.signaling.myIp,
-                  senderIp4:  this.signaling.myIp4 ?? null,
-                  senderIp6:  this.signaling.myIp6 ?? null,
                   senderPort: this.signaling.myPort,
                   sessionKey: callToken.sessionKey,
                   codec:      callToken.codec,
                   quality:    callToken.quality,
-                  mediaTypes: callToken.mediaTypes,
                   callee:     this.signaling.myAddress,
                 },
                 options.broadcastAnswerFn
@@ -634,7 +624,7 @@ class CallManager extends EventEmitter {
 
       // Identity exchange: save callee's fingerprint and end
       if (session.identityExchange && data.callerFingerprint) {
-        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp4 || null)
+        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp || null)
         session.status = 'ended'
         this.emit('call:identity-exchanged', {
           callTokenId: session.callTokenId,
@@ -649,7 +639,7 @@ class CallManager extends EventEmitter {
 
       // ANS token with callee's srflx IP:port (+ SDP answer + fingerprint)
       const calleePort = data.calleePort
-      const calleeIp   = data.calleeIp4 || data.calleeIp6 || null
+      const calleeIp   = data.calleeIp || null
       if (calleePort && calleeIp) {
         this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Callee answer received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
 
@@ -943,7 +933,6 @@ class CallManager extends EventEmitter {
         if (session) session.calleeSrflx = { ip, port }
         // Set callee's public IP from STUN (no HTTP detection needed)
         this.signaling.myIp = ip
-        this.signaling.myIp4 = ip
         this.emit('call:port-discovered', {
           callTokenId,
           callerAddress: callToken.caller,
@@ -979,7 +968,7 @@ class CallManager extends EventEmitter {
       //  2. STUN didn't respond → only host candidates available
       // Chrome uses mDNS hostnames (xxx.local) instead of IPs, so match any address with \S+
       if (!srflxAnnounced) {
-        const myPublicIp = this.signaling.myIp4
+        const myPublicIp = this.signaling.myIp
         if (myPublicIp) {
           // Try matching our public IP directly in host candidates
           const escapedIp = myPublicIp.replace(/\./g, '\\.')
@@ -1019,7 +1008,7 @@ class CallManager extends EventEmitter {
 
     // Save caller spray target — spray deferred until PORT TX is in mempool
     // so both sides punch simultaneously (caller waits for PORT TX too).
-    const callerIp4 = callToken.senderIp4 ?? null
+    const callerIp = callToken.senderIp ?? null
     const callerPort = callToken.senderPort || null
 
     // Update session so acceptCall() can reuse this PC
@@ -1027,7 +1016,7 @@ class CallManager extends EventEmitter {
       session.prePunchActive = true
       session.iceCreds = iceCreds
       session.mediaAnswer = finalAns || answer
-      session.callerSprayTarget = { ip: callerIp4, port: callerPort, callerPeerId: callToken.caller }
+      session.callerSprayTarget = { ip: callerIp, port: callerPort, callerPeerId: callToken.caller }
     }
     // Debug: log exact connection data on callee side
     if (rtcPc) {

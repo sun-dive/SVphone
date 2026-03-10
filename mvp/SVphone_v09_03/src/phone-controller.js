@@ -82,8 +82,6 @@ class PhoneController {
             // Create all component modules
             this.signaling = new CallSignaling()
             // Apply IPs detected before signaling was created
-            this.signaling.myIp4 = this._detectedIp4 ?? null
-            this.signaling.myIp6 = this._detectedIp6 ?? null
             this.peerConnection = new PeerConnection({
                 // Direct P2P with no centralized STUN servers
                 // Uses mDNS discovery and standard VoIP ports (3478-3497)
@@ -453,12 +451,10 @@ class PhoneController {
                 const portResult = await this.callTokenManager.broadcastCallAnswer(data.callerAddress, {
                     callee:            myAddress,
                     senderIp:          data.ip,
-                    senderIp4:         data.ip,
                     senderPort:        data.port,
                     sessionKey:        data.sessionKey || '',
                     codec:             'opus',
                     quality:           'hd',
-                    mediaTypes:        ['audio'],
                     sdpAnswer:         data.sdpAnswer || '',
                     calleeFingerprint: data.calleeFingerprint || '',
                     feePerKb:          portFeePerKb,
@@ -663,13 +659,10 @@ class PhoneController {
                                 caller: attrs.caller,
                                 callee: attrs.callee,
                                 ip: attrs.senderIp,
-                                ip4: attrs.senderIp4 ?? null,
-                                ip6: attrs.senderIp6 ?? null,
                                 port: attrs.senderPort,
                                 key: attrs.sessionKey,
                                 codec: attrs.codec,
                                 quality: attrs.quality,
-                                media: attrs.mediaTypes,
                                 callerFingerprint: attrs.callerFingerprint ?? null,
                                 // CALL: wrap as object so call_manager.js can access .sdp property
                                 // ANS:  plain string — signaling.js wraps it
@@ -689,8 +682,7 @@ class PhoneController {
                             const sdpUfrag = sdpStr.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
                             const sdpPwd = sdpStr.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
                             this.ui.log(
-                                `[Token] ${signal.type.toUpperCase()}: ip4=${signal.ip4 ?? 'none'} ` +
-                                `ip6=${signal.ip6 ? signal.ip6.slice(0,16)+'…' : 'none'} ` +
+                                `[Token] ${signal.type.toUpperCase()}: ip=${signal.ip ?? 'none'} ` +
                                 `port=${signal.port ?? 0} sdp=${sdpLen}B (${sdpCands} cands) ` +
                                 `ufrag=${sdpUfrag} key=${(signal.key || '').slice(0,8)}…`,
                                 'info'

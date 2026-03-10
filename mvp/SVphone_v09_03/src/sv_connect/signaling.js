@@ -35,8 +35,6 @@ class CallSignaling {
     this.pollHandle = null
     this.myAddress = null
     this.myIp = null
-    this.myIp4 = null
-    this.myIp6 = null
     this.myPort = null
   }
 
@@ -48,13 +46,10 @@ class CallSignaling {
   inscriptionToCallInfo(inscription) {
     return {
       senderIp: inscription.ip,
-      senderIp4: inscription.ip4 ?? null,
-      senderIp6: inscription.ip6 ?? null,
       senderPort: inscription.port,
       sessionKey: inscription.key,
       codec: inscription.codec ?? 'opus',
       quality: inscription.quality ?? 'hd',
-      mediaTypes: inscription.media ?? ['audio'],
       sdpOffer: inscription.type === 'call' ? inscription.sdp : undefined,
       sdpAnswer: inscription.type === 'answer' ? inscription.sdp : undefined,
       callerFingerprint: inscription.callerFingerprint ?? null,
@@ -80,7 +75,7 @@ class CallSignaling {
    * Create call initiation token with connection info
    * @param {string} calleeAddress - Recipient BSV address
    * @param {string} sessionKey - Ephemeral DH key (base64)
-   * @param {Object} options - {codec, quality, mediaTypes}
+   * @param {Object} options - {codec, quality}
    * @returns {Object} Call token ready to broadcast
    */
   createCallToken(calleeAddress, sessionKey, options = {}) {
@@ -89,15 +84,12 @@ class CallSignaling {
       caller: this.myAddress,
       callee: calleeAddress,
       senderIp: this.myIp,
-      senderIp4: this.myIp4,
-      senderIp6: this.myIp6,
       senderPort: this.myPort,
       sessionKey: sessionKey, // Ephemeral DH key for encryption
 
       // Call options
       codec: options.codec || 'opus',
       quality: options.quality || 'hd',
-      mediaTypes: options.mediaTypes || ['audio', 'video'],
 
       // State (mutable, stored in stateData)
       status: 'ringing', // ringing → answered → connected → ended
@@ -209,7 +201,7 @@ class CallSignaling {
               callTokenId: callId,
               caller: inscription.caller,
               callee: inscription.callee,
-              calleeIp4: callInfo.senderIp4,
+              calleeIp: callInfo.senderIp,
               calleePort: callInfo.senderPort,
               timestamp: Date.now()
             })
@@ -252,13 +244,10 @@ class CallSignaling {
       caller: inscription.caller,
       callee: inscription.callee,
       senderIp: callInfo.senderIp,
-      senderIp4: callInfo.senderIp4,
-      senderIp6: callInfo.senderIp6,
       senderPort: callInfo.senderPort,
       sessionKey: callInfo.sessionKey,
       codec: callInfo.codec,
       quality: callInfo.quality,
-      mediaTypes: callInfo.mediaTypes,
       sdpOffer: callInfo.sdpOffer,
       callerFingerprint: callInfo.callerFingerprint ?? null,
       status: 'ringing',
@@ -271,8 +260,6 @@ class CallSignaling {
       callTokenId: callId,
       caller: inscription.caller,
       callerIp: callInfo.senderIp,
-      callerIp4: callInfo.senderIp4,
-      callerIp6: callInfo.senderIp6,
       callerPort: callInfo.senderPort,
       codec: callInfo.codec,
       quality: callInfo.quality,
@@ -298,15 +285,12 @@ class CallSignaling {
       caller: inscription.caller,
       callee: inscription.callee,
       calleeIp: callInfo.senderIp,
-      calleeIp4: callInfo.senderIp4,
-      calleeIp6: callInfo.senderIp6,
       calleePort: callInfo.senderPort,
       calleeSessionKey: callInfo.sessionKey,
       sdpAnswer: callInfo.sdpAnswer,
       callerFingerprint: callInfo.callerFingerprint,
       codec: callInfo.codec,
       quality: callInfo.quality,
-      mediaTypes: callInfo.mediaTypes,
       timestamp: Date.now()
     })
 
@@ -363,7 +347,7 @@ class CallSignaling {
    * Broadcast call answer token back to caller
    * @param {string} callTokenId - Call token ID
    * @param {string} callerAddress - Caller's address (recipient)
-   * @param {Object} answerData - {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality, mediaTypes}
+   * @param {Object} answerData - {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality}
    * @param {Function} broadcastFn - Optional broadcast function
    */
   async broadcastCallAnswer(callTokenId, callerAddress, answerData, broadcastFn) {
