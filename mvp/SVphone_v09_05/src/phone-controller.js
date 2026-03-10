@@ -196,6 +196,15 @@ class PhoneController {
             }
         }
 
+        // Try 3: Get address from window.myAddress (set by app.ts on first load)
+        if (!found && window.myAddress) {
+            const addr = window.myAddress
+            myAddressField.value = addr
+            localStorage.setItem('svphone_wallet_address', addr)
+            this.ui.log(`✓ Wallet synced from key: ${addr}`, 'success')
+            found = true
+        }
+
         // If found, we're done
         if (found) return
 
@@ -467,7 +476,16 @@ class PhoneController {
 
         this.callManager.on('call:connection-failed', () => {
             this.ui.stopConnectingTone()
+            this.ui.stopOutgoingRing()
             this.ui.playFailedTone()
+            this.ui.updateCallStatus('failed', 'Connection failed')
+            this.ui.log('Connection failed', 'error')
+            // Auto-reset UI after brief delay so user sees/hears failure feedback
+            setTimeout(() => {
+                this.callManager.endCall(this.currentCallToken).catch(() => {})
+                this.currentCallToken = null
+                this.ui.resetCallUI()
+            }, 2000)
         })
 
         this.callManager.on('call:connected', () => {

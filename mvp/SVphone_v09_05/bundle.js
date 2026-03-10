@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.05";window.SVPHONE_BUILD="2026-03-10 15:05 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.05'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.05 / 2026-03-10 15:05 UTC';});console.log('[SVphone] v09.05 Build: 2026-03-10 15:05 UTC');
+window.SVPHONE_VERSION="v09.05";window.SVPHONE_BUILD="2026-03-10 15:30 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.05'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.05 / 2026-03-10 15:30 UTC';});console.log('[SVphone] v09.05 Build: 2026-03-10 15:30 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -23996,6 +23996,15 @@ class PhoneController {
             }
         }
 
+        // Try 3: Get address from window.myAddress (set by app.ts on first load)
+        if (!found && window.myAddress) {
+            const addr = window.myAddress
+            myAddressField.value = addr
+            localStorage.setItem('svphone_wallet_address', addr)
+            this.ui.log(`✓ Wallet synced from key: ${addr}`, 'success')
+            found = true
+        }
+
         // If found, we're done
         if (found) return
 
@@ -24267,7 +24276,16 @@ class PhoneController {
 
         this.callManager.on('call:connection-failed', () => {
             this.ui.stopConnectingTone()
+            this.ui.stopOutgoingRing()
             this.ui.playFailedTone()
+            this.ui.updateCallStatus('failed', 'Connection failed')
+            this.ui.log('Connection failed', 'error')
+            // Auto-reset UI after brief delay so user sees/hears failure feedback
+            setTimeout(() => {
+                this.callManager.endCall(this.currentCallToken).catch(() => {})
+                this.currentCallToken = null
+                this.ui.resetCallUI()
+            }, 2000)
         })
 
         this.callManager.on('call:connected', () => {
