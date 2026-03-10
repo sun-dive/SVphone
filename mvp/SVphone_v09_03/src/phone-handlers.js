@@ -65,6 +65,7 @@ class CallHandlers {
             }
 
             this.ui.log('✓ Call initiated successfully', 'success')
+            document.getElementById('endCallBtn').style.display = 'inline-block'
             this.app._unansweredTimeout = setTimeout(() => {
                 this.ui.stopOutgoingRing()
                 this.ui.log('⏱ No answer — call timed out', 'warning')

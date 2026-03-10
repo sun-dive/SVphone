@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 05:03 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-10 05:03 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-10 05:03 UTC');
+window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 05:13 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-10 05:13 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-10 05:13 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -23297,6 +23297,7 @@ class CallHandlers {
             }
 
             this.ui.log('✓ Call initiated successfully', 'success')
+            document.getElementById('endCallBtn').style.display = 'inline-block'
             this.app._unansweredTimeout = setTimeout(() => {
                 this.ui.stopOutgoingRing()
                 this.ui.log('⏱ No answer — call timed out', 'warning')
