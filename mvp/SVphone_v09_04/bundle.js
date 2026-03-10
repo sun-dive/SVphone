@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.04";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.04'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.04 / 2026-03-10 10:06 UTC';});console.log('[SVphone] v09.04 Build: 2026-03-10 10:06 UTC');
+window.SVPHONE_VERSION="v09.04";window.SVPHONE_BUILD="2026-03-10 11:10 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.04'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.04 / 2026-03-10 11:10 UTC';});console.log('[SVphone] v09.04 Build: 2026-03-10 11:10 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -20375,19 +20375,21 @@ class CallManager extends EventEmitter {
         this._calleePunchInterval = null
       }
 
-      // Close peer connection
+      // Close peer connection and release media
       const callToken = this.signaling.getCallToken(callTokenId)
       if (callToken) {
         const peerId = this._getPeerId(session, callToken)
         this.peerConnection.closePeerConnection(peerId)
       }
+      this.peerConnection.stopMediaStream()
 
-      // Update signaling
+      // Update signaling and clean up
       const duration = session.connectedAt ? Date.now() - session.connectedAt : 0
       this.signaling.endCall(callTokenId, {
         duration: duration,
         quality: session.stats
       })
+      this.signaling.callTokens.delete(callTokenId)
 
       // Remove session so stale entries don't interfere with subsequent calls
       this.activeCallSessions.delete(callTokenId)

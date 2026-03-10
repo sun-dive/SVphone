@@ -1102,19 +1102,21 @@ class CallManager extends EventEmitter {
         this._calleePunchInterval = null
       }
 
-      // Close peer connection
+      // Close peer connection and release media
       const callToken = this.signaling.getCallToken(callTokenId)
       if (callToken) {
         const peerId = this._getPeerId(session, callToken)
         this.peerConnection.closePeerConnection(peerId)
       }
+      this.peerConnection.stopMediaStream()
 
-      // Update signaling
+      // Update signaling and clean up
       const duration = session.connectedAt ? Date.now() - session.connectedAt : 0
       this.signaling.endCall(callTokenId, {
         duration: duration,
         quality: session.stats
       })
+      this.signaling.callTokens.delete(callTokenId)
 
       // Remove session so stale entries don't interfere with subsequent calls
       this.activeCallSessions.delete(callTokenId)
