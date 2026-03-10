@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.05";window.SVPHONE_BUILD="2026-03-10 17:03 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.05'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.05 / 2026-03-10 17:03 UTC';});console.log('[SVphone] v09.05 Build: 2026-03-10 17:03 UTC');
+window.SVPHONE_VERSION="v09.05";window.SVPHONE_BUILD="2026-03-10 21:45 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.05'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.05 / 2026-03-10 21:45 UTC';});console.log('[SVphone] v09.05 Build: 2026-03-10 21:45 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -19898,7 +19898,8 @@ class CallManager extends EventEmitter {
         }, 10000)
 
         console.log('[CallManager] ANS token received — started targeted spray')
-        this.emit('call:connecting', { callTokenId: data.callTokenId, callee: data.callee, calleeName: data.callerName ?? null, calleeIp, calleePort })
+        // NOTE: call:connecting emit temporarily disabled for connectivity debugging
+        // this.emit('call:connecting', { callTokenId: data.callTokenId, callee: data.callee, calleeName: data.callerName ?? null, calleeIp, calleePort })
         return  // Don't emit call:answered-session for port announcements
       }
 
@@ -24354,6 +24355,7 @@ class PhoneController {
         this.callManager.on('call:connection-failed', () => {
             // ICE goes to 'failed' on each spray round — do not end the call here.
             // The 3-minute unanswered/incoming timeout handles actual termination.
+            this.ui.stopConnectingTone()
             this.ui.log('[ICE] Connection attempt failed — retrying...', 'info')
         })
 

@@ -504,6 +504,7 @@ class PhoneController {
         this.callManager.on('call:connection-failed', () => {
             // ICE goes to 'failed' on each spray round — do not end the call here.
             // The 3-minute unanswered/incoming timeout handles actual termination.
+            this.ui.stopConnectingTone()
             this.ui.log('[ICE] Connection attempt failed — retrying...', 'info')
         })
 

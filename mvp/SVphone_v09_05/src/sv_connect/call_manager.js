@@ -616,7 +616,8 @@ class CallManager extends EventEmitter {
         }, 10000)
 
         console.log('[CallManager] ANS token received — started targeted spray')
-        this.emit('call:connecting', { callTokenId: data.callTokenId, callee: data.callee, calleeName: data.callerName ?? null, calleeIp, calleePort })
+        // NOTE: call:connecting emit temporarily disabled for connectivity debugging
+        // this.emit('call:connecting', { callTokenId: data.callTokenId, callee: data.callee, calleeName: data.callerName ?? null, calleeIp, calleePort })
         return  // Don't emit call:answered-session for port announcements
       }
 
