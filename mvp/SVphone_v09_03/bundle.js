@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-09 23:51 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-09 23:51 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-09 23:51 UTC');
+window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 00:17 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-10 00:17 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-10 00:17 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -24566,6 +24566,7 @@ class PhoneController {
 
                         // Scan outputs for P OP_RETURN call signals
                         let signal = null
+                        let lastDecoded = null
                         for (const output of tx.outputs) {
                             if (!output.lockingScript) continue
                             const decoded = window.decodeOpReturn(output.lockingScript)
@@ -24601,6 +24602,7 @@ class PhoneController {
                                 sdp: isCall ? { type: 'offer', sdp: sdpStr }
                                             : sdpStr,
                             }
+                            lastDecoded = decoded
                             break
                         }
 
@@ -24620,7 +24622,7 @@ class PhoneController {
                                 'info'
                             )
                             // Log stateData hex length for integrity check
-                            console.log(`[Token-DBG] stateData hex=${decoded.stateData?.length ?? 0} chars, SDP=${sdpLen} chars, starts: ${sdpStr.slice(0,30)}`)
+                            console.log(`[Token-DBG] stateData hex=${lastDecoded?.stateData?.length ?? 0} chars, SDP=${sdpLen} chars, starts: ${sdpStr.slice(0,30)}`)
                             results.push({ txId, inscription: signal })
                         }
                     } catch (e) {

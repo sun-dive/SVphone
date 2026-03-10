@@ -640,6 +640,7 @@ class PhoneController {
 
                         // Scan outputs for P OP_RETURN call signals
                         let signal = null
+                        let lastDecoded = null
                         for (const output of tx.outputs) {
                             if (!output.lockingScript) continue
                             const decoded = window.decodeOpReturn(output.lockingScript)
@@ -675,6 +676,7 @@ class PhoneController {
                                 sdp: isCall ? { type: 'offer', sdp: sdpStr }
                                             : sdpStr,
                             }
+                            lastDecoded = decoded
                             break
                         }
 
@@ -694,7 +696,7 @@ class PhoneController {
                                 'info'
                             )
                             // Log stateData hex length for integrity check
-                            console.log(`[Token-DBG] stateData hex=${decoded.stateData?.length ?? 0} chars, SDP=${sdpLen} chars, starts: ${sdpStr.slice(0,30)}`)
+                            console.log(`[Token-DBG] stateData hex=${lastDecoded?.stateData?.length ?? 0} chars, SDP=${sdpLen} chars, starts: ${sdpStr.slice(0,30)}`)
                             results.push({ txId, inscription: signal })
                         }
                     } catch (e) {
