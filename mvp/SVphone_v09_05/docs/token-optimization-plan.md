@@ -4,7 +4,7 @@ Each step is independent. Test a full ADSL<->Cable call between each step before
 
 ---
 
-## Step 1. Remove senderIp4 + senderIp6 duplicates from tokenAttributes
+## Step 1. Remove senderIp4 + senderIp6 duplicates from tokenAttributes — DONE (v09_03)
 
 **Savings:** 6 bytes per token
 **Risk:** Low — these fields are never read by the callee
@@ -21,7 +21,7 @@ senderIp4 always duplicates the main IP field (bytes 2-5). senderIp6 is never po
 
 ---
 
-## Step 2. Remove media types field from tokenAttributes
+## Step 2. Remove media types field from tokenAttributes — DONE (v09_03)
 
 **Savings:** 1 byte per token
 **Risk:** Low — always 0x01 (audio), never checked
@@ -34,7 +34,7 @@ senderIp4 always duplicates the main IP field (bytes 2-5). senderIp6 is never po
 
 ---
 
-## Step 3. Remove unused tokenRules fields (Restrictions + Version)
+## Step 3. Remove unused tokenRules fields (Restrictions + Version) — DONE (v09_03)
 
 **Savings:** 4 bytes per token
 **Risk:** Low — only Supply and Divisibility are read (by wallet UI)
@@ -49,7 +49,7 @@ tokenRules goes from 8 bytes to 4 bytes.
 
 ---
 
-## Step 4. Binary sessionKey (raw 32 bytes instead of base64 44 bytes)
+## Step 4. Binary sessionKey (raw 32 bytes instead of base64 44 bytes) — DONE (v09_03)
 
 **Savings:** 12 bytes per token
 **Risk:** Low — encode/decode both sides updated together
@@ -65,20 +65,29 @@ Currently sessionKey is stored as base64 string (44 chars). Send the raw 32 byte
 
 ---
 
-## Step 5. Strip ICE candidates from SDP before encoding
+## Step 5. Strip ICE candidates from SDP before encoding — DEFERRED
 
-**Savings:** ~450 bytes per token
-**Risk:** Low — callee already strips candidates on decode; IP:port is in tokenAttributes
+**Savings:** ~450 bytes pre-compression (~120 bytes post-gzip)
+**Risk:** HIGH — caused reliability issues in three separate attempts
 
-**Files:**
-- `call_token.js` — `encodeStateData()`: strip `a=candidate:` lines before hex encoding
-- No decode changes needed (callee already ignores candidates)
+**Problem:** Stripping candidates (even just srflx/relay, keeping host) consistently
+degraded call success rate. First call after refresh works, subsequent calls fail.
+Root cause unclear — the callee already strips candidates locally before
+setRemoteDescription, so removing them from the TX should be safe in theory.
+Possible causes: NAT flood protection triggered by spray patterns after candidate
+removal changes ICE timing, or subtle interaction with `_buildPublicIpCandidates()`
+which reads host candidate ports from the SDP.
 
-**Test:** Call connects. Candidates are injected from tokenAttributes IP:port as before.
+**Attempts:**
+1. Strip all `a=candidate:` lines — failed (callee couldn't build srflx candidates)
+2. Strip all + `a=end-of-candidates` — same failure
+3. Strip only srflx/relay, keep host — still degraded reliability
+
+**Decision:** Not worth the risk. Post-gzip savings are only ~120 bytes.
 
 ---
 
-## Step 6. Eliminate CXID — fingerprint exchange on first call
+## Step 6. Eliminate CXID — fingerprint exchange on first call — DONE (v09_03)
 
 **Savings:** ~7,000 bytes per new contact (entire CXID TX eliminated)
 **Risk:** Medium — changes call flow for unknown callers
@@ -101,57 +110,60 @@ Callee behavior on incoming CALL:
 
 ---
 
-## Step 7. Compress SDP with gzip
+## Step 7. Compress SDP with gzip — DONE (v09_04)
 
-**Savings:** ~4,500 bytes per token (64% of TX)
+**Savings:** ~4,500 bytes per token (73-75% compression measured in production)
 **Risk:** Low — browser CompressionStream API, deterministic encode/decode
 
 **Files:**
 - `call_token.js` — `encodeStateData()`: compress SDP bytes with gzip before hex encoding
 - `call_token.js` — `decodeStateData()`: decompress gzip before UTF-8 decode
-- Add version/magic byte prefix to distinguish compressed vs raw stateData
+- Gzip magic bytes (0x1f 0x8b) used for backward compat detection vs raw UTF-8
 
-**Test:** Call connects. SDP round-trip self-test passes. TX size drops from ~7KB to ~2.5KB.
+**Measured results:**
+- CALL SDP: ~7,900 chars → ~1,970 bytes (75% saved)
+- ANS SDP: ~5,770 chars → ~1,560 bytes (73% saved)
+
+**Test:** Call connects. SDP round-trip self-test passes. TX size drops from ~7KB to ~2.3KB.
 
 ---
 
-## Step 8. Strip redundant SDP lines before compression
+## Step 8. Strip redundant SDP lines before compression — DEFERRED
 
-**Savings:** ~750 bytes per token (before compression), improves compression ratio further
-**Risk:** Medium — must rebuild stripped lines on decode
+**Savings:** ~200 bytes post-gzip (750 bytes pre-compression, but gzip already handles repetition well)
+**Risk:** Medium — must rebuild stripped lines on decode; browser differences may break codec negotiation
 
 Strip boilerplate SDP lines that can be reconstructed:
 - `a=extmap:` lines (~500 bytes)
 - `a=rtcp-fb:` lines (~200 bytes)
 - `a=fmtp:` for standard codecs (~100 bytes)
 
-**Files:**
-- `call_token.js` — `encodeStateData()`: strip known boilerplate lines
-- `call_token.js` — `decodeStateData()`: rebuild stripped lines from defaults
-
-**Test:** Call connects. Media negotiation works (codec, RTP extensions correct).
+**Problem:** These lines vary between browser versions and platforms. Rebuilding them
+with hardcoded defaults risks mismatches that silently break codec negotiation or
+RTP header extensions. Since gzip already compresses repetitive boilerplate efficiently,
+the post-compression savings (~200 bytes) don't justify the risk.
 
 ---
 
-## Step 9 (future). Shorten addresses to pubkey hash
+## Step 9 (future). Shorten addresses to pubkey hash — NOT STARTED
 
 **Savings:** 28 bytes per token
 **Risk:** Medium — decoder must reconstruct full address from hash + network byte
 
-Not urgent. Revisit after steps 1-8 are stable.
+Not urgent. Revisit after other improvements are stable.
 
 ---
 
-## Running totals
+## Running totals (actual)
 
-| After step | tokenAttributes | stateData | TX total | Cumulative saved |
-|------------|----------------|-----------|----------|-----------------|
-| Current | ~236 B | ~6,500 B | ~7,055 B | — |
-| Step 1 | ~230 B | ~6,500 B | ~7,049 B | 6 B |
-| Step 2 | ~229 B | ~6,500 B | ~7,048 B | 7 B |
-| Step 3 | ~229 B | ~6,500 B | ~7,044 B | 11 B |
-| Step 4 | ~217 B | ~6,500 B | ~7,032 B | 23 B |
-| Step 5 | ~217 B | ~6,050 B | ~6,582 B | 473 B |
-| Step 6 | ~217 B | ~6,050 B | ~6,582 B | 473 B + no CXID TX |
-| Step 7 | ~217 B | ~1,800 B | ~2,332 B | ~4,723 B |
-| Step 8 | ~217 B | ~1,500 B | ~2,032 B | ~5,023 B |
+| Step | Status | tokenAttributes | stateData | TX total | Saved |
+|------|--------|----------------|-----------|----------|-------|
+| Baseline | — | ~236 B | ~6,500 B | ~7,055 B | — |
+| Steps 1-3 | DONE | ~225 B | ~6,500 B | ~7,044 B | 11 B |
+| Step 4 | DONE | ~213 B | ~6,500 B | ~7,032 B | 23 B |
+| Step 5 | DEFERRED | — | — | — | — |
+| Step 6 | DONE | — | — | — | no CXID TX (~7KB saved per new contact) |
+| Step 7 | DONE | ~213 B | ~1,750 B | ~2,280 B | **~4,775 B (68%)** |
+| Steps 8-9 | DEFERRED | — | — | — | — |
+
+**Current production TX size: ~2,280 bytes (down from ~7,055 — 68% reduction)**
