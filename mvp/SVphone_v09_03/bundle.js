@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-09 22:49 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-09 22:49 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-09 22:49 UTC');
+window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-09 23:51 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-09 23:51 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-09 23:51 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -22717,7 +22717,15 @@ class CallTokenManager {
     if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
     if (!sdpData) return '00'
     const sdpBuf = new TextEncoder().encode(sdpData)
-    return Array.from(sdpBuf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
+    const hex = Array.from(sdpBuf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
+    // Self-test: decode immediately and verify round-trip
+    const rt = this.decodeStateData(hex)
+    if (rt !== sdpData) {
+      console.error('[CallToken] ❌ SDP round-trip MISMATCH! encoded:', sdpData.length, 'decoded:', rt.length)
+    } else {
+      console.log(`[CallToken] ✓ SDP round-trip OK (${sdpData.length} chars, ${hex.length/2} bytes)`)
+    }
+    return hex
   }
 
   /**
@@ -24601,12 +24609,18 @@ class PhoneController {
                             const sdpStr = signal.sdp ? (typeof signal.sdp === 'object' ? signal.sdp.sdp : signal.sdp) : ''
                             const sdpLen = sdpStr?.length ?? 0
                             const sdpCands = (sdpStr.match(/a=candidate:/g) || []).length
+                            // Extract ICE creds from decoded SDP for cross-check
+                            const sdpUfrag = sdpStr.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
+                            const sdpPwd = sdpStr.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
                             this.ui.log(
                                 `[Token] ${signal.type.toUpperCase()}: ip4=${signal.ip4 ?? 'none'} ` +
                                 `ip6=${signal.ip6 ? signal.ip6.slice(0,16)+'…' : 'none'} ` +
-                                `port=${signal.port ?? 0} sdp=${sdpLen}B (${sdpCands} cands)`,
+                                `port=${signal.port ?? 0} sdp=${sdpLen}B (${sdpCands} cands) ` +
+                                `ufrag=${sdpUfrag} key=${(signal.key || '').slice(0,8)}…`,
                                 'info'
                             )
+                            // Log stateData hex length for integrity check
+                            console.log(`[Token-DBG] stateData hex=${decoded.stateData?.length ?? 0} chars, SDP=${sdpLen} chars, starts: ${sdpStr.slice(0,30)}`)
                             results.push({ txId, inscription: signal })
                         }
                     } catch (e) {

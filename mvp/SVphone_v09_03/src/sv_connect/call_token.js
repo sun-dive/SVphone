@@ -139,7 +139,15 @@ class CallTokenManager {
     if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
     if (!sdpData) return '00'
     const sdpBuf = new TextEncoder().encode(sdpData)
-    return Array.from(sdpBuf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
+    const hex = Array.from(sdpBuf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
+    // Self-test: decode immediately and verify round-trip
+    const rt = this.decodeStateData(hex)
+    if (rt !== sdpData) {
+      console.error('[CallToken] ❌ SDP round-trip MISMATCH! encoded:', sdpData.length, 'decoded:', rt.length)
+    } else {
+      console.log(`[CallToken] ✓ SDP round-trip OK (${sdpData.length} chars, ${hex.length/2} bytes)`)
+    }
+    return hex
   }
 
   /**

@@ -683,12 +683,18 @@ class PhoneController {
                             const sdpStr = signal.sdp ? (typeof signal.sdp === 'object' ? signal.sdp.sdp : signal.sdp) : ''
                             const sdpLen = sdpStr?.length ?? 0
                             const sdpCands = (sdpStr.match(/a=candidate:/g) || []).length
+                            // Extract ICE creds from decoded SDP for cross-check
+                            const sdpUfrag = sdpStr.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
+                            const sdpPwd = sdpStr.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
                             this.ui.log(
                                 `[Token] ${signal.type.toUpperCase()}: ip4=${signal.ip4 ?? 'none'} ` +
                                 `ip6=${signal.ip6 ? signal.ip6.slice(0,16)+'…' : 'none'} ` +
-                                `port=${signal.port ?? 0} sdp=${sdpLen}B (${sdpCands} cands)`,
+                                `port=${signal.port ?? 0} sdp=${sdpLen}B (${sdpCands} cands) ` +
+                                `ufrag=${sdpUfrag} key=${(signal.key || '').slice(0,8)}…`,
                                 'info'
                             )
+                            // Log stateData hex length for integrity check
+                            console.log(`[Token-DBG] stateData hex=${decoded.stateData?.length ?? 0} chars, SDP=${sdpLen} chars, starts: ${sdpStr.slice(0,30)}`)
                             results.push({ txId, inscription: signal })
                         }
                     } catch (e) {
