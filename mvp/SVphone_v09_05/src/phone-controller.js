@@ -502,17 +502,9 @@ class PhoneController {
         })
 
         this.callManager.on('call:connection-failed', () => {
-            this.ui.stopConnectingTone()
-            this.ui.stopOutgoingRing()
-            this.ui.playFailedTone()
-            this.ui.updateCallStatus('failed', 'Connection failed')
-            this.ui.log('Connection failed', 'error')
-            // Auto-reset UI after brief delay so user sees/hears failure feedback
-            setTimeout(() => {
-                this.callManager.endCall(this.currentCallToken).catch(() => {})
-                this.currentCallToken = null
-                this.ui.resetCallUI()
-            }, 2000)
+            // ICE goes to 'failed' on each spray round — do not end the call here.
+            // The 3-minute unanswered/incoming timeout handles actual termination.
+            this.ui.log('[ICE] Connection attempt failed — retrying...', 'info')
         })
 
         this.callManager.on('call:connected', () => {
