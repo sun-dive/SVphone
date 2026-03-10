@@ -279,7 +279,7 @@ class CallManager extends EventEmitter {
     }
 
     this.emit('call:incoming-session', session)
-    console.log('[CallManager] Incoming', isIdentityExchange ? 'identity exchange' : 'call', 'from:', data.caller)
+    console.log('[CallManager] Incoming', session.isNewCaller ? 'new caller' : 'call', 'from:', data.caller)
   }
 
   /**
