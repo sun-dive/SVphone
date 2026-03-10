@@ -102,6 +102,14 @@ class CallTokenManager {
     let sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
     if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
     if (!sdpData) return '00'
+    // Strip srflx/relay candidates (public IP already in tokenAttributes).
+    // Keep host candidates — _buildPublicIpCandidates needs their local ports.
+    sdpData = sdpData.split(/\r?\n/)
+      .filter(l => {
+        if (!l.startsWith('a=candidate:')) return true
+        return l.includes('typ host')
+      })
+      .join('\r\n')
     const sdpBuf = new TextEncoder().encode(sdpData)
     // Gzip compress
     const cs = new CompressionStream('gzip')
