@@ -1,7 +1,5 @@
-window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-10 10:06 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-10 10:06 UTC');
 (() => {
   var __defProp = Object.defineProperty;
-  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
     get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
   }) : x)(function(x) {
@@ -12,7 +10,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     for (var name in all)
       __defProp(target, name, { get: all[name], enumerable: true });
   };
-  var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/BigNumber.js
   var BufferCtor = typeof globalThis !== "undefined" ? globalThis.Buffer : void 0;
@@ -25,124 +22,146 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     HEX_CHAR_TO_VALUE[65 + i] = 10 + i;
     HEX_CHAR_TO_VALUE[97 + i] = 10 + i;
   }
-  var _BigNumber = class _BigNumber {
+  var BigNumber = class _BigNumber {
     /**
-     * @constructor
-     *
-     * @param number - The number (various types accepted) to construct a BigNumber from. Default is 0.
-     * @param base - The base of number provided. By default is 10.
-     * @param endian - The endianness provided. By default is 'big endian'.
+     * @privateinitializer
      */
-    constructor(number = 0, base = 10, endian = "be") {
-      __publicField(this, "_magnitude");
-      __publicField(this, "_sign");
-      __publicField(this, "_nominalWordLength");
-      /**
-       * Reduction context of the big number.
-       *
-       * @property red
-       */
-      __publicField(this, "red");
-      this._magnitude = 0n;
-      this._sign = 0;
-      this._nominalWordLength = 1;
-      this.red = null;
-      if (number === void 0)
-        number = 0;
-      if (number === null) {
-        this._initializeState(0n, 0);
-        return;
-      }
-      if (typeof number === "bigint") {
-        this._initializeState(number < 0n ? -number : number, number < 0n ? 1 : 0);
-        this.normSign();
-        return;
-      }
-      let effectiveBase = base;
-      let effectiveEndian = endian;
-      if (base === "le" || base === "be") {
-        effectiveEndian = base;
-        effectiveBase = 10;
-      }
-      if (typeof number === "number") {
-        this.initNumber(number, effectiveEndian);
-        return;
-      }
-      if (Array.isArray(number)) {
-        this.initArray(number, effectiveEndian);
-        return;
-      }
-      if (typeof number === "string") {
-        if (effectiveBase === "hex")
-          effectiveBase = 16;
-        this.assert(typeof effectiveBase === "number" && effectiveBase === (effectiveBase | 0) && effectiveBase >= 2 && effectiveBase <= 36, "Base must be an integer between 2 and 36");
-        const originalNumberStr = number.toString().replace(/\s+/g, "");
-        let start = 0;
-        let sign2 = 0;
-        if (originalNumberStr.startsWith("-")) {
-          start++;
-          sign2 = 1;
-        } else if (originalNumberStr.startsWith("+")) {
-          start++;
-        }
-        const numStr = originalNumberStr.substring(start);
-        if (numStr.length === 0) {
-          this._initializeState(0n, sign2 === 1 && originalNumberStr.startsWith("-") ? 1 : 0);
-          this.normSign();
-          return;
-        }
-        if (effectiveBase === 16) {
-          let tempMagnitude;
-          if (effectiveEndian === "le") {
-            const bytes2 = [];
-            let hexStr = numStr;
-            if (hexStr.length % 2 !== 0)
-              hexStr = "0" + hexStr;
-            for (let i = 0; i < hexStr.length; i += 2) {
-              const byteHex = hexStr.substring(i, i + 2);
-              const byteVal = parseInt(byteHex, 16);
-              if (isNaN(byteVal))
-                throw new Error("Invalid character in " + hexStr);
-              bytes2.push(byteVal);
-            }
-            this.initArray(bytes2, "le");
-            this._sign = sign2;
-            this.normSign();
-            return;
-          } else {
-            try {
-              tempMagnitude = BigInt("0x" + numStr);
-            } catch (e) {
-              throw new Error("Invalid character in " + numStr);
-            }
-          }
-          this._initializeState(tempMagnitude, sign2);
-          this.normSign();
-        } else {
-          try {
-            this._parseBaseString(numStr, effectiveBase);
-            this._sign = sign2;
-            this.normSign();
-            if (effectiveEndian === "le") {
-              const currentSign = this._sign;
-              this.initArray(this.toArray("be"), "le");
-              this._sign = currentSign;
-              this.normSign();
-            }
-          } catch (err) {
-            const error = err;
-            if (error.message.includes("Invalid character in string") || error.message.includes("Invalid digit for base") || error.message.startsWith("Invalid character:")) {
-              throw new Error("Invalid character");
-            }
-            throw error;
-          }
-        }
-      } else if (number !== 0) {
-        this.assert(false, "Unsupported input type for BigNumber constructor");
-      } else {
-        this._initializeState(0n, 0);
-      }
-    }
+    static zeros = [
+      "",
+      "0",
+      "00",
+      "000",
+      "0000",
+      "00000",
+      "000000",
+      "0000000",
+      "00000000",
+      "000000000",
+      "0000000000",
+      "00000000000",
+      "000000000000",
+      "0000000000000",
+      "00000000000000",
+      "000000000000000",
+      "0000000000000000",
+      "00000000000000000",
+      "000000000000000000",
+      "0000000000000000000",
+      "00000000000000000000",
+      "000000000000000000000",
+      "0000000000000000000000",
+      "00000000000000000000000",
+      "000000000000000000000000",
+      "0000000000000000000000000"
+    ];
+    /**
+     * @privateinitializer
+     */
+    static groupSizes = [
+      0,
+      0,
+      25,
+      16,
+      12,
+      11,
+      10,
+      9,
+      8,
+      8,
+      7,
+      7,
+      7,
+      7,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+    ];
+    /**
+     * @privateinitializer
+     */
+    static groupBases = [
+      0,
+      0,
+      33554432,
+      43046721,
+      16777216,
+      48828125,
+      60466176,
+      40353607,
+      16777216,
+      43046721,
+      1e7,
+      19487171,
+      35831808,
+      62748517,
+      7529536,
+      11390625,
+      16777216,
+      24137569,
+      34012224,
+      47045881,
+      64e6,
+      4084101,
+      5153632,
+      6436343,
+      7962624,
+      9765625,
+      11881376,
+      14348907,
+      17210368,
+      20511149,
+      243e5,
+      28629151,
+      33554432,
+      39135393,
+      45435424,
+      52521875,
+      60466176
+    ];
+    /**
+     * The word size of big number chunks.
+     *
+     * @property wordSize
+     *
+     * @example
+     * console.log(BigNumber.wordSize);  // output: 26
+     */
+    static wordSize = 26;
+    static WORD_SIZE_BIGINT = BigInt(_BigNumber.wordSize);
+    static WORD_MASK = (1n << _BigNumber.WORD_SIZE_BIGINT) - 1n;
+    static MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+    static MIN_SAFE_INTEGER_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
+    static MAX_IMULN_ARG = 67108864 - 1;
+    static MAX_NUMBER_CONSTRUCTOR_MAG_BIGINT = (1n << 53n) - 1n;
+    _magnitude;
+    _sign;
+    _nominalWordLength;
+    /**
+     * Reduction context of the big number.
+     *
+     * @property red
+     */
+    red;
     /**
      * Negative flag. Indicates whether the big number is a negative number.
      * - If 0, the number is positive.
@@ -249,6 +268,114 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
      */
     static min(left, right) {
       return left.cmp(right) < 0 ? left : right;
+    }
+    /**
+     * @constructor
+     *
+     * @param number - The number (various types accepted) to construct a BigNumber from. Default is 0.
+     * @param base - The base of number provided. By default is 10.
+     * @param endian - The endianness provided. By default is 'big endian'.
+     */
+    constructor(number = 0, base = 10, endian = "be") {
+      this._magnitude = 0n;
+      this._sign = 0;
+      this._nominalWordLength = 1;
+      this.red = null;
+      if (number === void 0)
+        number = 0;
+      if (number === null) {
+        this._initializeState(0n, 0);
+        return;
+      }
+      if (typeof number === "bigint") {
+        this._initializeState(number < 0n ? -number : number, number < 0n ? 1 : 0);
+        this.normSign();
+        return;
+      }
+      let effectiveBase = base;
+      let effectiveEndian = endian;
+      if (base === "le" || base === "be") {
+        effectiveEndian = base;
+        effectiveBase = 10;
+      }
+      if (typeof number === "number") {
+        this.initNumber(number, effectiveEndian);
+        return;
+      }
+      if (Array.isArray(number)) {
+        this.initArray(number, effectiveEndian);
+        return;
+      }
+      if (typeof number === "string") {
+        if (effectiveBase === "hex")
+          effectiveBase = 16;
+        this.assert(typeof effectiveBase === "number" && effectiveBase === (effectiveBase | 0) && effectiveBase >= 2 && effectiveBase <= 36, "Base must be an integer between 2 and 36");
+        const originalNumberStr = number.toString().replace(/\s+/g, "");
+        let start = 0;
+        let sign2 = 0;
+        if (originalNumberStr.startsWith("-")) {
+          start++;
+          sign2 = 1;
+        } else if (originalNumberStr.startsWith("+")) {
+          start++;
+        }
+        const numStr = originalNumberStr.substring(start);
+        if (numStr.length === 0) {
+          this._initializeState(0n, sign2 === 1 && originalNumberStr.startsWith("-") ? 1 : 0);
+          this.normSign();
+          return;
+        }
+        if (effectiveBase === 16) {
+          let tempMagnitude;
+          if (effectiveEndian === "le") {
+            const bytes2 = [];
+            let hexStr = numStr;
+            if (hexStr.length % 2 !== 0)
+              hexStr = "0" + hexStr;
+            for (let i = 0; i < hexStr.length; i += 2) {
+              const byteHex = hexStr.substring(i, i + 2);
+              const byteVal = parseInt(byteHex, 16);
+              if (isNaN(byteVal))
+                throw new Error("Invalid character in " + hexStr);
+              bytes2.push(byteVal);
+            }
+            this.initArray(bytes2, "le");
+            this._sign = sign2;
+            this.normSign();
+            return;
+          } else {
+            try {
+              tempMagnitude = BigInt("0x" + numStr);
+            } catch (e) {
+              throw new Error("Invalid character in " + numStr);
+            }
+          }
+          this._initializeState(tempMagnitude, sign2);
+          this.normSign();
+        } else {
+          try {
+            this._parseBaseString(numStr, effectiveBase);
+            this._sign = sign2;
+            this.normSign();
+            if (effectiveEndian === "le") {
+              const currentSign = this._sign;
+              this.initArray(this.toArray("be"), "le");
+              this._sign = currentSign;
+              this.normSign();
+            }
+          } catch (err) {
+            const error = err;
+            if (error.message.includes("Invalid character in string") || error.message.includes("Invalid digit for base") || error.message.startsWith("Invalid character:")) {
+              throw new Error("Invalid character");
+            }
+            throw error;
+          }
+        }
+      } else if (number !== 0) {
+        this.assert(false, "Unsupported input type for BigNumber constructor");
+      } else {
+        this._initializeState(0n, 0);
+      }
     }
     _bigIntToStringInBase(num, base) {
       if (num === 0n)
@@ -1523,140 +1650,14 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
       return out;
     }
   };
-  /**
-   * @privateinitializer
-   */
-  __publicField(_BigNumber, "zeros", [
-    "",
-    "0",
-    "00",
-    "000",
-    "0000",
-    "00000",
-    "000000",
-    "0000000",
-    "00000000",
-    "000000000",
-    "0000000000",
-    "00000000000",
-    "000000000000",
-    "0000000000000",
-    "00000000000000",
-    "000000000000000",
-    "0000000000000000",
-    "00000000000000000",
-    "000000000000000000",
-    "0000000000000000000",
-    "00000000000000000000",
-    "000000000000000000000",
-    "0000000000000000000000",
-    "00000000000000000000000",
-    "000000000000000000000000",
-    "0000000000000000000000000"
-  ]);
-  /**
-   * @privateinitializer
-   */
-  __publicField(_BigNumber, "groupSizes", [
-    0,
-    0,
-    25,
-    16,
-    12,
-    11,
-    10,
-    9,
-    8,
-    8,
-    7,
-    7,
-    7,
-    7,
-    6,
-    6,
-    6,
-    6,
-    6,
-    6,
-    6,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5,
-    5
-  ]);
-  /**
-   * @privateinitializer
-   */
-  __publicField(_BigNumber, "groupBases", [
-    0,
-    0,
-    33554432,
-    43046721,
-    16777216,
-    48828125,
-    60466176,
-    40353607,
-    16777216,
-    43046721,
-    1e7,
-    19487171,
-    35831808,
-    62748517,
-    7529536,
-    11390625,
-    16777216,
-    24137569,
-    34012224,
-    47045881,
-    64e6,
-    4084101,
-    5153632,
-    6436343,
-    7962624,
-    9765625,
-    11881376,
-    14348907,
-    17210368,
-    20511149,
-    243e5,
-    28629151,
-    33554432,
-    39135393,
-    45435424,
-    52521875,
-    60466176
-  ]);
-  /**
-   * The word size of big number chunks.
-   *
-   * @property wordSize
-   *
-   * @example
-   * console.log(BigNumber.wordSize);  // output: 26
-   */
-  __publicField(_BigNumber, "wordSize", 26);
-  __publicField(_BigNumber, "WORD_SIZE_BIGINT", BigInt(_BigNumber.wordSize));
-  __publicField(_BigNumber, "WORD_MASK", (1n << _BigNumber.WORD_SIZE_BIGINT) - 1n);
-  __publicField(_BigNumber, "MAX_SAFE_INTEGER_BIGINT", BigInt(Number.MAX_SAFE_INTEGER));
-  __publicField(_BigNumber, "MIN_SAFE_INTEGER_BIGINT", BigInt(Number.MIN_SAFE_INTEGER));
-  __publicField(_BigNumber, "MAX_IMULN_ARG", 67108864 - 1);
-  __publicField(_BigNumber, "MAX_NUMBER_CONSTRUCTOR_MAG_BIGINT", (1n << 53n) - 1n);
-  var BigNumber = _BigNumber;
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/Mersenne.js
   var Mersenne = class {
+    name;
+    p;
+    k;
+    n;
+    tmp;
     /**
      * @constructor
      * @param name - An identifier for the Mersenne instance.
@@ -1666,11 +1667,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
      * const mersenne = new Mersenne('M31', '7FFFFFFF');
      */
     constructor(name, p) {
-      __publicField(this, "name");
-      __publicField(this, "p");
-      __publicField(this, "k");
-      __publicField(this, "n");
-      __publicField(this, "tmp");
       this.name = name;
       this.p = new BigNumber(p, 16);
       this.n = this.p.bitLength();
@@ -1852,6 +1848,8 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/ReductionContext.js
   var ReductionContext = class {
+    prime;
+    m;
     /**
      * Constructs a new ReductionContext.
      *
@@ -1863,8 +1861,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
      * new ReductionContext('k256');
      */
     constructor(m) {
-      __publicField(this, "prime");
-      __publicField(this, "m");
       if (m === "k256") {
         const prime = new K256();
         this.m = prime.p;
@@ -2293,17 +2289,17 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/MontgomoryMethod.js
   var MontgomoryMethod = class extends ReductionContext {
+    shift;
+    r;
+    r2;
+    rinv;
+    minv;
     /**
      * @constructor
      * @param m - The modulus to be used for the Montgomery method reductions.
      */
     constructor(m) {
       super(m);
-      __publicField(this, "shift");
-      __publicField(this, "r");
-      __publicField(this, "r2");
-      __publicField(this, "rinv");
-      __publicField(this, "minv");
       this.shift = this.m.bitLength();
       if (this.shift % 26 !== 0) {
         this.shift += 26 - this.shift % 26;
@@ -2419,10 +2415,10 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/BasePoint.js
   var BasePoint = class {
+    curve;
+    type;
+    precomputed;
     constructor(type) {
-      __publicField(this, "curve");
-      __publicField(this, "type");
-      __publicField(this, "precomputed");
       this.curve = new Curve();
       this.type = type;
       this.precomputed = null;
@@ -2431,6 +2427,10 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/JacobianPoint.js
   var JacobianPoint = class _JacobianPoint extends BasePoint {
+    x;
+    y;
+    z;
+    zOne;
     /**
      * Constructs a new `JacobianPoint` instance.
      *
@@ -2449,10 +2449,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
      */
     constructor(x, y, z) {
       super("jacobian");
-      __publicField(this, "x");
-      __publicField(this, "y");
-      __publicField(this, "z");
-      __publicField(this, "zOne");
       if (x === null && y === null && z === null) {
         this.x = this.curve.one;
         this.y = this.curve.one;
@@ -2843,16 +2839,16 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     }
   };
   var BaseHash = class {
+    pending;
+    pendingTotal;
+    blockSize;
+    outSize;
+    endian;
+    _delta8;
+    _delta32;
+    padLength;
+    hmacStrength;
     constructor(blockSize, outSize, hmacStrength, padLength) {
-      __publicField(this, "pending");
-      __publicField(this, "pendingTotal");
-      __publicField(this, "blockSize");
-      __publicField(this, "outSize");
-      __publicField(this, "endian");
-      __publicField(this, "_delta8");
-      __publicField(this, "_delta32");
-      __publicField(this, "padLength");
-      __publicField(this, "hmacStrength");
       this.pending = null;
       this.pendingTotal = 0;
       this.blockSize = blockSize;
@@ -3527,9 +3523,9 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     }
   }
   var RIPEMD160 = class extends BaseHash {
+    h;
     constructor() {
       super(512, 160, 192, 64);
-      __publicField(this, "h");
       this.endian = "little";
       this.h = [1732584193, 4023233417, 2562383102, 271733878, 3285377520];
       this.endian = "little";
@@ -3575,8 +3571,8 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     }
   };
   var SHA256 = class {
+    h;
     constructor() {
-      __publicField(this, "h");
       this.h = new FastSHA256();
     }
     update(msg, enc) {
@@ -3592,11 +3588,11 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     }
   };
   var SHA1 = class extends BaseHash {
+    h;
+    W;
+    k;
     constructor() {
       super(512, 160, 80, 64);
-      __publicField(this, "h");
-      __publicField(this, "W");
-      __publicField(this, "k");
       this.k = [1518500249, 1859775393, 2400959708, 3395469782];
       this.h = [1732584193, 4023233417, 2562383102, 271733878, 3285377520];
       this.W = new Array(80);
@@ -3641,8 +3637,8 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     }
   };
   var SHA512 = class {
+    h;
     constructor() {
-      __publicField(this, "h");
       this.h = new FastSHA512();
     }
     update(msg, enc) {
@@ -3658,6 +3654,9 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     }
   };
   var SHA256HMAC = class {
+    h;
+    blockSize = 64;
+    outSize = 32;
     /**
      * The constructor for the `SHA256HMAC` class.
      *
@@ -3672,9 +3671,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
      * const myHMAC = new SHA256HMAC('deadbeef');
      */
     constructor(key) {
-      __publicField(this, "h");
-      __publicField(this, "blockSize", 64);
-      __publicField(this, "outSize", 32);
       const k = key instanceof Uint8Array ? key : Uint8Array.from(toArray(key, typeof key === "string" ? "hex" : void 0));
       this.h = new HMAC(sha256Fast, k);
     }
@@ -3720,10 +3716,10 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     }
   };
   var SHA1HMAC = class {
+    inner;
+    outer;
+    blockSize = 64;
     constructor(key) {
-      __publicField(this, "inner");
-      __publicField(this, "outer");
-      __publicField(this, "blockSize", 64);
       key = toArray(key, "hex");
       if (key.length > this.blockSize) {
         key = new SHA1().update(key).digest();
@@ -3755,6 +3751,9 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     }
   };
   var SHA512HMAC = class {
+    h;
+    blockSize = 128;
+    outSize = 32;
     /**
      * The constructor for the `SHA512HMAC` class.
      *
@@ -3769,9 +3768,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
      * const myHMAC = new SHA512HMAC('deadbeef');
      */
     constructor(key) {
-      __publicField(this, "h");
-      __publicField(this, "blockSize", 128);
-      __publicField(this, "outSize", 32);
       const k = key instanceof Uint8Array ? key : Uint8Array.from(toArray(key, typeof key === "string" ? "hex" : void 0));
       this.h = new HMAC(sha512Fast, k);
     }
@@ -3948,18 +3944,18 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
   var add5L = (Al, Bl, Cl, Dl, El) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0) + (Dl >>> 0) + (El >>> 0);
   var add5H = (low, Ah, Bh, Ch, Dh, Eh) => Ah + Bh + Ch + Dh + Eh + (low / 2 ** 32 | 0) | 0;
   var HashMD = class extends Hash {
+    blockLen;
+    outputLen;
+    padOffset;
+    isLE;
+    buffer;
+    view;
+    finished = false;
+    length = 0;
+    pos = 0;
+    destroyed = false;
     constructor(blockLen, outputLen, padOffset, isLE) {
       super();
-      __publicField(this, "blockLen");
-      __publicField(this, "outputLen");
-      __publicField(this, "padOffset");
-      __publicField(this, "isLE");
-      __publicField(this, "buffer");
-      __publicField(this, "view");
-      __publicField(this, "finished", false);
-      __publicField(this, "length", 0);
-      __publicField(this, "pos", 0);
-      __publicField(this, "destroyed", false);
       this.blockLen = blockLen;
       this.outputLen = outputLen;
       this.padOffset = padOffset;
@@ -4028,7 +4024,7 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
       return res;
     }
     _cloneInto(to) {
-      to || (to = new this.constructor());
+      to ||= new this.constructor();
       to.set(...this.get());
       const { blockLen, buffer, length, finished, destroyed, pos } = this;
       to.destroyed = destroyed;
@@ -4133,16 +4129,16 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
   ]);
   var SHA256_W = new Uint32Array(64);
   var FastSHA256 = class extends HashMD {
+    A = SHA256_IV[0] | 0;
+    B = SHA256_IV[1] | 0;
+    C = SHA256_IV[2] | 0;
+    D = SHA256_IV[3] | 0;
+    E = SHA256_IV[4] | 0;
+    F = SHA256_IV[5] | 0;
+    G = SHA256_IV[6] | 0;
+    H = SHA256_IV[7] | 0;
     constructor(outputLen = 32) {
       super(64, outputLen, 8, false);
-      __publicField(this, "A", SHA256_IV[0] | 0);
-      __publicField(this, "B", SHA256_IV[1] | 0);
-      __publicField(this, "C", SHA256_IV[2] | 0);
-      __publicField(this, "D", SHA256_IV[3] | 0);
-      __publicField(this, "E", SHA256_IV[4] | 0);
-      __publicField(this, "F", SHA256_IV[5] | 0);
-      __publicField(this, "G", SHA256_IV[6] | 0);
-      __publicField(this, "H", SHA256_IV[7] | 0);
     }
     get() {
       const { A: A2, B: B2, C, D, E, F, G, H } = this;
@@ -4305,24 +4301,24 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
   var SHA512_W_H = new Uint32Array(80);
   var SHA512_W_L = new Uint32Array(80);
   var FastSHA512 = class extends HashMD {
+    Ah = SHA512_IV[0] | 0;
+    Al = SHA512_IV[1] | 0;
+    Bh = SHA512_IV[2] | 0;
+    Bl = SHA512_IV[3] | 0;
+    Ch = SHA512_IV[4] | 0;
+    Cl = SHA512_IV[5] | 0;
+    Dh = SHA512_IV[6] | 0;
+    Dl = SHA512_IV[7] | 0;
+    Eh = SHA512_IV[8] | 0;
+    El = SHA512_IV[9] | 0;
+    Fh = SHA512_IV[10] | 0;
+    Fl = SHA512_IV[11] | 0;
+    Gh = SHA512_IV[12] | 0;
+    Gl = SHA512_IV[13] | 0;
+    Hh = SHA512_IV[14] | 0;
+    Hl = SHA512_IV[15] | 0;
     constructor(outputLen = 64) {
       super(128, outputLen, 16, false);
-      __publicField(this, "Ah", SHA512_IV[0] | 0);
-      __publicField(this, "Al", SHA512_IV[1] | 0);
-      __publicField(this, "Bh", SHA512_IV[2] | 0);
-      __publicField(this, "Bl", SHA512_IV[3] | 0);
-      __publicField(this, "Ch", SHA512_IV[4] | 0);
-      __publicField(this, "Cl", SHA512_IV[5] | 0);
-      __publicField(this, "Dh", SHA512_IV[6] | 0);
-      __publicField(this, "Dl", SHA512_IV[7] | 0);
-      __publicField(this, "Eh", SHA512_IV[8] | 0);
-      __publicField(this, "El", SHA512_IV[9] | 0);
-      __publicField(this, "Fh", SHA512_IV[10] | 0);
-      __publicField(this, "Fl", SHA512_IV[11] | 0);
-      __publicField(this, "Gh", SHA512_IV[12] | 0);
-      __publicField(this, "Gl", SHA512_IV[13] | 0);
-      __publicField(this, "Hh", SHA512_IV[14] | 0);
-      __publicField(this, "Hl", SHA512_IV[15] | 0);
     }
     get() {
       const { Ah, Al, Bh, Bl, Ch, Cl, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl } = this;
@@ -4416,14 +4412,14 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
   };
   var sha512Fast = createHasher(() => new FastSHA512());
   var HMAC = class extends Hash {
+    oHash;
+    iHash;
+    blockLen;
+    outputLen;
+    finished = false;
+    destroyed = false;
     constructor(hash, _key) {
       super();
-      __publicField(this, "oHash");
-      __publicField(this, "iHash");
-      __publicField(this, "blockLen");
-      __publicField(this, "outputLen");
-      __publicField(this, "finished", false);
-      __publicField(this, "destroyed", false);
       ahash(hash);
       const key = toBytes(_key);
       this.iHash = hash.create();
@@ -4464,7 +4460,7 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
       return out;
     }
     _cloneInto(to) {
-      to || (to = Object.create(Object.getPrototypeOf(this), {}));
+      to ||= Object.create(Object.getPrototypeOf(this), {});
       const { oHash, iHash, finished, destroyed, blockLen, outputLen } = this;
       to = to;
       to.finished = finished;
@@ -4558,10 +4554,10 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/WriterUint8Array.js
   var WriterUint8Array = class {
+    buffer;
+    pos;
+    capacity;
     constructor(bufs, initialCapacity = 256) {
-      __publicField(this, "buffer");
-      __publicField(this, "pos");
-      __publicField(this, "capacity");
       if (bufs != null && bufs.length > 0) {
         const totalLength = bufs.reduce((sum, buf) => sum + buf.length, 0);
         initialCapacity = Math.max(initialCapacity, totalLength);
@@ -4720,10 +4716,19 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/ReaderUint8Array.js
   var ReaderUint8Array = class _ReaderUint8Array {
+    bin;
+    pos;
+    length;
+    static makeReader(bin, pos = 0) {
+      if (bin instanceof Uint8Array) {
+        return new _ReaderUint8Array(bin, pos);
+      }
+      if (Array.isArray(bin)) {
+        return new Reader(bin, pos);
+      }
+      throw new Error("ReaderUint8Array.makeReader: bin must be Uint8Array or number[]");
+    }
     constructor(bin = new Uint8Array(0), pos = 0) {
-      __publicField(this, "bin");
-      __publicField(this, "pos");
-      __publicField(this, "length");
       if (bin instanceof Uint8Array) {
         this.bin = bin;
       } else if (Array.isArray(bin)) {
@@ -4733,15 +4738,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
       }
       this.pos = pos;
       this.length = this.bin.length;
-    }
-    static makeReader(bin, pos = 0) {
-      if (bin instanceof Uint8Array) {
-        return new _ReaderUint8Array(bin, pos);
-      }
-      if (Array.isArray(bin)) {
-        return new Reader(bin, pos);
-      }
-      throw new Error("ReaderUint8Array.makeReader: bin must be Uint8Array or number[]");
     }
     eof() {
       return this.pos >= this.length;
@@ -5193,9 +5189,9 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     return { prefix, data };
   };
   var Writer = class _Writer {
+    bufs;
+    length;
     constructor(bufs) {
-      __publicField(this, "bufs");
-      __publicField(this, "length");
       this.bufs = bufs !== void 0 ? bufs : [];
       this.length = 0;
       for (const b of this.bufs)
@@ -5405,10 +5401,10 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     }
   };
   var Reader = class {
+    bin;
+    pos;
+    length;
     constructor(bin = [], pos = 0) {
-      __publicField(this, "bin");
-      __publicField(this, "pos");
-      __publicField(this, "length");
       this.bin = bin;
       this.pos = pos;
       this.length = bin.length;
@@ -5769,48 +5765,9 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     return modN(lm);
   };
   var Point = class _Point extends BasePoint {
-    /**
-     * @constructor
-     * @param x - The x-coordinate of the point. May be a number, a BigNumber, a string (which will be interpreted as hex), a number array, or null. If null, an "Infinity" point is constructed.
-     * @param y - The y-coordinate of the point, similar to x.
-     * @param isRed - A boolean indicating if the point is a member of the field of integers modulo the k256 prime. Default is true.
-     *
-     * @example
-     * new Point('abc123', 'def456');
-     * new Point(null, null); // Generates Infinity point.
-     */
-    constructor(x, y, isRed = true) {
-      super("affine");
-      __publicField(this, "x");
-      __publicField(this, "y");
-      __publicField(this, "inf");
-      this.precomputed = null;
-      if (x === null && y === null) {
-        this.x = null;
-        this.y = null;
-        this.inf = true;
-      } else {
-        if (!BigNumber.isBN(x)) {
-          x = new BigNumber(x, 16);
-        }
-        this.x = x;
-        if (!BigNumber.isBN(y)) {
-          y = new BigNumber(y, 16);
-        }
-        this.y = y;
-        if (isRed) {
-          this.x.forceRed(this.curve.red);
-          this.y.forceRed(this.curve.red);
-        }
-        if (this.x.red === null) {
-          this.x = this.x.toRed(this.curve.red);
-        }
-        if (this.y.red === null) {
-          this.y = this.y.toRed(this.curve.red);
-        }
-        this.inf = false;
-      }
-    }
+    x;
+    y;
+    inf;
     static _assertOnCurve(p) {
       if (!p.validate()) {
         throw new Error("Invalid point");
@@ -5945,6 +5902,45 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
         } : void 0
       };
       return res;
+    }
+    /**
+     * @constructor
+     * @param x - The x-coordinate of the point. May be a number, a BigNumber, a string (which will be interpreted as hex), a number array, or null. If null, an "Infinity" point is constructed.
+     * @param y - The y-coordinate of the point, similar to x.
+     * @param isRed - A boolean indicating if the point is a member of the field of integers modulo the k256 prime. Default is true.
+     *
+     * @example
+     * new Point('abc123', 'def456');
+     * new Point(null, null); // Generates Infinity point.
+     */
+    constructor(x, y, isRed = true) {
+      super("affine");
+      this.precomputed = null;
+      if (x === null && y === null) {
+        this.x = null;
+        this.y = null;
+        this.inf = true;
+      } else {
+        if (!BigNumber.isBN(x)) {
+          x = new BigNumber(x, 16);
+        }
+        this.x = x;
+        if (!BigNumber.isBN(y)) {
+          y = new BigNumber(y, 16);
+        }
+        this.y = y;
+        if (isRed) {
+          this.x.forceRed(this.curve.red);
+          this.y.forceRed(this.curve.red);
+        }
+        if (this.x.red === null) {
+          this.x = this.x.toRed(this.curve.red);
+        }
+        if (this.y.red === null) {
+          this.y = this.y.toRed(this.curve.red);
+        }
+        this.inf = false;
+      }
     }
     /**
      * Validates if a point belongs to the curve. Follows the short Weierstrass
@@ -6644,29 +6640,122 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
   // node_modules/@bsv/sdk/dist/esm/src/primitives/Curve.js
   var globalCurve;
   var Curve = class _Curve {
+    p;
+    red;
+    redN;
+    zero;
+    one;
+    two;
+    g;
+    n;
+    a;
+    b;
+    tinv;
+    zeroA;
+    threeA;
+    endo;
+    // beta, lambda, basis
+    _endoWnafT1;
+    _endoWnafT2;
+    _wnafT1;
+    _wnafT2;
+    _wnafT3;
+    _wnafT4;
+    _bitLength;
+    // Represent num in a w-NAF form
+    static assert(expression, message = "Elliptic curve assertion failed") {
+      if (!expression) {
+        throw new Error(message);
+      }
+    }
+    getNAF(num, w, bits) {
+      const naf = new Array(Math.max(num.bitLength(), bits) + 1);
+      naf.fill(0);
+      const ws = 1 << w + 1;
+      const k = num.clone();
+      for (let i = 0; i < naf.length; i++) {
+        let z;
+        const mod = k.andln(ws - 1);
+        if (k.isOdd()) {
+          if (mod > (ws >> 1) - 1) {
+            z = (ws >> 1) - mod;
+          } else {
+            z = mod;
+          }
+          k.isubn(z);
+        } else {
+          z = 0;
+        }
+        naf[i] = z;
+        k.iushrn(1);
+      }
+      return naf;
+    }
+    // Represent k1, k2 in a Joint Sparse Form
+    getJSF(k1, k2) {
+      const jsf = [[], []];
+      k1 = k1.clone();
+      k2 = k2.clone();
+      let d1 = 0;
+      let d2 = 0;
+      while (k1.cmpn(-d1) > 0 || k2.cmpn(-d2) > 0) {
+        let m14 = k1.andln(3) + d1 & 3;
+        let m24 = k2.andln(3) + d2 & 3;
+        if (m14 === 3) {
+          m14 = -1;
+        }
+        if (m24 === 3) {
+          m24 = -1;
+        }
+        let u1;
+        if ((m14 & 1) === 0) {
+          u1 = 0;
+        } else {
+          const m8 = k1.andln(7) + d1 & 7;
+          if ((m8 === 3 || m8 === 5) && m24 === 2) {
+            u1 = -m14;
+          } else {
+            u1 = m14;
+          }
+        }
+        jsf[0].push(u1);
+        let u2;
+        if ((m24 & 1) === 0) {
+          u2 = 0;
+        } else {
+          const m8 = k2.andln(7) + d2 & 7;
+          if ((m8 === 3 || m8 === 5) && m14 === 2) {
+            u2 = -m24;
+          } else {
+            u2 = m24;
+          }
+        }
+        jsf[1].push(u2);
+        if (2 * d1 === u1 + 1) {
+          d1 = 1 - d1;
+        }
+        if (2 * d2 === u2 + 1) {
+          d2 = 1 - d2;
+        }
+        k1.iushrn(1);
+        k2.iushrn(1);
+      }
+      return jsf;
+    }
+    static cachedProperty(obj, name, computer) {
+      const key = "_" + name;
+      obj.prototype[name] = function cachedProperty() {
+        const r2 = this[key] !== void 0 ? this[key] : this[key] = computer.call(this);
+        return r2;
+      };
+    }
+    static parseBytes(bytes2) {
+      return typeof bytes2 === "string" ? toArray2(bytes2, "hex") : bytes2;
+    }
+    static intFromLE(bytes2) {
+      return new BigNumber(bytes2, "hex", "le");
+    }
     constructor() {
-      __publicField(this, "p");
-      __publicField(this, "red");
-      __publicField(this, "redN");
-      __publicField(this, "zero");
-      __publicField(this, "one");
-      __publicField(this, "two");
-      __publicField(this, "g");
-      __publicField(this, "n");
-      __publicField(this, "a");
-      __publicField(this, "b");
-      __publicField(this, "tinv");
-      __publicField(this, "zeroA");
-      __publicField(this, "threeA");
-      __publicField(this, "endo");
-      // beta, lambda, basis
-      __publicField(this, "_endoWnafT1");
-      __publicField(this, "_endoWnafT2");
-      __publicField(this, "_wnafT1");
-      __publicField(this, "_wnafT2");
-      __publicField(this, "_wnafT3");
-      __publicField(this, "_wnafT4");
-      __publicField(this, "_bitLength");
       if (typeof globalCurve !== "undefined") {
         return globalCurve;
       } else {
@@ -7501,99 +7590,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
       this._endoWnafT1 = new Array(4);
       this._endoWnafT2 = new Array(4);
     }
-    // Represent num in a w-NAF form
-    static assert(expression, message = "Elliptic curve assertion failed") {
-      if (!expression) {
-        throw new Error(message);
-      }
-    }
-    getNAF(num, w, bits) {
-      const naf = new Array(Math.max(num.bitLength(), bits) + 1);
-      naf.fill(0);
-      const ws = 1 << w + 1;
-      const k = num.clone();
-      for (let i = 0; i < naf.length; i++) {
-        let z;
-        const mod = k.andln(ws - 1);
-        if (k.isOdd()) {
-          if (mod > (ws >> 1) - 1) {
-            z = (ws >> 1) - mod;
-          } else {
-            z = mod;
-          }
-          k.isubn(z);
-        } else {
-          z = 0;
-        }
-        naf[i] = z;
-        k.iushrn(1);
-      }
-      return naf;
-    }
-    // Represent k1, k2 in a Joint Sparse Form
-    getJSF(k1, k2) {
-      const jsf = [[], []];
-      k1 = k1.clone();
-      k2 = k2.clone();
-      let d1 = 0;
-      let d2 = 0;
-      while (k1.cmpn(-d1) > 0 || k2.cmpn(-d2) > 0) {
-        let m14 = k1.andln(3) + d1 & 3;
-        let m24 = k2.andln(3) + d2 & 3;
-        if (m14 === 3) {
-          m14 = -1;
-        }
-        if (m24 === 3) {
-          m24 = -1;
-        }
-        let u1;
-        if ((m14 & 1) === 0) {
-          u1 = 0;
-        } else {
-          const m8 = k1.andln(7) + d1 & 7;
-          if ((m8 === 3 || m8 === 5) && m24 === 2) {
-            u1 = -m14;
-          } else {
-            u1 = m14;
-          }
-        }
-        jsf[0].push(u1);
-        let u2;
-        if ((m24 & 1) === 0) {
-          u2 = 0;
-        } else {
-          const m8 = k2.andln(7) + d2 & 7;
-          if ((m8 === 3 || m8 === 5) && m14 === 2) {
-            u2 = -m24;
-          } else {
-            u2 = m24;
-          }
-        }
-        jsf[1].push(u2);
-        if (2 * d1 === u1 + 1) {
-          d1 = 1 - d1;
-        }
-        if (2 * d2 === u2 + 1) {
-          d2 = 1 - d2;
-        }
-        k1.iushrn(1);
-        k2.iushrn(1);
-      }
-      return jsf;
-    }
-    static cachedProperty(obj, name, computer) {
-      const key = "_" + name;
-      obj.prototype[name] = function cachedProperty() {
-        const r2 = this[key] !== void 0 ? this[key] : this[key] = computer.call(this);
-        return r2;
-      };
-    }
-    static parseBytes(bytes2) {
-      return typeof bytes2 === "string" ? toArray2(bytes2, "hex") : bytes2;
-    }
-    static intFromLE(bytes2) {
-      return new BigNumber(bytes2, "hex", "le");
-    }
     _getEndomorphism(conf) {
       if (!this.zeroA || this.p.modrn(3) !== 1) {
         return;
@@ -7761,29 +7757,13 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
   // node_modules/@bsv/sdk/dist/esm/src/primitives/Signature.js
   var Signature = class _Signature {
     /**
-     * Creates an instance of the Signature class.
-     *
-     * @constructor
-     * @param r - The R component of the signature.
-     * @param s - The S component of the signature.
-     *
-     * @example
-     * const r = new BigNumber('208755674028...');
-     * const s = new BigNumber('564745627577...');
-     * const signature = new Signature(r, s);
+     * @property Represents the "r" component of the digital signature
      */
-    constructor(r2, s2) {
-      /**
-       * @property Represents the "r" component of the digital signature
-       */
-      __publicField(this, "r");
-      /**
-       * @property Represents the "s" component of the digital signature
-       */
-      __publicField(this, "s");
-      this.r = r2;
-      this.s = s2;
-    }
+    r;
+    /**
+     * @property Represents the "s" component of the digital signature
+     */
+    s;
     /**
      * Takes an array of numbers or a string and returns a new Signature instance.
      * This method will throw an error if the DER encoding is invalid.
@@ -7808,8 +7788,8 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
         }
       };
       class Position {
+        place;
         constructor() {
-          __publicField(this, "place");
           this.place = 0;
         }
       }
@@ -7880,6 +7860,22 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
         throw new Error("Invalid Compact Byte");
       }
       return new _Signature(new BigNumber(data.slice(1, 33)), new BigNumber(data.slice(33, 65)));
+    }
+    /**
+     * Creates an instance of the Signature class.
+     *
+     * @constructor
+     * @param r - The R component of the signature.
+     * @param s - The S component of the signature.
+     *
+     * @example
+     * const r = new BigNumber('208755674028...');
+     * const s = new BigNumber('564745627577...');
+     * const signature = new Signature(r, s);
+     */
+    constructor(r2, s2) {
+      this.r = r2;
+      this.s = s2;
     }
     /**
      * Verifies a digital signature.
@@ -8083,99 +8079,7 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     }
   };
 
-  // node_modules/@bsv/sdk/dist/esm/src/primitives/DRBG.js
-  var DRBG = class {
-    constructor(entropy, nonce) {
-      __publicField(this, "K");
-      __publicField(this, "V");
-      const entropyBytes = toArray2(entropy, "hex");
-      const nonceBytes = toArray2(nonce, "hex");
-      if (entropyBytes.length !== 32) {
-        throw new Error("Entropy must be exactly 32 bytes (256 bits)");
-      }
-      if (nonceBytes.length !== 32) {
-        throw new Error("Nonce must be exactly 32 bytes (256 bits)");
-      }
-      const seedMaterial = entropyBytes.concat(nonceBytes);
-      this.K = new Array(32);
-      this.V = new Array(32);
-      for (let i = 0; i < 32; i++) {
-        this.K[i] = 0;
-        this.V[i] = 1;
-      }
-      this.update(seedMaterial);
-    }
-    /**
-     * Generates HMAC using the K value of the instance. This method is used internally for operations.
-     *
-     * @method hmac
-     * @returns The SHA256HMAC object created with K value.
-     *
-     * @example
-     * const hmac = drbg.hmac();
-     */
-    hmac() {
-      return new SHA256HMAC(this.K);
-    }
-    /**
-     * Updates the `K` and `V` values of the instance based on the seed.
-     * The seed if not provided uses `V` as seed.
-     *
-     * @method update
-     * @param seed - an optional value that used to update `K` and `V`. Default is `undefined`.
-     * @returns Nothing, but updates the internal state `K` and `V` value.
-     *
-     * @example
-     * drbg.update('e13af...');
-     */
-    update(seed) {
-      let kmac = this.hmac().update(this.V).update([0]);
-      if (seed !== void 0) {
-        kmac = kmac.update(seed);
-      }
-      this.K = kmac.digest();
-      this.V = this.hmac().update(this.V).digest();
-      if (seed === void 0) {
-        return;
-      }
-      this.K = this.hmac().update(this.V).update([1]).update(seed).digest();
-      this.V = this.hmac().update(this.V).digest();
-    }
-    /**
-     * Generates deterministic random hexadecimal string of given length.
-     * In every generation process, it also updates the internal state `K` and `V`.
-     *
-     * @method generate
-     * @param len - The length of required random number.
-     * @returns The required deterministic random hexadecimal string.
-     *
-     * @example
-     * const randomHex = drbg.generate(256);
-     */
-    generate(len) {
-      let temp = [];
-      while (temp.length < len) {
-        this.V = this.hmac().update(this.V).digest();
-        temp = temp.concat(this.V);
-      }
-      const res = temp.slice(0, len);
-      this.update();
-      return toHex(res);
-    }
-  };
-
   // node_modules/@bsv/sdk/dist/esm/src/primitives/ECDSA.js
-  function truncateToN(msg, truncOnly, curve2 = new Curve()) {
-    const delta = msg.byteLength() * 8 - curve2.n.bitLength();
-    if (delta > 0) {
-      msg.iushrn(delta);
-    }
-    if (truncOnly !== true && msg.cmp(curve2.n) >= 0) {
-      return msg.sub(curve2.n);
-    } else {
-      return msg;
-    }
-  }
   function bnToBigInt(bn) {
     const bytes2 = bn.toArray("be");
     let x = 0n;
@@ -8188,63 +8092,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
   var bytes = curve.n.byteLength();
   var ns1 = curve.n.subn(1);
   var halfN = N_BIGINT >> 1n;
-  var sign = (msg, key, forceLowS = false, customK) => {
-    const nBitLength = curve.n.bitLength();
-    if (msg.bitLength() > nBitLength) {
-      throw new Error(`ECDSA message is too large: expected <= ${nBitLength} bits. Callers must hash messages before signing.`);
-    }
-    msg = truncateToN(msg);
-    const msgBig = bnToBigInt(msg);
-    const keyBig = bnToBigInt(key);
-    const bkey = key.toArray("be", bytes);
-    const nonce = msg.toArray("be", bytes);
-    const drbg = new DRBG(bkey, nonce);
-    for (let iter = 0; ; iter++) {
-      let kBN = typeof customK === "function" ? customK(iter) : BigNumber.isBN(customK) ? customK : new BigNumber(drbg.generate(bytes), 16);
-      if (kBN == null) {
-        throw new Error("k is undefined");
-      }
-      kBN = truncateToN(kBN, true);
-      if (kBN.cmpn(1) < 0 || kBN.cmp(ns1) > 0) {
-        if (BigNumber.isBN(customK)) {
-          throw new Error("Invalid fixed custom K value (must be >1 and <N-1)");
-        }
-        continue;
-      }
-      const R2 = curve.g.mulCT(kBN);
-      if (R2.isInfinity()) {
-        if (BigNumber.isBN(customK)) {
-          throw new Error("Invalid fixed custom K value (k\xB7G at infinity)");
-        }
-        continue;
-      }
-      const xAff = BigInt("0x" + R2.getX().toString(16));
-      const rBig = modN(xAff);
-      if (rBig === 0n) {
-        if (BigNumber.isBN(customK)) {
-          throw new Error("Invalid fixed custom K value (r == 0)");
-        }
-        continue;
-      }
-      const kBig = BigInt("0x" + kBN.toString(16));
-      const kInv = modInvN(kBig);
-      const rTimesKey = modMulN(rBig, keyBig);
-      const sum = modN(msgBig + rTimesKey);
-      let sBig = modMulN(kInv, sum);
-      if (sBig === 0n) {
-        if (BigNumber.isBN(customK)) {
-          throw new Error("Invalid fixed custom K value (s == 0)");
-        }
-        continue;
-      }
-      if (forceLowS && sBig > halfN) {
-        sBig = N_BIGINT - sBig;
-      }
-      const r2 = new BigNumber(rBig.toString(16), 16);
-      const s2 = new BigNumber(sBig.toString(16), 16);
-      return new Signature(r2, s2);
-    }
-  };
   var verify = (msg, sig, key) => {
     const nBitLength = curve.n.bitLength();
     if (msg.bitLength() > nBitLength) {
@@ -8517,8 +8364,14 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/Random.js
   var Rand = class {
+    _rand;
+    // ✅ Explicit function type
+    getRandomValues(obj, n) {
+      const arr = new Uint8Array(n);
+      obj.crypto.getRandomValues(arr);
+      return Array.from(arr);
+    }
     constructor() {
-      __publicField(this, "_rand");
       const noRand = () => {
         throw new Error("No secure random number generator is available in this environment.");
       };
@@ -8555,12 +8408,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
       }
       this._rand = noRand;
     }
-    // ✅ Explicit function type
-    getRandomValues(obj, n) {
-      const arr = new Uint8Array(n);
-      obj.crypto.getRandomValues(arr);
-      return Array.from(arr);
-    }
     generate(len) {
       return this._rand(len);
     }
@@ -8571,519 +8418,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
       ayn = new Rand();
     }
     return ayn.generate(len);
-  };
-
-  // node_modules/@bsv/sdk/dist/esm/src/primitives/Polynomial.js
-  var PointInFiniteField = class _PointInFiniteField {
-    constructor(x, y) {
-      __publicField(this, "x");
-      __publicField(this, "y");
-      const P2 = new Curve().p;
-      this.x = x.umod(P2);
-      this.y = y.umod(P2);
-    }
-    toString() {
-      return toBase58(this.x.toArray()) + "." + toBase58(this.y.toArray());
-    }
-    static fromString(str) {
-      const [x, y] = str.split(".");
-      return new _PointInFiniteField(new BigNumber(fromBase58(x)), new BigNumber(fromBase58(y)));
-    }
-  };
-  var Polynomial = class _Polynomial {
-    constructor(points, threshold) {
-      __publicField(this, "points");
-      __publicField(this, "threshold");
-      this.points = points;
-      this.threshold = threshold ?? points.length;
-    }
-    static fromPrivateKey(key, threshold) {
-      const P2 = new Curve().p;
-      const points = [
-        new PointInFiniteField(new BigNumber(0), new BigNumber(key.toArray()))
-      ];
-      for (let i = 1; i < threshold; i++) {
-        const randomX = new BigNumber(Random_default(32)).umod(P2);
-        const randomY = new BigNumber(Random_default(32)).umod(P2);
-        points.push(new PointInFiniteField(randomX, randomY));
-      }
-      return new _Polynomial(points);
-    }
-    // Evaluate the polynomial at x by using Lagrange interpolation
-    valueAt(x) {
-      const P2 = new Curve().p;
-      let y = new BigNumber(0);
-      for (let i = 0; i < this.threshold; i++) {
-        let term = this.points[i].y;
-        for (let j = 0; j < this.threshold; j++) {
-          if (i !== j) {
-            const xj = this.points[j].x;
-            const xi = this.points[i].x;
-            const numerator = x.sub(xj).umod(P2);
-            const denominator = xi.sub(xj).umod(P2);
-            const denominatorInverse = denominator.invm(P2);
-            const fraction = numerator.mul(denominatorInverse).umod(P2);
-            term = term.mul(fraction).umod(P2);
-          }
-        }
-        y = y.add(term).umod(P2);
-      }
-      return y;
-    }
-  };
-
-  // node_modules/@bsv/sdk/dist/esm/src/primitives/PrivateKey.js
-  var KeyShares = class _KeyShares {
-    constructor(points, threshold, integrity) {
-      __publicField(this, "points");
-      __publicField(this, "threshold");
-      __publicField(this, "integrity");
-      this.points = points;
-      this.threshold = threshold;
-      this.integrity = integrity;
-    }
-    static fromBackupFormat(shares) {
-      let threshold = 0;
-      let integrity = "";
-      const points = shares.map((share, idx) => {
-        const shareParts = share.split(".");
-        if (shareParts.length !== 4) {
-          throw new Error("Invalid share format in share " + idx.toString() + '. Expected format: "x.y.t.i" - received ' + share);
-        }
-        const [x, y, t, i] = shareParts;
-        if (t === void 0)
-          throw new Error("Threshold not found in share " + idx.toString());
-        if (i === void 0)
-          throw new Error("Integrity not found in share " + idx.toString());
-        const tInt = parseInt(t);
-        if (idx !== 0 && threshold !== tInt) {
-          throw new Error("Threshold mismatch in share " + idx.toString());
-        }
-        if (idx !== 0 && integrity !== i) {
-          throw new Error("Integrity mismatch in share " + idx.toString());
-        }
-        threshold = tInt;
-        integrity = i;
-        return PointInFiniteField.fromString([x, y].join("."));
-      });
-      return new _KeyShares(points, threshold, integrity);
-    }
-    toBackupFormat() {
-      return this.points.map((share) => share.toString() + "." + this.threshold.toString() + "." + this.integrity);
-    }
-  };
-  var PrivateKey = class _PrivateKey extends BigNumber {
-    /**
-     * Generates a private key randomly.
-     *
-     * @method fromRandom
-     * @static
-     * @returns The newly generated Private Key.
-     *
-     * @example
-     * const privateKey = PrivateKey.fromRandom();
-     */
-    static fromRandom() {
-      return new _PrivateKey(Random_default(32));
-    }
-    /**
-     * Generates a private key from a string.
-     *
-     * @method fromString
-     * @static
-     * @param str - The string to generate the private key from.
-     * @param base - The base of the string.
-     * @returns The generated Private Key.
-     * @throws Will throw an error if the string is not valid.
-     **/
-    static fromString(str, base = "hex") {
-      return new _PrivateKey(super.fromString(str, base).toArray());
-    }
-    /**
-     * Generates a private key from a hexadecimal string.
-     *
-     * @method fromHex
-     * @static
-     * @param {string} str - The hexadecimal string representing the private key. The string must represent a valid private key in big-endian format.
-     * @returns {PrivateKey} The generated Private Key instance.
-     * @throws {Error} If the string is not a valid hexadecimal or represents an invalid private key.
-     **/
-    static fromHex(str) {
-      return new _PrivateKey(super.fromHex(str, "big"));
-    }
-    /**
-     * Generates a private key from a WIF (Wallet Import Format) string.
-     *
-     * @method fromWif
-     * @static
-     * @param wif - The WIF string to generate the private key from.
-     * @param base - The base of the string.
-     * @returns The generated Private Key.
-     * @throws Will throw an error if the string is not a valid WIF.
-     **/
-    static fromWif(wif, prefixLength = 1) {
-      const decoded = fromBase58Check(wif, void 0, prefixLength);
-      if (decoded.data.length !== 33) {
-        throw new Error("Invalid WIF length");
-      }
-      if (decoded.data[32] !== 1) {
-        throw new Error("Invalid WIF padding");
-      }
-      return new _PrivateKey(decoded.data.slice(0, 32));
-    }
-    /**
-     * @constructor
-     *
-     * @param number - The number (various types accepted) to construct a BigNumber from. Default is 0.
-     *
-     * @param base - The base of number provided. By default is 10. Ignored if number is BigNumber.
-     *
-     * @param endian - The endianness provided. By default is 'big endian'. Ignored if number is BigNumber.
-     *
-     * @param modN - Optional. Default 'apply. If 'apply', apply modN to input to guarantee a valid PrivateKey. If 'error', if input is out of field throw new Error('Input is out of field'). If 'nocheck', assumes input is in field.
-     *
-     * @example
-     * import PrivateKey from './PrivateKey';
-     * import BigNumber from './BigNumber';
-     * const privKey = new PrivateKey(new BigNumber('123456', 10, 'be'));
-     */
-    constructor(number = 0, base = 10, endian = "be", modN2 = "apply") {
-      if (number instanceof BigNumber) {
-        super();
-        number.copy(this);
-      } else {
-        super(number, base, endian);
-      }
-      if (modN2 !== "nocheck") {
-        const check = this.checkInField();
-        if (!check.inField) {
-          if (modN2 === "error") {
-            throw new Error("Input is out of field");
-          }
-          BigNumber.move(this, check.modN);
-        }
-      }
-    }
-    /**
-     * A utility function to check that the value of this PrivateKey lies in the field limited by curve.n
-     * @returns { inField, modN } where modN is this PrivateKey's current BigNumber value mod curve.n, and inField is true only if modN equals current BigNumber value.
-     */
-    checkInField() {
-      const curve2 = new Curve();
-      const modN2 = this.mod(curve2.n);
-      const inField = this.cmp(modN2) === 0;
-      return { inField, modN: modN2 };
-    }
-    /**
-     * @returns true if the PrivateKey's current BigNumber value lies in the field limited by curve.n
-     */
-    isValid() {
-      return this.checkInField().inField;
-    }
-    /**
-     * Signs a message using the private key.
-     *
-     * @method sign
-     * @param msg - The message (array of numbers or string) to be signed.
-     * @param enc - If 'hex' the string will be treated as hex, utf8 otherwise.
-     * @param forceLowS - If true (the default), the signature will be forced to have a low S value.
-     * @param customK — If provided, uses a custom K-value for the signature. Provie a function that returns a BigNumber, or the BigNumber itself.
-     * @returns A digital signature generated from the hash of the message and the private key.
-     *
-     * @example
-     * const privateKey = PrivateKey.fromRandom();
-     * const signature = privateKey.sign('Hello, World!');
-     */
-    sign(msg, enc, forceLowS = true, customK) {
-      const msgHash = new BigNumber(sha256(msg, enc), 16);
-      return sign(msgHash, this, forceLowS, customK);
-    }
-    /**
-     * Verifies a message's signature using the public key associated with this private key.
-     *
-     * @method verify
-     * @param msg - The original message which has been signed.
-     * @param sig - The signature to be verified.
-     * @param enc - The data encoding method.
-     * @returns Whether or not the signature is valid.
-     *
-     * @example
-     * const privateKey = PrivateKey.fromRandom();
-     * const signature = privateKey.sign('Hello, World!');
-     * const isSignatureValid = privateKey.verify('Hello, World!', signature);
-     */
-    verify(msg, sig, enc) {
-      const msgHash = new BigNumber(sha256(msg, enc), 16);
-      return verify(msgHash, sig, this.toPublicKey());
-    }
-    /**
-     * Converts the private key to its corresponding public key.
-     *
-     * The public key is generated by multiplying the base point G of the curve and the private key.
-     *
-     * @method toPublicKey
-     * @returns The generated PublicKey.
-     *
-     * @example
-     * const privateKey = PrivateKey.fromRandom();
-     * const publicKey = privateKey.toPublicKey();
-     */
-    toPublicKey() {
-      const c = new Curve();
-      const p = c.g.mulCT(this);
-      return new PublicKey(p.x, p.y);
-    }
-    /**
-     * Converts the private key to a Wallet Import Format (WIF) string.
-     *
-     * Base58Check encoding is used for encoding the private key.
-     * The prefix
-     *
-     * @method toWif
-     * @returns The WIF string.
-     *
-     * @param prefix defaults to [0x80] for mainnet, set it to [0xef] for testnet.
-     *
-     * @throws Error('Value is out of field') if current BigNumber value is out of field limited by curve.n
-     *
-     * @example
-     * const privateKey = PrivateKey.fromRandom();
-     * const wif = privateKey.toWif();
-     * const testnetWif = privateKey.toWif([0xef]);
-     */
-    toWif(prefix = [128]) {
-      if (!this.isValid()) {
-        throw new Error("Value is out of field");
-      }
-      return toBase58Check([...this.toArray("be", 32), 1], prefix);
-    }
-    /**
-     * Base58Check encodes the hash of the public key associated with this private key with a prefix to indicate locking script type.
-     * Defaults to P2PKH for mainnet, otherwise known as a "Bitcoin Address".
-     *
-     * @param prefix defaults to [0x00] for mainnet, set to [0x6f] for testnet or use the strings 'testnet' or 'mainnet'
-     *
-     * @returns Returns the address encoding associated with the hash of the public key associated with this private key.
-     *
-     * @example
-     * const address = privkey.toAddress()
-     * const address = privkey.toAddress('mainnet')
-     * const testnetAddress = privkey.toAddress([0x6f])
-     * const testnetAddress = privkey.toAddress('testnet')
-     */
-    toAddress(prefix = [0]) {
-      return this.toPublicKey().toAddress(prefix);
-    }
-    /**
-     * Converts this PrivateKey to a hexadecimal string.
-     *
-     * @method toHex
-     * @param length - The minimum length of the hex string
-     * @returns Returns a string representing the hexadecimal value of this BigNumber.
-     *
-     * @example
-     * const bigNumber = new BigNumber(255);
-     * const hex = bigNumber.toHex();
-     */
-    toHex() {
-      return super.toHex(32);
-    }
-    /**
-     * Converts this PrivateKey to a string representation.
-     *
-     * @method toString
-     * @param {number | 'hex'} [base='hex'] - The base for representing the number. Default is hexadecimal ('hex').
-     * @param {number} [padding=64] - The minimum number of digits for the output string. Default is 64, ensuring a 256-bit representation in hexadecimal.
-     * @returns {string} A string representation of the PrivateKey in the specified base, padded to the specified length.
-     *
-     **/
-    toString(base = "hex", padding = 64) {
-      return super.toString(base, padding);
-    }
-    /**
-     * Derives a shared secret from the public key.
-     *
-     * @method deriveSharedSecret
-     * @param key - The public key to derive the shared secret from.
-     * @returns The derived shared secret (a point on the curve).
-     * @throws Will throw an error if the public key is not valid.
-     *
-     * @example
-     * const privateKey = PrivateKey.fromRandom();
-     * const publicKey = privateKey.toPublicKey();
-     * const sharedSecret = privateKey.deriveSharedSecret(publicKey);
-     */
-    deriveSharedSecret(key) {
-      if (!key.validate()) {
-        throw new Error("Public key not valid for ECDH secret derivation");
-      }
-      return key.mulCT(this);
-    }
-    /**
-     * SECURITY NOTE – DETERMINISTIC CHILD KEY DERIVATION
-     *
-     * This method derives child private keys deterministically from the caller’s
-     * long-term private key, the counterparty’s public key, and a caller-supplied
-     * invoice number using HMAC over an ECDH shared secret (BRC-42 style derivation).
-     *
-     * This construction does NOT implement a formally authenticated key exchange
-     * (AKE) and does NOT provide the following security properties:
-     *
-     *  - Forward secrecy: Compromise of a long-term private key compromises all
-     *    past and future child keys derived from it.
-     *  - Replay protection: Child keys are deterministic for a given invoice
-     *    number and key pair; previously observed messages can be replayed.
-     *  - Explicit authentication / identity binding: Possession of a public key
-     *    alone does not guarantee the intended peer identity, enabling potential
-     *    identity misbinding attacks if higher-level identity verification is absent.
-     *
-     * This derivation is intended for lightweight, deterministic key hierarchies
-     * where both parties already possess and trust each other’s long-term public
-     * keys. It SHOULD NOT be used as a drop-in replacement for a standard
-     * authenticated key exchange (e.g. X3DH, Noise, or SIGMA) in high-security or
-     * high-value contexts.
-     *
-     * Any future protocol providing forward secrecy, replay protection, or strong
-     * peer authentication will require a versioned, breaking change.
-     */
-    /**
-     * Derives a child key with BRC-42.
-     * @param publicKey The public key of the other party
-     * @param invoiceNumber The invoice number used to derive the child key
-     * @param cacheSharedSecret Optional function to cache shared secrets
-     * @param retrieveCachedSharedSecret Optional function to retrieve shared secrets from the cache
-     * @returns The derived child key.
-     */
-    deriveChild(publicKey, invoiceNumber, cacheSharedSecret, retrieveCachedSharedSecret) {
-      let sharedSecret;
-      if (typeof retrieveCachedSharedSecret === "function") {
-        const retrieved = retrieveCachedSharedSecret(this, publicKey);
-        if (typeof retrieved !== "undefined") {
-          sharedSecret = retrieved;
-        } else {
-          sharedSecret = this.deriveSharedSecret(publicKey);
-          if (typeof cacheSharedSecret === "function") {
-            cacheSharedSecret(this, publicKey, sharedSecret);
-          }
-        }
-      } else {
-        sharedSecret = this.deriveSharedSecret(publicKey);
-      }
-      const invoiceNumberBin = toArray2(invoiceNumber, "utf8");
-      const hmac2 = sha256hmac(sharedSecret.encode(true), invoiceNumberBin);
-      const curve2 = new Curve();
-      return new _PrivateKey(this.add(new BigNumber(hmac2)).mod(curve2.n).toArray());
-    }
-    /**
-     * Splits the private key into shares using Shamir's Secret Sharing Scheme.
-     *
-     * @param threshold The minimum number of shares required to reconstruct the private key.
-     * @param totalShares The total number of shares to generate.
-     * @param prime The prime number to be used in Shamir's Secret Sharing Scheme.
-     * @returns An array of shares.
-     *
-     * @example
-     * const key = PrivateKey.fromRandom()
-     * const shares = key.toKeyShares(2, 5)
-     */
-    toKeyShares(threshold, totalShares) {
-      if (typeof threshold !== "number" || typeof totalShares !== "number") {
-        throw new Error("threshold and totalShares must be numbers");
-      }
-      if (threshold < 2)
-        throw new Error("threshold must be at least 2");
-      if (totalShares < 2)
-        throw new Error("totalShares must be at least 2");
-      if (threshold > totalShares) {
-        throw new Error("threshold should be less than or equal to totalShares");
-      }
-      const poly = Polynomial.fromPrivateKey(this, threshold);
-      const points = [];
-      const usedXCoordinates = /* @__PURE__ */ new Set();
-      const curve2 = new Curve();
-      const seed = Random_default(64);
-      for (let i = 0; i < totalShares; i++) {
-        let x;
-        let attempts = 0;
-        do {
-          const counter = [i, attempts, ...Random_default(32)];
-          const h = sha512hmac(seed, counter);
-          x = new BigNumber(h).umod(curve2.p);
-          attempts++;
-          if (attempts > 5) {
-            throw new Error("Failed to generate unique x coordinate after 5 attempts");
-          }
-        } while (x.isZero() || usedXCoordinates.has(x.toString()));
-        usedXCoordinates.add(x.toString());
-        const y = poly.valueAt(x);
-        points.push(new PointInFiniteField(x, y));
-      }
-      const integrity = this.toPublicKey().toHash("hex").slice(0, 8);
-      return new KeyShares(points, threshold, integrity);
-    }
-    /**
-     * @method toBackupShares
-     *
-     * Creates a backup of the private key by splitting it into shares.
-     *
-     *
-     * @param threshold The number of shares which will be required to reconstruct the private key.
-     * @param totalShares The number of shares to generate for distribution.
-     * @returns
-     */
-    toBackupShares(threshold, totalShares) {
-      return this.toKeyShares(threshold, totalShares).toBackupFormat();
-    }
-    /**
-     *
-     * @method fromBackupShares
-     *
-     * Creates a private key from backup shares.
-     *
-     * @param shares
-     * @returns PrivateKey
-     *
-     * @example
-     *
-     * const share1 = '3znuzt7DZp8HzZTfTh5MF9YQKNX3oSxTbSYmSRGrH2ev.2Nm17qoocmoAhBTCs8TEBxNXCskV9N41rB2PckcgYeqV.2.35449bb9'
-     * const share2 = 'Cm5fuUc39X5xgdedao8Pr1kvCSm8Gk7Cfenc7xUKcfLX.2juyK9BxCWn2DiY5JUAgj9NsQ77cc9bWksFyW45haXZm.2.35449bb9'
-     *
-     * const recoveredKey = PrivateKey.fromBackupShares([share1, share2])
-     */
-    static fromBackupShares(shares) {
-      return _PrivateKey.fromKeyShares(KeyShares.fromBackupFormat(shares));
-    }
-    /**
-     * Combines shares to reconstruct the private key.
-     *
-     * @param shares An array of points (shares) to be used to reconstruct the private key.
-     * @param threshold The minimum number of shares required to reconstruct the private key.
-     *
-     * @returns The reconstructed private key.
-     *
-     **/
-    static fromKeyShares(keyShares) {
-      const { points, threshold, integrity } = keyShares;
-      if (threshold < 2)
-        throw new Error("threshold must be at least 2");
-      if (points.length < threshold) {
-        throw new Error(`At least ${threshold} shares are required to reconstruct the private key`);
-      }
-      for (let i = 0; i < threshold; i++) {
-        for (let j = i + 1; j < threshold; j++) {
-          if (points[i].x.eq(points[j].x)) {
-            throw new Error("Duplicate share detected, each must be unique.");
-          }
-        }
-      }
-      const poly = new Polynomial(points, threshold);
-      const privateKey = new _PrivateKey(poly.valueAt(new BigNumber(0)).toArray());
-      const integrityHash = privateKey.toPublicKey().toHash("hex").slice(0, 8);
-      if (integrityHash !== integrity) {
-        throw new Error("Integrity hash mismatch");
-      }
-      return privateKey;
-    }
   };
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/AESGCM.js
@@ -9373,12 +8707,13 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/TransactionSignature.js
   var EMPTY_SCRIPT = new Uint8Array(0);
-  var _TransactionSignature = class _TransactionSignature extends Signature {
-    constructor(r2, s2, scope) {
-      super(r2, s2);
-      __publicField(this, "scope");
-      this.scope = scope;
-    }
+  var TransactionSignature = class _TransactionSignature extends Signature {
+    static SIGHASH_ALL = 1;
+    static SIGHASH_NONE = 2;
+    static SIGHASH_SINGLE = 3;
+    static SIGHASH_FORKID = 64;
+    static SIGHASH_ANYONECANPAY = 128;
+    scope;
     /**
      * Formats the SIGHASH preimage for the targeted input, optionally using a cache to skip recomputing shared hash prefixes.
      * @param params - Context for the signing input plus transaction metadata.
@@ -9521,6 +8856,10 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
       const tempSig = Signature.fromDER(derbuf);
       return new _TransactionSignature(tempSig.r, tempSig.s, scope);
     }
+    constructor(r2, s2, scope) {
+      super(r2, s2);
+      this.scope = scope;
+    }
     /**
      * Compares to bitcoind's IsLowDERSignature
      * See also Ecdsa signature algorithm which enforces this.
@@ -9537,12 +8876,6 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
       return [...derbuf, this.scope];
     }
   };
-  __publicField(_TransactionSignature, "SIGHASH_ALL", 1);
-  __publicField(_TransactionSignature, "SIGHASH_NONE", 2);
-  __publicField(_TransactionSignature, "SIGHASH_SINGLE", 3);
-  __publicField(_TransactionSignature, "SIGHASH_FORKID", 64);
-  __publicField(_TransactionSignature, "SIGHASH_ANYONECANPAY", 128);
-  var TransactionSignature = _TransactionSignature;
 
   // node_modules/@bsv/sdk/dist/esm/src/primitives/Secp256r1.js
   var P = BigInt("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
@@ -9762,24 +9095,10 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
   // node_modules/@bsv/sdk/dist/esm/src/script/Script.js
   var BufferCtor3 = typeof globalThis !== "undefined" ? globalThis.Buffer : void 0;
   var Script = class _Script {
-    /**
-     * @constructor
-     * Constructs a new Script object.
-     * @param chunks=[] - An array of script chunks to directly initialize the script.
-     * @param rawBytesCache - Optional serialized bytes that can be reused instead of reserializing `chunks`.
-     * @param hexCache - Optional lowercase hex string that matches the serialized bytes, used to satisfy `toHex` quickly.
-     * @param parsed - When false the script defers parsing `rawBytesCache` until `chunks` is accessed; defaults to true.
-     */
-    constructor(chunks = [], rawBytesCache, hexCache, parsed = true) {
-      __publicField(this, "_chunks");
-      __publicField(this, "parsed");
-      __publicField(this, "rawBytesCache");
-      __publicField(this, "hexCache");
-      this._chunks = chunks;
-      this.parsed = parsed;
-      this.rawBytesCache = rawBytesCache;
-      this.hexCache = hexCache;
-    }
+    _chunks;
+    parsed;
+    rawBytesCache;
+    hexCache;
     /**
      * @method fromASM
      * Static method to construct a Script instance from an ASM (Assembly) formatted string.
@@ -9883,6 +9202,20 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
     static fromBinary(bin) {
       const rawBytes = Uint8Array.from(bin);
       return new _Script([], rawBytes, void 0, false);
+    }
+    /**
+     * @constructor
+     * Constructs a new Script object.
+     * @param chunks=[] - An array of script chunks to directly initialize the script.
+     * @param rawBytesCache - Optional serialized bytes that can be reused instead of reserializing `chunks`.
+     * @param hexCache - Optional lowercase hex string that matches the serialized bytes, used to satisfy `toHex` quickly.
+     * @param parsed - When false the script defers parsing `rawBytesCache` until `chunks` is accessed; defaults to true.
+     */
+    constructor(chunks = [], rawBytesCache, hexCache, parsed = true) {
+      this._chunks = chunks;
+      this.parsed = parsed;
+      this.rawBytesCache = rawBytesCache;
+      this.hexCache = hexCache;
     }
     get chunks() {
       this.ensureParsed();
@@ -10315,6 +9648,15 @@ window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 10:06 UTC";docu
 
   // node_modules/@bsv/sdk/dist/esm/src/script/ScriptEvaluationError.js
   var ScriptEvaluationError = class extends Error {
+    txid;
+    outputIndex;
+    context;
+    programCounter;
+    stackState;
+    altStackState;
+    ifStackState;
+    stackMem;
+    altStackMem;
     constructor(params) {
       const stackHex = params.stackState.map((s2) => s2 != null && typeof s2.length !== "undefined" ? toHex(s2) : s2 === null || s2 === void 0 ? "null/undef" : "INVALID_STACK_ITEM").join(", ");
       const altStackHex = params.altStackState.map((s2) => s2 != null && typeof s2.length !== "undefined" ? toHex(s2) : s2 === null || s2 === void 0 ? "null/undef" : "INVALID_STACK_ITEM").join(", ");
@@ -10329,15 +9671,6 @@ ${stackInfo}
 ${altStackInfo}
 ${ifStackInfo}`;
       super(fullMessage);
-      __publicField(this, "txid");
-      __publicField(this, "outputIndex");
-      __publicField(this, "context");
-      __publicField(this, "programCounter");
-      __publicField(this, "stackState");
-      __publicField(this, "altStackState");
-      __publicField(this, "ifStackState");
-      __publicField(this, "stackMem");
-      __publicField(this, "altStackMem");
       this.name = this.constructor.name;
       this.txid = params.txid;
       this.outputIndex = params.outputIndex;
@@ -10441,6 +9774,27 @@ ${ifStackInfo}`;
     return true;
   }
   var Spend = class {
+    sourceTXID;
+    sourceOutputIndex;
+    sourceSatoshis;
+    lockingScript;
+    transactionVersion;
+    otherInputs;
+    outputs;
+    inputIndex;
+    unlockingScript;
+    inputSequence;
+    lockTime;
+    context;
+    programCounter;
+    lastCodeSeparator;
+    stack;
+    altStack;
+    ifStack;
+    memoryLimit;
+    stackMem;
+    altStackMem;
+    sigHashCache;
     /**
      * @constructor
      * Constructs the Spend object with necessary transaction details.
@@ -10474,27 +9828,6 @@ ${ifStackInfo}`;
      * });
      */
     constructor(params) {
-      __publicField(this, "sourceTXID");
-      __publicField(this, "sourceOutputIndex");
-      __publicField(this, "sourceSatoshis");
-      __publicField(this, "lockingScript");
-      __publicField(this, "transactionVersion");
-      __publicField(this, "otherInputs");
-      __publicField(this, "outputs");
-      __publicField(this, "inputIndex");
-      __publicField(this, "unlockingScript");
-      __publicField(this, "inputSequence");
-      __publicField(this, "lockTime");
-      __publicField(this, "context");
-      __publicField(this, "programCounter");
-      __publicField(this, "lastCodeSeparator");
-      __publicField(this, "stack");
-      __publicField(this, "altStack");
-      __publicField(this, "ifStack");
-      __publicField(this, "memoryLimit");
-      __publicField(this, "stackMem");
-      __publicField(this, "altStackMem");
-      __publicField(this, "sigHashCache");
       this.sourceTXID = params.sourceTXID;
       this.sourceOutputIndex = params.sourceOutputIndex;
       this.sourceSatoshis = params.sourceSatoshis;
@@ -11554,11 +10887,11 @@ ${ifStackInfo}`;
           if (sourceTXID === "") {
             throw new Error("The input sourceTXID or sourceTransaction is required for transaction signing.");
           }
-          sourceSatoshis || (sourceSatoshis = input.sourceTransaction?.outputs[input.sourceOutputIndex].satoshis);
+          sourceSatoshis ||= input.sourceTransaction?.outputs[input.sourceOutputIndex].satoshis;
           if (sourceSatoshis == null || sourceSatoshis === void 0) {
             throw new Error("The sourceSatoshis or input sourceTransaction is required for transaction signing.");
           }
-          lockingScript || (lockingScript = input.sourceTransaction?.outputs[input.sourceOutputIndex].lockingScript);
+          lockingScript ||= input.sourceTransaction?.outputs[input.sourceOutputIndex].lockingScript;
           if (lockingScript == null) {
             throw new Error("The lockingScript or input sourceTransaction is required for transaction signing.");
           }
@@ -11594,16 +10927,16 @@ ${ifStackInfo}`;
   // node_modules/@bsv/sdk/dist/esm/src/transaction/fee-models/SatoshisPerKilobyte.js
   var SatoshisPerKilobyte = class {
     /**
+     * @property
+     * Denotes the number of satoshis paid per kilobyte of transaction size.
+     */
+    value;
+    /**
      * Constructs an instance of the sat/kb fee model.
      *
      * @param {number} value - The number of satoshis per kilobyte to charge as a fee.
      */
     constructor(value) {
-      /**
-       * @property
-       * Denotes the number of satoshis paid per kilobyte of transaction size.
-       */
-      __publicField(this, "value");
       this.value = value;
     }
     /**
@@ -11654,7 +10987,12 @@ ${ifStackInfo}`;
   };
 
   // node_modules/@bsv/sdk/dist/esm/src/transaction/fee-models/LivePolicy.js
-  var _LivePolicy = class _LivePolicy extends SatoshisPerKilobyte {
+  var LivePolicy = class _LivePolicy extends SatoshisPerKilobyte {
+    static ARC_POLICY_URL = "https://arc.gorillapool.io/v1/policy";
+    static instance = null;
+    cachedRate = null;
+    cacheTimestamp = 0;
+    cacheValidityMs;
     /**
      * Constructs an instance of the live policy fee model.
      *
@@ -11662,9 +11000,6 @@ ${ifStackInfo}`;
      */
     constructor(cacheValidityMs = 5 * 60 * 1e3) {
       super(100);
-      __publicField(this, "cachedRate", null);
-      __publicField(this, "cacheTimestamp", 0);
-      __publicField(this, "cacheValidityMs");
       this.cacheValidityMs = cacheValidityMs;
     }
     /**
@@ -11724,14 +11059,11 @@ ${ifStackInfo}`;
       return super.computeFee(tx);
     }
   };
-  __publicField(_LivePolicy, "ARC_POLICY_URL", "https://arc.gorillapool.io/v1/policy");
-  __publicField(_LivePolicy, "instance", null);
-  var LivePolicy = _LivePolicy;
 
   // node_modules/@bsv/sdk/dist/esm/src/transaction/http/NodejsHttpClient.js
   var NodejsHttpClient = class {
+    https;
     constructor(https) {
-      __publicField(this, "https");
       this.https = https;
     }
     async request(url, requestOptions) {
@@ -11766,8 +11098,8 @@ ${ifStackInfo}`;
 
   // node_modules/@bsv/sdk/dist/esm/src/transaction/http/FetchHttpClient.js
   var FetchHttpClient = class {
+    fetch;
     constructor(fetch2) {
-      __publicField(this, "fetch");
       this.fetch = fetch2;
     }
     async request(url, options) {
@@ -11814,14 +11146,14 @@ ${ifStackInfo}`;
     return `ts-sdk-${toHex(Random_default(16))}`;
   }
   var ARC = class {
+    URL;
+    apiKey;
+    deploymentId;
+    callbackUrl;
+    callbackToken;
+    headers;
+    httpClient;
     constructor(URL2, config) {
-      __publicField(this, "URL");
-      __publicField(this, "apiKey");
-      __publicField(this, "deploymentId");
-      __publicField(this, "callbackUrl");
-      __publicField(this, "callbackToken");
-      __publicField(this, "headers");
-      __publicField(this, "httpClient");
       this.URL = URL2;
       if (typeof config === "string") {
         this.apiKey = config;
@@ -11998,6 +11330,10 @@ ${ifStackInfo}`;
 
   // node_modules/@bsv/sdk/dist/esm/src/transaction/chaintrackers/WhatsOnChain.js
   var WhatsOnChain = class {
+    network;
+    apiKey;
+    URL;
+    httpClient;
     /**
      * Constructs an instance of the WhatsOnChain ChainTracker.
      *
@@ -12005,10 +11341,6 @@ ${ifStackInfo}`;
      * @param {WhatsOnChainConfig} config - Configuration options for the WhatsOnChain ChainTracker.
      */
     constructor(network = "main", config = {}) {
-      __publicField(this, "network");
-      __publicField(this, "apiKey");
-      __publicField(this, "URL");
-      __publicField(this, "httpClient");
       const { apiKey, httpClient } = config;
       this.network = network;
       this.URL = `https://api.whatsonchain.com/v1/bsv/${network}`;
@@ -12064,44 +11396,8 @@ ${ifStackInfo}`;
 
   // node_modules/@bsv/sdk/dist/esm/src/transaction/MerklePath.js
   var MerklePath = class _MerklePath {
-    constructor(blockHeight, path, legalOffsetsOnly = true) {
-      __publicField(this, "blockHeight");
-      __publicField(this, "path");
-      this.blockHeight = blockHeight;
-      this.path = path;
-      const legalOffsets = Array(this.path.length).fill(0).map(() => /* @__PURE__ */ new Set());
-      this.path.forEach((leaves, height) => {
-        if (leaves.length === 0 && height === 0) {
-          throw new Error(`Empty level at height: ${height}`);
-        }
-        const offsetsAtThisHeight = /* @__PURE__ */ new Set();
-        leaves.forEach((leaf) => {
-          if (offsetsAtThisHeight.has(leaf.offset)) {
-            throw new Error(`Duplicate offset: ${leaf.offset}, at height: ${height}`);
-          }
-          offsetsAtThisHeight.add(leaf.offset);
-          if (height === 0) {
-            if (leaf.duplicate !== true) {
-              for (let h = 1; h < this.path.length; h++) {
-                legalOffsets[h].add(leaf.offset >> h ^ 1);
-              }
-            }
-          } else {
-            if (legalOffsetsOnly && !legalOffsets[height].has(leaf.offset)) {
-              throw new Error(`Invalid offset: ${leaf.offset}, at height: ${height}, with legal offsets: ${Array.from(legalOffsets[height]).join(", ")}`);
-            }
-          }
-        });
-      });
-      let root;
-      this.path[0].forEach((leaf, idx) => {
-        if (idx === 0)
-          root = this.computeRoot(leaf.hash);
-        if (root !== this.computeRoot(leaf.hash)) {
-          throw new Error("Mismatched roots");
-        }
-      });
-    }
+    blockHeight;
+    path;
     /**
      * Creates a MerklePath instance from a hexadecimal string.
      *
@@ -12165,6 +11461,42 @@ ${ifStackInfo}`;
      */
     static fromCoinbaseTxidAndHeight(txid, height) {
       return new _MerklePath(height, [[{ offset: 0, hash: txid, txid: true }]]);
+    }
+    constructor(blockHeight, path, legalOffsetsOnly = true) {
+      this.blockHeight = blockHeight;
+      this.path = path;
+      const legalOffsets = Array(this.path.length).fill(0).map(() => /* @__PURE__ */ new Set());
+      this.path.forEach((leaves, height) => {
+        if (leaves.length === 0 && height === 0) {
+          throw new Error(`Empty level at height: ${height}`);
+        }
+        const offsetsAtThisHeight = /* @__PURE__ */ new Set();
+        leaves.forEach((leaf) => {
+          if (offsetsAtThisHeight.has(leaf.offset)) {
+            throw new Error(`Duplicate offset: ${leaf.offset}, at height: ${height}`);
+          }
+          offsetsAtThisHeight.add(leaf.offset);
+          if (height === 0) {
+            if (leaf.duplicate !== true) {
+              for (let h = 1; h < this.path.length; h++) {
+                legalOffsets[h].add(leaf.offset >> h ^ 1);
+              }
+            }
+          } else {
+            if (legalOffsetsOnly && !legalOffsets[height].has(leaf.offset)) {
+              throw new Error(`Invalid offset: ${leaf.offset}, at height: ${height}, with legal offsets: ${Array.from(legalOffsets[height]).join(", ")}`);
+            }
+          }
+        });
+      });
+      let root;
+      this.path[0].forEach((leaf, idx) => {
+        if (idx === 0)
+          root = this.computeRoot(leaf.hash);
+        if (root !== this.computeRoot(leaf.hash)) {
+          throw new Error("Mismatched roots");
+        }
+      });
     }
     /**
      * Serializes the MerklePath to the writer provided.
@@ -12416,37 +11748,18 @@ ${ifStackInfo}`;
 
   // node_modules/@bsv/sdk/dist/esm/src/transaction/BeefTx.js
   var BeefTx = class _BeefTx {
+    _bumpIndex;
+    _tx;
+    _rawTx;
+    // ← changed to Uint8Array internally
+    _txid;
+    inputTxids = [];
     /**
-     * @param tx If string, must be a valid txid. If `number[]` must be a valid serialized transaction.
-     * @param bumpIndex If transaction already has a proof in the beef to which it will be added.
+     * true if `hasProof` or all inputs chain to `hasProof`.
+     *
+     * Typically set by sorting transactions by proven dependency chains.
      */
-    constructor(tx, bumpIndex) {
-      __publicField(this, "_bumpIndex");
-      __publicField(this, "_tx");
-      __publicField(this, "_rawTx");
-      // ← changed to Uint8Array internally
-      __publicField(this, "_txid");
-      __publicField(this, "inputTxids", []);
-      /**
-       * true if `hasProof` or all inputs chain to `hasProof`.
-       *
-       * Typically set by sorting transactions by proven dependency chains.
-       */
-      __publicField(this, "isValid");
-      if (typeof tx === "string") {
-        this._txid = tx;
-      } else if (tx instanceof Uint8Array) {
-        this._rawTx = tx;
-      } else if (Array.isArray(tx)) {
-        this._rawTx = new Uint8Array(tx);
-      } else if (tx instanceof Transaction) {
-        this._tx = tx;
-      } else {
-        throw new Error("Invalid transaction data type");
-      }
-      this.bumpIndex = bumpIndex;
-      this.updateInputTxids();
-    }
+    isValid = void 0;
     get bumpIndex() {
       return this._bumpIndex;
     }
@@ -12507,6 +11820,25 @@ ${ifStackInfo}`;
         return this._rawTx;
       }
       return void 0;
+    }
+    /**
+     * @param tx If string, must be a valid txid. If `number[]` must be a valid serialized transaction.
+     * @param bumpIndex If transaction already has a proof in the beef to which it will be added.
+     */
+    constructor(tx, bumpIndex) {
+      if (typeof tx === "string") {
+        this._txid = tx;
+      } else if (tx instanceof Uint8Array) {
+        this._rawTx = tx;
+      } else if (Array.isArray(tx)) {
+        this._rawTx = new Uint8Array(tx);
+      } else if (tx instanceof Transaction) {
+        this._tx = tx;
+      } else {
+        throw new Error("Invalid transaction data type");
+      }
+      this.bumpIndex = bumpIndex;
+      this.updateInputTxids();
     }
     static fromTx(tx, bumpIndex) {
       return new _BeefTx(tx, bumpIndex);
@@ -12607,15 +11939,15 @@ ${ifStackInfo}`;
     TX_DATA_FORMAT2[TX_DATA_FORMAT2["TXID_ONLY"] = 2] = "TXID_ONLY";
   })(TX_DATA_FORMAT || (TX_DATA_FORMAT = {}));
   var Beef = class _Beef {
+    bumps = [];
+    txs = [];
+    version = BEEF_V2;
+    atomicTxid = void 0;
+    txidIndex = void 0;
+    rawBytesCache;
+    hexCache;
+    needsSort = true;
     constructor(version = BEEF_V2) {
-      __publicField(this, "bumps", []);
-      __publicField(this, "txs", []);
-      __publicField(this, "version", BEEF_V2);
-      __publicField(this, "atomicTxid");
-      __publicField(this, "txidIndex");
-      __publicField(this, "rawBytesCache");
-      __publicField(this, "hexCache");
-      __publicField(this, "needsSort", true);
       this.version = version;
     }
     invalidateSerializationCaches() {
@@ -13391,23 +12723,15 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
 
   // node_modules/@bsv/sdk/dist/esm/src/transaction/Transaction.js
   var Transaction = class _Transaction {
-    constructor(version = 1, inputs = [], outputs = [], lockTime = 0, metadata = /* @__PURE__ */ new Map(), merklePath) {
-      __publicField(this, "version");
-      __publicField(this, "inputs");
-      __publicField(this, "outputs");
-      __publicField(this, "lockTime");
-      __publicField(this, "metadata");
-      __publicField(this, "merklePath");
-      __publicField(this, "cachedHash");
-      __publicField(this, "rawBytesCache");
-      __publicField(this, "hexCache");
-      this.version = version;
-      this.inputs = inputs;
-      this.outputs = outputs;
-      this.lockTime = lockTime;
-      this.metadata = metadata;
-      this.merklePath = merklePath;
-    }
+    version;
+    inputs;
+    outputs;
+    lockTime;
+    metadata;
+    merklePath;
+    cachedHash;
+    rawBytesCache;
+    hexCache;
     // Recursive function for adding merkle proofs or input transactions
     static addPathOrInputs(obj, transactions, BUMPs) {
       if (typeof obj.pathIndex === "number") {
@@ -13652,6 +12976,14 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
      */
     static fromHexBEEF(hex, txid) {
       return _Transaction.fromBEEF(toArray2(hex, "hex"), txid);
+    }
+    constructor(version = 1, inputs = [], outputs = [], lockTime = 0, metadata = /* @__PURE__ */ new Map(), merklePath) {
+      this.version = version;
+      this.inputs = inputs;
+      this.outputs = outputs;
+      this.lockTime = lockTime;
+      this.metadata = metadata;
+      this.merklePath = merklePath;
     }
     invalidateSerializationCaches() {
       this.cachedHash = void 0;
@@ -14519,11 +13851,11 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
   var FAILURE_BACKOFF_GRACE = 2;
   var STORAGE_KEY = "bsvsdk_overlay_host_reputation_v1";
   var HostReputationTracker = class {
-    constructor(store2) {
-      __publicField(this, "stats");
-      __publicField(this, "store");
+    stats;
+    store;
+    constructor(store) {
       this.stats = /* @__PURE__ */ new Map();
-      this.store = store2 ?? this.getLocalStorageAdapter();
+      this.store = store ?? this.getLocalStorageAdapter();
       this.loadFromStorage();
     }
     reset() {
@@ -14705,254 +14037,6 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
 
   // node_modules/@bsv/sdk/dist/esm/src/overlay-tools/LookupResolver.js
   var defaultFetch2 = typeof globalThis !== "undefined" && typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : fetch;
-
-  // src/token_protocol/walletProvider.ts
-  var WOC_BASE = typeof location !== "undefined" && location.hostname === "localhost" ? "/woc/v1/bsv/main" : "https://api.whatsonchain.com/v1/bsv/main";
-  var MIN_REQUEST_DELAY = 600;
-  var RATE_LIMIT_BACKOFF = 3e3;
-  var fetchStack = [];
-  var fetchProcessing = false;
-  async function processStack() {
-    if (fetchProcessing) return;
-    fetchProcessing = true;
-    while (fetchStack.length > 0) {
-      const entry = fetchStack.pop();
-      let delay = MIN_REQUEST_DELAY;
-      try {
-        const resp = await fetch(entry.url, entry.init);
-        if (resp.status === 429) {
-          console.warn(`[queuedFetch] 429 rate limit hit \u2014 backing off ${RATE_LIMIT_BACKOFF}ms`);
-          delay = RATE_LIMIT_BACKOFF;
-        }
-        entry.resolve(resp);
-      } catch (err) {
-        entry.reject(err);
-      }
-      await new Promise((r2) => setTimeout(r2, delay));
-    }
-    fetchProcessing = false;
-  }
-  function queuedFetch(url, init2) {
-    return new Promise((resolve, reject) => {
-      fetchStack.push({ url, init: init2, resolve, reject });
-      processStack();
-    });
-  }
-  var WalletProvider = class {
-    // key: "txId:outputIndex"
-    constructor(address) {
-      __publicField(this, "address");
-      __publicField(this, "txCache", /* @__PURE__ */ new Map());
-      /**
-       * v05.22: Local pending UTXO tracking for consecutive transfers.
-       *
-       * When we broadcast a TX, the change output won't appear in WoC's UTXO list
-       * until the TX is confirmed. This prevents consecutive fragment transfers
-       * because the second transfer can't find funding UTXOs.
-       *
-       * Solution: Track pending UTXOs locally and combine with confirmed UTXOs.
-       */
-      __publicField(this, "pendingUtxos", /* @__PURE__ */ new Map());
-      // key: "txId:outputIndex"
-      __publicField(this, "spentOutpoints", /* @__PURE__ */ new Set());
-      this.address = address;
-    }
-    getAddress() {
-      return this.address;
-    }
-    // ── Wallet Operations (UTXO model) ─────────────────────────────
-    /**
-     * Get UTXOs combining confirmed (from WoC) with local pending UTXOs.
-     *
-     * v05.22: Enables consecutive transfers by including unconfirmed change
-     * outputs and excluding locally-spent outpoints.
-     */
-    async getUtxos() {
-      const address = this.getAddress();
-      const resp = await queuedFetch(`${WOC_BASE}/address/${address}/unspent`);
-      if (!resp.ok) throw new Error(`WoC UTXO fetch failed: ${resp.status}`);
-      const data = await resp.json();
-      const confirmed = Array.isArray(data) ? data.map((u) => ({
-        txId: u.tx_hash,
-        outputIndex: u.tx_pos,
-        satoshis: u.value,
-        script: ""
-      })) : [];
-      const filtered = confirmed.filter((u) => {
-        const key = `${u.txId}:${u.outputIndex}`;
-        return !this.spentOutpoints.has(key);
-      });
-      for (const u of confirmed) {
-        const key = `${u.txId}:${u.outputIndex}`;
-        if (this.pendingUtxos.has(key)) {
-          this.pendingUtxos.delete(key);
-          console.debug(`getUtxos: Pending UTXO ${key.slice(0, 16)}... now confirmed`);
-        }
-      }
-      const pending = Array.from(this.pendingUtxos.values());
-      const combined = [...filtered, ...pending];
-      console.debug(`getUtxos: ${confirmed.length} confirmed, ${this.spentOutpoints.size} spent locally, ${pending.length} pending = ${combined.length} available`);
-      return combined;
-    }
-    /**
-     * Register a pending transaction for local UTXO tracking.
-     *
-     * Call this after broadcasting a TX to enable consecutive transfers
-     * before the TX is confirmed.
-     *
-     * @param txId - The broadcast transaction ID
-     * @param spentInputs - Outpoints consumed by this TX [{txId, outputIndex}]
-     * @param changeOutput - Change output created by this TX (if any)
-     */
-    registerPendingTx(txId, spentInputs, changeOutput) {
-      for (const input of spentInputs) {
-        const key = `${input.txId}:${input.outputIndex}`;
-        this.spentOutpoints.add(key);
-        this.pendingUtxos.delete(key);
-      }
-      if (changeOutput && changeOutput.satoshis > 0) {
-        const key = `${txId}:${changeOutput.outputIndex}`;
-        this.pendingUtxos.set(key, {
-          txId,
-          outputIndex: changeOutput.outputIndex,
-          satoshis: changeOutput.satoshis,
-          script: ""
-        });
-        console.debug(`registerPendingTx: Added pending UTXO ${key.slice(0, 16)}... (${changeOutput.satoshis} sats)`);
-      }
-      console.debug(`registerPendingTx: TX ${txId.slice(0, 12)}... spent ${spentInputs.length} inputs, pending UTXOs: ${this.pendingUtxos.size}`);
-    }
-    /**
-     * Clear spent outpoints for a confirmed transaction.
-     *
-     * Call this when a pending TX is confirmed to clean up tracking state.
-     * Note: Pending UTXOs are auto-cleaned in getUtxos() when they appear confirmed.
-     */
-    clearConfirmedSpends(spentInputs) {
-      for (const input of spentInputs) {
-        const key = `${input.txId}:${input.outputIndex}`;
-        this.spentOutpoints.delete(key);
-      }
-    }
-    async getBalance() {
-      const utxos = await this.getUtxos();
-      return utxos.reduce((sum, u) => sum + u.satoshis, 0);
-    }
-    // ── Broadcasting ──────────────────────────────────────────────
-    async broadcast(rawHex) {
-      const resp = await queuedFetch(`${WOC_BASE}/tx/raw`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ txhex: rawHex })
-      });
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`Broadcast failed (${resp.status}): ${text}`);
-      }
-      const txId = await resp.text();
-      return txId.replace(/"/g, "");
-    }
-    // ── Raw Transactions ──────────────────────────────────────────
-    async getRawTransaction(txId) {
-      const cached = this.txCache.get(txId);
-      if (cached) return cached;
-      const resp = await queuedFetch(`${WOC_BASE}/tx/${txId}/hex`);
-      if (!resp.ok) throw new Error(`WoC raw TX fetch failed: ${resp.status}`);
-      const hex = await resp.text();
-      this.txCache.set(txId, hex);
-      return hex;
-    }
-    async getSourceTransaction(txId) {
-      const hex = await this.getRawTransaction(txId);
-      return Transaction.fromHex(hex);
-    }
-    // ── Block Headers (feeds into SPV verification) ───────────────
-    async getBlockHeader(height) {
-      const hashResp = await queuedFetch(`${WOC_BASE}/block/height/${height}`);
-      if (!hashResp.ok) throw new Error(`WoC block height fetch failed: ${hashResp.status}`);
-      const hashBody = await hashResp.text();
-      let blockHash;
-      try {
-        const parsed = JSON.parse(hashBody);
-        blockHash = typeof parsed === "string" ? parsed : parsed.hash;
-      } catch {
-        blockHash = hashBody.replace(/"/g, "");
-      }
-      try {
-        const parsed = JSON.parse(hashBody);
-        if (typeof parsed === "object" && parsed.merkleroot) {
-          return {
-            height,
-            merkleRoot: parsed.merkleroot,
-            hash: parsed.hash,
-            timestamp: parsed.time,
-            prevHash: parsed.previousblockhash
-          };
-        }
-      } catch {
-      }
-      const headerResp = await queuedFetch(`${WOC_BASE}/block/${blockHash}/header`);
-      if (!headerResp.ok) throw new Error(`WoC block header fetch failed: ${headerResp.status}`);
-      const hdr = await headerResp.json();
-      return {
-        height,
-        merkleRoot: hdr.merkleroot,
-        hash: hdr.hash,
-        timestamp: hdr.time,
-        prevHash: hdr.previousblockhash
-      };
-    }
-    // ── Address History ───────────────────────────────────────────
-    async getAddressHistory() {
-      const address = this.getAddress();
-      const resp = await queuedFetch(`${WOC_BASE}/address/${address}/history`);
-      if (!resp.ok) throw new Error(`WoC history fetch failed: ${resp.status}`);
-      const data = await resp.json();
-      if (!Array.isArray(data)) return [];
-      return data.map((entry) => ({
-        txId: entry.tx_hash,
-        blockHeight: entry.height ?? 0
-      }));
-    }
-    // ── Merkle Proofs (feeds into proof chain construction) ───────
-    async getMerkleProof(txId) {
-      const resp = await queuedFetch(`${WOC_BASE}/tx/${txId}/proof/tsc`);
-      if (!resp.ok) {
-        console.debug(`getMerkleProof: WoC returned ${resp.status} for ${txId.slice(0, 12)}...`);
-        return null;
-      }
-      const raw = await resp.json();
-      console.debug("getMerkleProof: raw response:", JSON.stringify(raw).slice(0, 200));
-      const data = Array.isArray(raw) ? raw[0] : raw;
-      if (!data || !data.target) {
-        console.debug("getMerkleProof: no target in proof data:", data);
-        return null;
-      }
-      const nodes = data.nodes ?? [];
-      const index = data.index ?? 0;
-      const path = [];
-      let idx = index;
-      for (const node of nodes) {
-        if (node === "*") {
-          idx = idx >> 1;
-          continue;
-        }
-        const position = idx % 2 === 0 ? "R" : "L";
-        path.push({ hash: node, position });
-        idx = idx >> 1;
-      }
-      const blockHash = data.target;
-      const headerResp = await queuedFetch(`${WOC_BASE}/block/${blockHash}/header`);
-      if (!headerResp.ok) return null;
-      const header = await headerResp.json();
-      return {
-        txId,
-        blockHeight: header.height,
-        merkleRoot: header.merkleroot,
-        path
-      };
-    }
-  };
 
   // src/token_protocol/tokenProtocol.ts
   function hexToBytes(hex) {
@@ -15273,12 +14357,12 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
   function decodeTokenRules(rulesHex) {
     const bytes2 = hexToBytes2(rulesHex);
     const view = new DataView(new Uint8Array(bytes2).buffer);
-    const restrictions = bytes2.length >= 6 ? view.getUint16(4, true) : 0;
+    const restrictions = view.getUint16(4, true);
     return {
       supply: view.getUint16(0, true),
       divisibility: view.getUint16(2, true),
       restrictions,
-      version: bytes2.length >= 8 ? view.getUint16(6, true) : 0,
+      version: view.getUint16(6, true),
       isFungible: (restrictions & RESTRICTION_FUNGIBLE) !== 0
     };
   }
@@ -15290,16 +14374,15 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
   var BYTES_PER_P2PKH_OUTPUT = 34;
   var TX_OVERHEAD = 10;
   var TokenBuilder = class {
-    constructor(provider2, store2, key) {
-      this.provider = provider2;
-      this.store = store2;
-      __publicField(this, "feePerKb", DEFAULT_FEE_PER_KB);
-      __publicField(this, "key");
-      __publicField(this, "myAddress");
-      __publicField(this, "autoImportAttempted", /* @__PURE__ */ new Set());
+    constructor(provider, store, key) {
+      this.provider = provider;
+      this.store = store;
       this.key = key;
       this.myAddress = key.toAddress();
     }
+    feePerKb = DEFAULT_FEE_PER_KB;
+    key;
+    myAddress;
     // ── Token UTXO Protection ───────────────────────────────────────
     /**
      * Build a set of "txId:outputIndex" keys for UTXOs currently holding
@@ -15330,16 +14413,13 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
      * For any quarantined 1-sat UTXOs that contain P OP_RETURN data
      * addressed to this wallet, we auto-import them into the token store.
      */
-    async getSafeUtxos(skipImport = false) {
+    async getSafeUtxos() {
       const utxos = await this.provider.getUtxos();
       const safe = [];
-      for (let i = utxos.length - 1; i >= 0; i--) {
-        const u = utxos[i];
+      for (const u of utxos) {
         if (u.satoshis <= TOKEN_SATS) {
-          if (!skipImport) {
-            this.tryAutoImport(u).catch(() => {
-            });
-          }
+          this.tryAutoImport(u).catch(() => {
+          });
           continue;
         }
         safe.push(u);
@@ -15502,12 +14582,6 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
      */
     async tryAutoImport(u) {
       const utxoKey = `${u.txId}:${u.outputIndex}`;
-      if (this.autoImportAttempted.has(utxoKey)) return;
-      this.autoImportAttempted.add(utxoKey);
-      if (this.autoImportAttempted.size > 1e3) {
-        const oldest = this.autoImportAttempted.values().next().value;
-        this.autoImportAttempted.delete(oldest);
-      }
       const tokenKeys = await this.getTokenUtxoKeys();
       if (tokenKeys.has(utxoKey)) return;
       const tx = await this.provider.getSourceTransaction(u.txId);
@@ -16371,10 +15445,7 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
               continue;
             }
             const existing = await this.store.getToken(tokenId);
-            if (existing && existing.status === "active") {
-              console.debug(`[tokenBuilder] Skipping token ${tokenId.slice(0, 12)}... (existing with status=active)`);
-              continue;
-            }
+            if (existing && existing.status === "active") continue;
             if (existing && existing.status === "pending" && !isUnconfirmedTx) {
               existing.status = "active";
               await this.store.updateToken(existing);
@@ -16383,59 +15454,11 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
             }
             if (existing && existing.status === "pending") continue;
             if (existing && (existing.status === "transferred" || existing.status === "pending_transfer")) {
-              console.log(`[tokenBuilder] \u2713 RETURN-TO-SENDER path: ${opData.tokenName}, status=${existing.status}`);
               existing.status = "active";
               existing.currentTxId = txId;
               existing.currentOutputIndex = p2pkhOutputIndex;
               existing.transferTxId = void 0;
               existing.stateData = opData.stateData;
-              console.debug(`[tokenBuilder] isCALL=${opData.tokenName?.startsWith("CALL-")}`);
-              if (opData.tokenName?.startsWith("CALL-")) {
-                console.log(`[tokenBuilder] \u{1F4DE} CALL token (RETURNED) detected: ${opData.tokenName}, extracting addresses`);
-                console.debug(`[tokenBuilder] Return-to-sender: existing token has caller=${existing.caller?.slice(0, 20)}, callee=${existing.callee?.slice(0, 20)}`);
-                try {
-                  const calleeOutput = tx.outputs[p2pkhOutputIndex];
-                  console.debug(`[tokenBuilder] calleeOutput exists=${!!calleeOutput}, hasLockingScript=${!!calleeOutput?.lockingScript}`);
-                  if (calleeOutput?.lockingScript) {
-                    const calleeAddrScript = calleeOutput.lockingScript.toHex();
-                    console.debug(`[tokenBuilder] calleeAddrScript=${calleeAddrScript}`);
-                    const calleeAddr = extractAddressFromP2pkhScript(calleeAddrScript);
-                    console.debug(`[tokenBuilder] extractAddressFromP2pkhScript returned: ${calleeAddr}`);
-                    if (calleeAddr) {
-                      existing.callee = calleeAddr;
-                      console.log(`[tokenBuilder] \u2705 CALLEE (RETURNED) extracted: ${calleeAddr}`);
-                    } else {
-                      console.warn(`[tokenBuilder] \u26A0\uFE0F CALLEE extraction failed (returned null)`);
-                    }
-                  } else {
-                    console.warn(`[tokenBuilder] \u26A0\uFE0F calleeOutput or lockingScript missing at index ${p2pkhOutputIndex}`);
-                  }
-                  console.debug(`[tokenBuilder] tx.inputs?.length=${tx.inputs?.length}`);
-                  if (tx.inputs?.length > 0) {
-                    let callerAddr = extractCallerFromSPVEnvelope(tx.inputs[0]);
-                    console.debug(`[tokenBuilder] extractCallerFromSPVEnvelope returned: ${callerAddr}`);
-                    if (!callerAddr) {
-                      console.debug(`[tokenBuilder] SPV envelope failed, trying blockchain method...`);
-                      callerAddr = await extractCallerFromBlockchain(this.provider, tx.inputs[0]);
-                      console.debug(`[tokenBuilder] extractCallerFromBlockchain returned: ${callerAddr}`);
-                    }
-                    if (callerAddr) {
-                      existing.caller = callerAddr;
-                      console.log(`[tokenBuilder] \u2705 CALLER (RETURNED) extracted: ${callerAddr}`);
-                    } else {
-                      console.warn(`[tokenBuilder] \u26A0\uFE0F CALLER extraction failed (both methods returned null)`);
-                    }
-                  } else {
-                    console.warn(`[tokenBuilder] \u26A0\uFE0F No inputs in transaction (tx.inputs empty)`);
-                  }
-                  console.log(`[tokenBuilder] \u2705 CALL token address extraction complete:`, {
-                    caller: existing.caller?.slice(0, 20),
-                    callee: existing.callee?.slice(0, 20)
-                  });
-                } catch (e) {
-                  console.error(`[tokenBuilder] \u274C Error extracting CALL token addresses (returned): ${e?.message}`);
-                }
-              }
               await this.store.updateToken(existing);
               await this.store.addToken(existing, verification.chain);
               imported.push(existing);
@@ -16710,71 +15733,6 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
       return verifyProofChainAsync(chain, async (height) => {
         return this.provider.getBlockHeader(height);
       });
-    }
-    // ── Call Signal TX ────────────────────────────────────────────
-    /**
-     * Build and broadcast a single-TX call signal using the P OP_RETURN format.
-     * No genesis+transfer; the signal goes directly to recipientAddress in one TX.
-     *
-     * TX structure:
-     *   Output 0: OP_RETURN (0 sats) — P v03 format with call/answer data
-     *   Output 1: P2PKH 1-sat → recipientAddress (WoC address history indexing)
-     *   Output 2: P2PKH change → caller
-     *
-     * @param tokenName       "CALL-{ident}" or "ANS-{ident}"
-     * @param restrictions    16-char hex tokenRules (8 bytes, standard P protocol format)
-     * @param tokenAttributes binary hex from encodeCallAttributes()
-     * @param recipientAddress callee (CALL) or caller (ANS) BSV address
-     * @param feePerKb        sat/KB fee rate (default 1.1 — ephemeral signals)
-     * @param stateData       hex-encoded SDP or other payload (default empty)
-     */
-    async createCallSignalTx(tokenName, restrictions, tokenAttributes, recipientAddress, feePerKb = 1.1, stateData = "") {
-      const utxos = await this.getSafeUtxos(true);
-      if (utxos.length === 0) {
-        throw new Error("No spendable UTXOs. Fund your wallet address first.");
-      }
-      const opReturnScript = encodeOpReturn({
-        tokenName,
-        tokenScript: "",
-        tokenRules: restrictions,
-        tokenAttributes,
-        stateData: stateData || ""
-      });
-      const opReturnBytes = opReturnScript.toBinary();
-      const opReturnVarInt = opReturnBytes.length < 253 ? 1 : 3;
-      const opReturnOutputSize = 8 + opReturnVarInt + opReturnBytes.length;
-      const estSize = TX_OVERHEAD + BYTES_PER_INPUT + opReturnOutputSize + 2 * BYTES_PER_P2PKH_OUTPUT;
-      const fee = Math.ceil(estSize * feePerKb / 1e3);
-      const sorted = [...utxos].sort((a, b) => a.satoshis - b.satoshis);
-      const utxo = sorted.find((u) => u.satoshis >= TOKEN_SATS + fee);
-      if (!utxo) {
-        const best = sorted[sorted.length - 1];
-        throw new Error(
-          `Insufficient funds: need ${TOKEN_SATS + fee} sats, best UTXO has ${best?.satoshis ?? 0} sats.`
-        );
-      }
-      const sourceTx = await this.provider.getSourceTransaction(utxo.txId);
-      const tx = new Transaction();
-      tx.addInput({
-        sourceTransaction: sourceTx,
-        sourceOutputIndex: utxo.outputIndex,
-        unlockingScriptTemplate: new P2PKH().unlock(this.key)
-      });
-      tx.addOutput({ lockingScript: opReturnScript, satoshis: 0 });
-      tx.addOutput({ lockingScript: new P2PKH().lock(recipientAddress), satoshis: TOKEN_SATS });
-      const changeAmount = utxo.satoshis - TOKEN_SATS - fee;
-      if (changeAmount > 0) {
-        tx.addOutput({ lockingScript: new P2PKH().lock(this.myAddress), satoshis: changeAmount });
-      }
-      await tx.sign();
-      const txId = tx.id("hex");
-      await this.provider.broadcast(tx.toHex());
-      this.provider.registerPendingTx(
-        txId,
-        [{ txId: utxo.txId, outputIndex: utxo.outputIndex }],
-        changeAmount > 0 ? { outputIndex: 2, satoshis: changeAmount } : void 0
-      );
-      return { txId };
     }
     // ── Transaction Building (wallet internals) ───────────────────
     async buildFundedTx(utxos, changeAddress, addOutputs) {
@@ -17149,11 +16107,11 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
     }
     return null;
   }
-  async function extractCallerFromBlockchain(provider2, input) {
+  async function extractCallerFromBlockchain(provider, input) {
     try {
       if (!input.sourceTXID || input.sourceOutputIndex === void 0) return null;
       console.debug(`[tokenBuilder] \u{1F310} [Method 2] Querying blockchain for prev TX: ${input.sourceTXID.slice(0, 12)}...`);
-      const prevTx = await provider2.getSourceTransaction(input.sourceTXID);
+      const prevTx = await provider.getSourceTransaction(input.sourceTXID);
       if (prevTx.outputs?.[input.sourceOutputIndex]) {
         const prevOutput = prevTx.outputs[input.sourceOutputIndex];
         if (prevOutput.lockingScript) {
@@ -17170,9483 +16128,4 @@ ${t.inputTxids.map((it) => `      '${it}'`).join(",\n")}
     }
     return null;
   }
-
-  // src/token_protocol/tokenStore.ts
-  var LocalStorageBackend = class {
-    constructor(prefix = "p:") {
-      __publicField(this, "prefix");
-      this.prefix = prefix;
-    }
-    async get(key) {
-      return localStorage.getItem(this.prefix + key);
-    }
-    async set(key, value) {
-      localStorage.setItem(this.prefix + key, value);
-    }
-    async delete(key) {
-      localStorage.removeItem(this.prefix + key);
-    }
-    async keys() {
-      return Object.keys(localStorage).filter((k) => k.startsWith(this.prefix)).map((k) => k.slice(this.prefix.length));
-    }
-  };
-  var TOKEN_KEY = "token:";
-  var PROOF_KEY = "proof:";
-  var FUNGIBLE_KEY = "fungible:";
-  var TokenStore = class {
-    constructor(storage) {
-      this.storage = storage;
-    }
-    /** Store token and its proof chain separately but with matching keys for consistent lookups. */
-    async addToken(token, proofChain) {
-      await this.storage.set(TOKEN_KEY + token.tokenId, JSON.stringify(token));
-      await this.storage.set(PROOF_KEY + token.tokenId, JSON.stringify(proofChain));
-    }
-    async getToken(tokenId) {
-      const data = await this.storage.get(TOKEN_KEY + tokenId);
-      if (!data) return null;
-      const token = JSON.parse(data);
-      if (!token.status) token.status = "active";
-      if (token.status === "pending") {
-        token.status = "active";
-        token.confirmationStatus = "unconfirmed";
-      }
-      return token;
-    }
-    async getProofChain(tokenId) {
-      const data = await this.storage.get(PROOF_KEY + tokenId);
-      return data ? JSON.parse(data) : null;
-    }
-    async updateToken(token) {
-      await this.storage.set(TOKEN_KEY + token.tokenId, JSON.stringify(token));
-    }
-    async removeToken(tokenId) {
-      await this.storage.delete(TOKEN_KEY + tokenId);
-      await this.storage.delete(PROOF_KEY + tokenId);
-    }
-    async listTokens() {
-      const allKeys = await this.storage.keys();
-      const tokens = [];
-      for (const key of allKeys) {
-        if (key.startsWith(TOKEN_KEY)) {
-          const data = await this.storage.get(key);
-          if (data) {
-            const token = JSON.parse(data);
-            if (!token.status) token.status = "active";
-            if (token.status === "pending") {
-              token.status = "active";
-              token.confirmationStatus = "unconfirmed";
-            }
-            tokens.push(token);
-          }
-        }
-      }
-      return tokens;
-    }
-    async findToken(idOrTxId) {
-      const direct = await this.getToken(idOrTxId);
-      if (direct) return direct;
-      const all = await this.listTokens();
-      return all.find(
-        (t) => t.genesisTxId === idOrTxId || t.currentTxId === idOrTxId
-      ) ?? null;
-    }
-    // ─── Fungible Token Methods ──────────────────────────────────────
-    async addFungibleToken(token, proofChain) {
-      await this.storage.set(FUNGIBLE_KEY + token.tokenId, JSON.stringify(token));
-      await this.storage.set(PROOF_KEY + token.tokenId, JSON.stringify(proofChain));
-    }
-    async getFungibleToken(tokenId) {
-      const data = await this.storage.get(FUNGIBLE_KEY + tokenId);
-      return data ? JSON.parse(data) : null;
-    }
-    async updateFungibleToken(token) {
-      await this.storage.set(FUNGIBLE_KEY + token.tokenId, JSON.stringify(token));
-    }
-    async listFungibleTokens() {
-      const allKeys = await this.storage.keys();
-      const tokens = [];
-      for (const key of allKeys) {
-        if (key.startsWith(FUNGIBLE_KEY)) {
-          const data = await this.storage.get(key);
-          if (data) tokens.push(JSON.parse(data));
-        }
-      }
-      return tokens;
-    }
-    /** Get total balance of a fungible token (sum of active UTXOs) */
-    async getFungibleBalance(tokenId) {
-      const token = await this.getFungibleToken(tokenId);
-      if (!token) return 0;
-      return token.utxos.filter((u) => u.status === "active").reduce((sum, u) => sum + u.satoshis, 0);
-    }
-  };
-
-  // src/fileCache.ts
-  var DB_NAME = "p-files";
-  var STORE_NAME = "files";
-  var DB_VERSION = 2;
-  var FileCache = class {
-    constructor() {
-      __publicField(this, "dbPromise");
-      this.dbPromise = new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, DB_VERSION);
-        req.onupgradeneeded = () => {
-          req.result.createObjectStore(STORE_NAME, { keyPath: "hash" });
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-    }
-    async store(hash, data) {
-      const db = await this.dbPromise;
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        tx.objectStore(STORE_NAME).put({ hash, ...data });
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
-    }
-    async get(hash) {
-      const db = await this.dbPromise;
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readonly");
-        const req = tx.objectStore(STORE_NAME).get(hash);
-        req.onsuccess = () => resolve(req.result ?? null);
-        req.onerror = () => reject(req.error);
-      });
-    }
-  };
-
-  // src/app.ts
-  var provider;
-  var builder;
-  var store;
-  var fileCache;
-  var myKey = null;
-  var WIF_KEY = "p:wallet:wif";
-  function init() {
-    let wif = localStorage.getItem(WIF_KEY);
-    let key;
-    if (wif) {
-      try {
-        key = PrivateKey.fromWif(wif);
-      } catch {
-        key = PrivateKey.fromRandom();
-        localStorage.setItem(WIF_KEY, key.toWif());
-      }
-    } else {
-      key = PrivateKey.fromRandom();
-      wif = key.toWif();
-      localStorage.setItem(WIF_KEY, wif);
-    }
-    const address = key.toAddress();
-    myKey = key;
-    provider = new WalletProvider(address);
-    const storage = new LocalStorageBackend("p:data:");
-    store = new TokenStore(storage);
-    fileCache = new FileCache();
-    builder = new TokenBuilder(provider, store, key);
-    console.log("[SVphone v08.02] Initialized");
-    console.log("[SVphone v08.02] Address:", address);
-    console.log("[SVphone v08.02] TokenBuilder available:", !!builder);
-  }
-  window.TokenBuilder = TokenBuilder;
-  window.TokenStore = TokenStore;
-  window.WalletProvider = WalletProvider;
-  window.initWallet = init;
-  window.decodeTokenRules = decodeTokenRules;
-  window.decodeOpReturn = decodeOpReturn;
-  window.bitcoin = {
-    PrivateKey,
-    Hash: Hash_exports
-  };
-  function initAndExpose() {
-    init();
-    window.builder = builder;
-    window.tokenBuilder = builder;
-    window.store = store;
-    window.tokenStore = store;
-    window.provider = provider;
-    window.fileCache = fileCache;
-    window.myKey = myKey ?? void 0;
-    if (myKey) {
-      window.myAddress = myKey.toAddress();
-      window.myPublicKey = myKey.toPublicKey().toString();
-      window.myWif = myKey.toWif();
-    }
-  }
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initAndExpose);
-  } else {
-    initAndExpose();
-  }
 })();
-
-/**
- * DTLS Certificate Store — Persistent RTCCertificate via IndexedDB
- *
- * Generates one DTLS certificate per device and persists it so the
- * fingerprint stays stable across sessions (enabling 1-TX call signaling).
- * The stable fingerprint is the device's call identity — share it once
- * with each contact (as part of your identity string) and skip the ANS token.
- */
-class DtlsCertStore {
-  static DB_NAME    = 'svphone_dtls'
-  static STORE_NAME = 'certs'
-  static KEY        = 'primary'
-
-  /**
-   * Return the persisted certificate, generating one if not yet stored.
-   * @returns {Promise<RTCCertificate>}
-   */
-  async getOrCreate() {
-    const existing = await this._load()
-    if (existing) return existing
-
-    const cert = await RTCPeerConnection.generateCertificate({
-      name: 'ECDSA',
-      namedCurve: 'P-256',
-    })
-    await this._save(cert)
-    return cert
-  }
-
-  /**
-   * Extract the SHA-256 fingerprint string from a certificate.
-   * @param {RTCCertificate} cert
-   * @returns {string} e.g. "sha-256 AB:CD:EF:..."
-   */
-  getFingerprint(cert) {
-    const fps    = cert.getFingerprints()
-    const sha256 = fps.find(f => f.algorithm.toLowerCase() === 'sha-256') || fps[0]
-    if (!sha256) throw new Error('[DtlsCertStore] No fingerprint in certificate')
-    return `sha-256 ${sha256.value.toUpperCase()}`
-  }
-
-  async _load() {
-    const db = await this._openDb()
-    return new Promise((resolve, reject) => {
-      const tx  = db.transaction(DtlsCertStore.STORE_NAME, 'readonly')
-      const req = tx.objectStore(DtlsCertStore.STORE_NAME).get(DtlsCertStore.KEY)
-      req.onsuccess = () => { db.close(); resolve(req.result?.cert ?? null) }
-      req.onerror   = () => { db.close(); reject(req.error) }
-    })
-  }
-
-  async _save(cert) {
-    const db = await this._openDb()
-    return new Promise((resolve, reject) => {
-      const tx  = db.transaction(DtlsCertStore.STORE_NAME, 'readwrite')
-      const req = tx.objectStore(DtlsCertStore.STORE_NAME).put({ cert }, DtlsCertStore.KEY)
-      req.onsuccess = () => { db.close(); resolve() }
-      req.onerror   = () => { db.close(); reject(req.error) }
-    })
-  }
-
-  _openDb() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DtlsCertStore.DB_NAME, 1)
-      req.onupgradeneeded = (e) => {
-        e.target.result.createObjectStore(DtlsCertStore.STORE_NAME)
-      }
-      req.onsuccess = () => resolve(req.result)
-      req.onerror   = () => reject(req.error)
-    })
-  }
-}
-
-if (typeof window !== 'undefined') window.DtlsCertStore = DtlsCertStore
-if (typeof module !== 'undefined' && module.exports) module.exports = DtlsCertStore
-
-/**
- * Contacts Store — maps BSV addresses to DTLS fingerprints + public IPs (localStorage).
- *
- * Contact identity string (share out-of-band — paste in Signal, QR code, etc.):
- *   "<bsvAddress>:sha-256:<COLON-SEPARATED-HEX>@<publicIP>"
- * Examples:
- *   "1AaBbCcDd...:sha-256:AB:CD:EF:01:23:45:...@203.0.113.42"
- *   "1AaBbCcDd...:sha-256:AB:CD:EF:01:23:45:..."          (no IP — backward compat)
- *
- * Internal storage key: 'svphone_contact_<bsvAddress>'
- * Internal storage val: JSON {"fingerprint":"sha-256 AB:CD:...","ip":"203.0.113.42"}
- *   (backward-compat: old plain string "sha-256 AB:CD:..." is read as {fingerprint, ip:null})
- */
-class ContactsStore {
-  static PREFIX = 'svphone_contact_'
-
-  /**
-   * Parse a contact identity string into { address, fingerprint, ip }.
-   * Format: "ADDRESS:sha-256:XX:XX:...[@IP]"
-   * @returns {{ address: string, fingerprint: string, ip: string|null } | null}
-   */
-  parse(identityStr) {
-    if (!identityStr) return null
-    const idx = identityStr.toLowerCase().indexOf(':sha-256:')
-    if (idx === -1) return null
-    const address = identityStr.slice(0, idx).trim()
-    let tail = identityStr.slice(idx + 9).trim()
-    if (!address || tail.length < 5) return null
-
-    // Split fingerprint from optional IP at last '@'
-    let ip = null
-    const atIdx = tail.lastIndexOf('@')
-    if (atIdx !== -1) {
-      ip = tail.slice(atIdx + 1).trim() || null
-      tail = tail.slice(0, atIdx).trim()
-    }
-    const fpColons = tail.toUpperCase()
-    return { address, fingerprint: 'sha-256 ' + fpColons, ip }
-  }
-
-  /**
-   * Format an identity string from address + fingerprint + optional IP.
-   * @param {string} address     - BSV address
-   * @param {string} fingerprint - "sha-256 AB:CD:EF:..."
-   * @param {string|null} ip     - public IP (optional)
-   * @returns {string}
-   */
-  format(address, fingerprint, ip = null) {
-    if (!address || !fingerprint) return ''
-    const colonFp = fingerprint.replace(/^sha-256\s+/i, '')
-    let str = `${address}:sha-256:${colonFp}`
-    if (ip) str += `@${ip}`
-    return str
-  }
-
-  /** Save a contact (fingerprint + optional IP) */
-  save(address, fingerprint, ip = null) {
-    if (!address || !fingerprint) return
-    localStorage.setItem(ContactsStore.PREFIX + address, JSON.stringify({ fingerprint, ip: ip || null }))
-  }
-
-  /** Look up contact by address → { fingerprint, ip } or null */
-  get(address) {
-    const raw = localStorage.getItem(ContactsStore.PREFIX + address)
-    if (!raw) return null
-    // JSON format (new)
-    if (raw.startsWith('{')) {
-      try { return JSON.parse(raw) } catch { /* fall through */ }
-    }
-    // Plain fingerprint string (old backward-compat)
-    return { fingerprint: raw, ip: null }
-  }
-
-  /** Return all contacts as [{ address, fingerprint, ip }] */
-  getAll() {
-    const out = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key?.startsWith(ContactsStore.PREFIX)) {
-        const address = key.slice(ContactsStore.PREFIX.length)
-        const raw = localStorage.getItem(key)
-        if (raw?.startsWith('{')) {
-          try {
-            const { fingerprint, ip } = JSON.parse(raw)
-            out.push({ address, fingerprint, ip: ip || null })
-            continue
-          } catch { /* fall through */ }
-        }
-        out.push({ address, fingerprint: raw, ip: null })
-      }
-    }
-    return out
-  }
-
-  /** Remove a contact */
-  remove(address) {
-    localStorage.removeItem(ContactsStore.PREFIX + address)
-  }
-}
-
-if (typeof window !== 'undefined') window.ContactsStore = ContactsStore
-if (typeof module !== 'undefined' && module.exports) module.exports = ContactsStore
-
-/**
- * ICE Credential Derivation — deterministic ICE ufrag/pwd via HMAC-SHA256.
- *
- * Both caller and callee derive the same ICE credentials from the shared
- * session key, so the caller can build a synthetic callee answer SDP (with
- * callee's credentials pre-filled) without waiting for an ANS token.
- *
- * Derivation:
- *   callerUfrag = base64url( HMAC-SHA256(sessionKey, "caller:ufrag") ).slice(0, 8)
- *   callerPwd   = base64url( HMAC-SHA256(sessionKey, "caller:pwd")  ).slice(0, 22)
- *   calleeUfrag = base64url( HMAC-SHA256(sessionKey, "callee:ufrag") ).slice(0, 8)
- *   calleePwd   = base64url( HMAC-SHA256(sessionKey, "callee:pwd")  ).slice(0, 22)
- *
- * ICE spec: ufrag 4-256 chars, pwd 22-256 chars (all base64url-safe).
- */
-class IceCredentials {
-  /**
-   * Derive all four ICE credentials from a shared session key.
-   * @param {string} sessionKey - base64 session key (from call token)
-   * @returns {Promise<{callerUfrag, callerPwd, calleeUfrag, calleePwd}>}
-   */
-  async deriveAll(sessionKey) {
-    const keyBytes  = this._base64ToBytes(sessionKey)
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
-    )
-    const [cu, cp, eu, ep] = await Promise.all([
-      this._hmac(cryptoKey, 'caller:ufrag'),
-      this._hmac(cryptoKey, 'caller:pwd'),
-      this._hmac(cryptoKey, 'callee:ufrag'),
-      this._hmac(cryptoKey, 'callee:pwd'),
-    ])
-    return {
-      callerUfrag: this._toBase64url(cu).slice(0, 8),
-      callerPwd:   this._toBase64url(cp).slice(0, 22),
-      calleeUfrag: this._toBase64url(eu).slice(0, 8),
-      calleePwd:   this._toBase64url(ep).slice(0, 22),
-    }
-  }
-
-  /**
-   * Replace a=ice-ufrag and a=ice-pwd lines in an SDP string.
-   * Call this BEFORE setLocalDescription to use derived credentials.
-   * @param {string} sdp
-   * @param {string} ufrag
-   * @param {string} pwd
-   * @returns {string} munged SDP
-   */
-  mungeSdp(sdp, ufrag, pwd) {
-    return sdp
-      .split(/\r?\n/)
-      .map(line => {
-        if (line.startsWith('a=ice-ufrag:')) return `a=ice-ufrag:${ufrag}`
-        if (line.startsWith('a=ice-pwd:'))   return `a=ice-pwd:${pwd}`
-        return line
-      })
-      .join('\r\n')
-  }
-
-  async _hmac(cryptoKey, label) {
-    const data = new TextEncoder().encode(label)
-    return new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, data))
-  }
-
-  _base64ToBytes(b64) {
-    const std = b64.replace(/-/g, '+').replace(/_/g, '/')
-    const bin = atob(std)
-    return new Uint8Array(bin.length).map((_, i) => bin.charCodeAt(i))
-  }
-
-  _toBase64url(bytes) {
-    return btoa(String.fromCharCode(...bytes))
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
-  }
-}
-
-if (typeof window !== 'undefined') window.IceCredentials = IceCredentials
-if (typeof module !== 'undefined' && module.exports) module.exports = IceCredentials
-
-/**
- * Synthetic SDP Builder
- *
- * Builds a callee answer SDP on the caller side, using:
- *   - callee's derived ICE credentials (from session key)
- *   - callee's DTLS fingerprint (from contacts)
- *   - media sections mirrored from the offer
- *
- * This lets the caller call setRemoteDescription(syntheticAnswer) immediately
- * after setLocalDescription(offer), so its ICE agent is listening for
- * peer-reflexive STUN checks from the callee — no ANS token required.
- *
- * The browser validates fingerprint/ICE credentials during the actual DTLS/ICE
- * handshake, not during SDP parsing, so the synthetic SDP is accepted as long
- * as it is syntactically valid and uses callee's real cert and derived creds.
- */
-class SyntheticSdp {
-  /**
-   * Build a synthetic answer SDP.
-   * @param {string} offerSdp         - the munged offer SDP (caller's local description)
-   * @param {string} calleeUfrag      - callee's derived ICE ufrag
-   * @param {string} calleePwd        - callee's derived ICE pwd
-   * @param {string} calleeFingerprint - "sha-256 AB:CD:..." from contacts
-   * @returns {string} answer SDP
-   */
-  build(offerSdp, calleeUfrag, calleePwd, calleeFingerprint) {
-    const lines   = offerSdp.split(/\r?\n/).filter(l => l.length > 0)
-    const answer  = []
-
-    // Session section
-    answer.push('v=0')
-    answer.push(`o=- ${Date.now()} 1 IN IP4 0.0.0.0`)
-    answer.push('s=-')
-    answer.push('t=0 0')
-
-    // Copy session-level attributes that the answer must mirror
-    for (const line of lines) {
-      if (line.startsWith('m=')) break
-      if (line.startsWith('a=group:') || line === 'a=extmap-allow-mixed') {
-        answer.push(line)
-      }
-    }
-
-    // Build one answer m-section per offer m-section
-    for (const sect of this._parseSections(lines)) {
-      answer.push(sect.mLine)          // same m= line (same PTs, port 9 = ignored)
-      answer.push('c=IN IP4 0.0.0.0')
-      answer.push('a=rtcp:9 IN IP4 0.0.0.0')
-
-      // Derived ICE credentials (must match callee's setLocalDescription)
-      answer.push(`a=ice-ufrag:${calleeUfrag}`)
-      answer.push(`a=ice-pwd:${calleePwd}`)
-      answer.push('a=ice-options:trickle')
-
-      // Callee's DTLS fingerprint (from contacts)
-      answer.push(`a=fingerprint:${calleeFingerprint}`)
-      answer.push('a=setup:active')       // callee is DTLS client (matches browser createAnswer default)
-
-      // Mirror critical m-section attributes from offer
-      let foundDirection = false
-      for (const l of sect.attrs) {
-        if (
-          l.startsWith('a=mid:')     ||
-          l === 'a=rtcp-mux'         ||
-          l === 'a=rtcp-rsize'       ||
-          l.startsWith('a=rtpmap:')  ||
-          l.startsWith('a=fmtp:')    ||
-          l.startsWith('a=rtcp-fb:') ||
-          l.startsWith('a=extmap:')  ||
-          l.startsWith('a=sctpmap:') ||
-          l.startsWith('a=sctp-port:') ||
-          l.startsWith('a=max-message-size:')
-        ) {
-          answer.push(l)
-          continue
-        }
-        // Mirror media direction
-        if (/^a=(sendrecv|sendonly|recvonly|inactive)$/.test(l)) {
-          const map = {
-            'a=sendonly':  'a=recvonly',
-            'a=recvonly':  'a=sendonly',
-            'a=sendrecv':  'a=sendrecv',
-            'a=inactive':  'a=inactive',
-          }
-          answer.push(map[l] || l)
-          foundDirection = true
-        }
-      }
-      if (!foundDirection) answer.push('a=sendrecv')
-    }
-
-    return answer.join('\r\n') + '\r\n'
-  }
-
-  /** @private Split offer SDP into per-m-section objects */
-  _parseSections(lines) {
-    const sections = []
-    let current    = null
-    for (const line of lines) {
-      if (line.startsWith('m=')) {
-        if (current) sections.push(current)
-        current = { mLine: line, attrs: [] }
-      } else if (current && !line.startsWith('c=')) {
-        current.attrs.push(line)
-      }
-    }
-    if (current) sections.push(current)
-    return sections
-  }
-}
-
-if (typeof window !== 'undefined') window.SyntheticSdp = SyntheticSdp
-if (typeof module !== 'undefined' && module.exports) module.exports = SyntheticSdp
-
-/**
- * SVphone Call Signaling Layer (v08.00)
- *
- * Implements call initiation, acceptance, and termination using 1-sat ordinal
- * inscriptions for signaling and WebRTC for peer-to-peer media.
- *
- * Call flow: Caller sends inscription → Recipient polls address history → P2P connection established
- *
- * Inscription format: standard 1sat ordinal (OP_FALSE OP_IF "ord" ...) with JSON call data:
- * { v, proto:"svphone", type:"call"|"answer", caller, callee, ip, port, key, codec, quality, media, sdp }
- */
-
-class CallSignaling {
-  // Codec enumeration
-  static CODECS = { opus: 0, pcm: 1, aac: 2 }
-  static CODEC_IDS = ['opus', 'pcm', 'aac']
-
-  // Quality enumeration
-  static QUALITIES = { sd: 0, hd: 1, vhd: 2 }
-  static QUALITY_IDS = ['sd', 'hd', 'vhd']
-
-  constructor(options = {}) {
-    this.callTokens = new Map() // Map<callTokenId, CallToken>
-    this.activeCalls = new Map() // Map<peerId, ActiveCall>
-    this.listeners = new Map() // Map<eventName, [callbacks]>
-
-    // Configuration
-    this.rpcUrl = options.rpcUrl || 'http://localhost:8332'
-    this.pollingInterval = options.pollingInterval || 2000 // 2s poll for incoming tokens
-    this.callTimeout = options.callTimeout || 60000 // 60s call ring timeout
-    this.signalingTimeout = options.signalingTimeout || 10000 // 10s for call answer
-
-    // State
-    this.isPolling = false
-    this.pollHandle = null
-    this.myAddress = null
-    this.myIp = null
-    this.myPort = null
-  }
-
-  /**
-   * Normalise inscription data into a common call info object.
-   * Inscription JSON fields map directly to the call token format.
-   * @private
-   */
-  inscriptionToCallInfo(inscription) {
-    return {
-      senderIp: inscription.ip,
-      senderPort: inscription.port,
-      sessionKey: inscription.key,
-      codec: inscription.codec ?? 'opus',
-      quality: inscription.quality ?? 'hd',
-      sdpOffer: inscription.type === 'call' ? inscription.sdp : undefined,
-      sdpAnswer: inscription.type === 'answer' ? inscription.sdp : undefined,
-      callerFingerprint: inscription.callerFingerprint ?? null,
-    }
-  }
-
-  /**
-   * Initialize the signaling layer with wallet address and network info
-   */
-  async initialize(myAddress, myIp, myPort) {
-    this.myAddress = myAddress
-    this.myIp = myIp
-    this.myPort = myPort
-
-    console.log('[CallSignaling] Initialized', {
-      address: myAddress,
-      ip: myIp,
-      port: myPort
-    })
-  }
-
-  /**
-   * Create call initiation token with connection info
-   * @param {string} calleeAddress - Recipient BSV address
-   * @param {string} sessionKey - Ephemeral DH key (base64)
-   * @param {Object} options - {codec, quality}
-   * @returns {Object} Call token ready to broadcast
-   */
-  createCallToken(calleeAddress, sessionKey, options = {}) {
-    const callToken = {
-      // Call attributes (mutable, stored in tokenAttributes)
-      caller: this.myAddress,
-      callee: calleeAddress,
-      senderIp: this.myIp,
-      senderPort: this.myPort,
-      sessionKey: sessionKey, // Ephemeral DH key for encryption
-
-      // Call options
-      codec: options.codec || 'opus',
-      quality: options.quality || 'hd',
-
-      // State (mutable, stored in stateData)
-      status: 'ringing', // ringing → answered → connected → ended
-      initiatedAt: Date.now(),
-      timestamp: Math.floor(Date.now() / 1000), // Block height approximation
-
-      // Call ID (computed from token ID after broadcast)
-      callTokenId: null,
-      currentTxId: null
-    }
-
-    console.log('[CallSignaling] Created call token:', {
-      calleeAddress,
-      codec: callToken.codec,
-      quality: callToken.quality
-    })
-
-    return callToken
-  }
-
-  /**
-   * Broadcast call token to blockchain (mint new or use existing)
-   * @param {Object} callToken - Token to broadcast
-   * @param {Function} mintTokenFn - Optional: (token) => Promise<{txId, tokenId}>
-   * @returns {Object} {txId, tokenId, callTokenId}
-   */
-  async broadcastCallToken(callToken, mintTokenFn) {
-    try {
-      let result
-
-      if (mintTokenFn) {
-        // Mint new token if mintTokenFn provided
-        result = await mintTokenFn(callToken)
-      } else {
-        // Use existing token if no mintTokenFn provided
-        // For now, generate a pseudo-result with call token data
-        // The actual token broadcasting will use existing tokens from tokenBuilder
-        result = {
-          tokenId: callToken.callTokenId || `existing-${Date.now()}`,
-          txId: callToken.currentTxId || `existing-tx-${Date.now()}`
-        }
-      }
-
-      callToken.callTokenId = result.tokenId
-      callToken.currentTxId = result.txId
-
-      this.callTokens.set(result.tokenId, callToken)
-
-      this.emit('call:initiated', {
-        callTokenId: result.tokenId,
-        txId: result.txId,
-        calleeAddress: callToken.callee,
-        timestamp: Date.now()
-      })
-
-      console.log('[CallSignaling] Broadcasted call token:', {
-        tokenId: result.tokenId,
-        txId: result.txId,
-        callee: callToken.callee,
-        mode: mintTokenFn ? 'new-mint' : 'existing-token'
-      })
-
-      return {
-        txId: result.txId,
-        tokenId: result.tokenId,
-        callTokenId: result.tokenId
-      }
-    } catch (error) {
-      console.error('[CallSignaling] Failed to broadcast call token:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Start polling for incoming call inscriptions.
-   *
-   * @param {Function} scanInscriptionsFn - async (myAddress) => Array<{txId, inscription}>
-   *   Should return inscription objects for all new SVphone inscriptions addressed to myAddress.
-   */
-  async startPolling(scanInscriptionsFn) {
-    if (this.isPolling) {
-      console.warn('[CallSignaling] Already polling for incoming inscriptions')
-      return
-    }
-
-    this.isPolling = true
-    console.log('[CallSignaling] Started polling for incoming call inscriptions')
-
-    const pollOnce = async () => {
-      try {
-        const results = await scanInscriptionsFn(this.myAddress)
-
-        for (const { txId, inscription } of results) {
-          const callId = txId
-
-          // Skip already-seen inscriptions
-          if (this.callTokens.has(callId)) continue
-
-          const callInfo = this.inscriptionToCallInfo(inscription)
-
-          if (inscription.type === 'call' && inscription.callee === this.myAddress) {
-            this.handleIncomingCall(callId, inscription, callInfo)
-          } else if (inscription.type === 'answer' && inscription.caller === this.myAddress) {
-            this.handleCallResponse(callId, inscription, callInfo)
-          } else if (inscription.type === 'answer' && inscription.callee === this.myAddress) {
-            // Callee detected its own ANS token via UTXO polling (change output).
-            // Emit so call_manager can start callee spray, synchronized with caller.
-            this.emit('call:answered', {
-              callTokenId: callId,
-              caller: inscription.caller,
-              callee: inscription.callee,
-              calleeIp: callInfo.senderIp,
-              calleePort: callInfo.senderPort,
-              timestamp: Date.now()
-            })
-            console.log('[CallSignaling] Callee detected own ANS token:', callId.slice(0, 12))
-          }
-        }
-      } catch (error) {
-        console.error('[CallSignaling] Polling error:', error.message)
-      }
-
-      if (this.isPolling) {
-        this.pollHandle = setTimeout(pollOnce, this.pollingInterval)
-      }
-    }
-
-    // Start polling
-    this.pollHandle = setTimeout(pollOnce, 100)
-  }
-
-  /**
-   * Stop polling for incoming tokens
-   */
-  stopPolling() {
-    if (this.pollHandle) {
-      clearTimeout(this.pollHandle)
-      this.pollHandle = null
-    }
-    this.isPolling = false
-    console.log('[CallSignaling] Stopped polling for incoming call tokens')
-  }
-
-  /**
-   * Handle incoming call inscription
-   * @private
-   */
-  handleIncomingCall(callId, inscription, callInfo) {
-    const callToken = {
-      callTokenId: callId,
-      txId: callId,
-      caller: inscription.caller,
-      callee: inscription.callee,
-      senderIp: callInfo.senderIp,
-      senderPort: callInfo.senderPort,
-      sessionKey: callInfo.sessionKey,
-      codec: callInfo.codec,
-      quality: callInfo.quality,
-      sdpOffer: callInfo.sdpOffer,
-      callerFingerprint: callInfo.callerFingerprint ?? null,
-      status: 'ringing',
-      receivedAt: Date.now()
-    }
-
-    this.callTokens.set(callId, callToken)
-
-    this.emit('call:incoming', {
-      callTokenId: callId,
-      caller: inscription.caller,
-      callerIp: callInfo.senderIp,
-      callerPort: callInfo.senderPort,
-      codec: callInfo.codec,
-      quality: callInfo.quality,
-      sdpOffer: callInfo.sdpOffer,
-      timestamp: Date.now()
-    })
-
-    console.log('[CallSignaling] Incoming call from:', inscription.caller)
-  }
-
-  /**
-   * Handle answer inscription from callee
-   * @private
-   */
-  handleCallResponse(callId, inscription, callInfo) {
-    // Accept ANS tokens with: sdpAnswer, callerFingerprint (identity), or senderPort (port announcement)
-    if (!callInfo.sdpAnswer && !callInfo.callerFingerprint && !callInfo.senderPort) return
-
-    this.callTokens.set(callId, { callTokenId: callId, txId: callId, status: 'answered' })
-
-    this.emit('call:answered', {
-      callTokenId: callId,
-      caller: inscription.caller,
-      callee: inscription.callee,
-      calleeIp: callInfo.senderIp,
-      calleePort: callInfo.senderPort,
-      calleeSessionKey: callInfo.sessionKey,
-      sdpAnswer: callInfo.sdpAnswer,
-      callerFingerprint: callInfo.callerFingerprint,
-      codec: callInfo.codec,
-      quality: callInfo.quality,
-      timestamp: Date.now()
-    })
-
-    console.log('[CallSignaling] Call answer received from', inscription.callee?.slice(0, 20))
-  }
-
-  /**
-   * Accept incoming call
-   * @param {string} callTokenId - Call token ID to accept
-   * @param {Object} options - Acceptance options
-   * @returns {Object} Answer token to send back
-   */
-  acceptCall(callTokenId, options = {}) {
-    const callToken = this._validateCallToken(callTokenId)
-
-    callToken.status = 'answered'
-    callToken.answeredAt = Date.now()
-
-    const answerToken = {
-      type: 'call-answer',
-      callTokenId: callTokenId,
-      answerer: this.myAddress,
-      answererIp: this.myIp,
-      answererPort: this.myPort,
-      answererSessionKey: options.sessionKey || this.generateSessionKey(),
-      timestamp: Date.now()
-    }
-
-    // Emit call:answered event with CALLER's connection info (for callee to establish P2P back)
-    // callToken contains the CALLER's information (from the incoming call token)
-    this.emit('call:answered', {
-      callTokenId: callTokenId,
-      answerer: this.myAddress,
-      // Include caller's connection info from the incoming call token so callee can connect back
-      calleeAddress: callToken.caller,      // Caller's address
-      calleeIp: callToken.senderIp,         // Caller's IP (from incoming token)
-      calleePort: callToken.senderPort,     // Caller's port (from incoming token)
-      calleeSessionKey: callToken.sessionKey, // Caller's session key
-      timestamp: Date.now()
-    })
-
-    console.debug('[CallSignaling] Emitting call:answered with caller connection info:', {
-      calleeAddress: callToken.caller?.slice(0,20),
-      calleeIp: callToken.senderIp,
-      calleePort: callToken.senderPort,
-      answerer: this.myAddress?.slice(0,20)
-    })
-    console.log('[CallSignaling] Accepted call:', callTokenId)
-
-    return answerToken
-  }
-
-  /**
-   * Broadcast call answer token back to caller
-   * @param {string} callTokenId - Call token ID
-   * @param {string} callerAddress - Caller's address (recipient)
-   * @param {Object} answerData - {sdpAnswer, senderIp, senderPort, sessionKey, codec, quality}
-   * @param {Function} broadcastFn - Optional broadcast function
-   */
-  async broadcastCallAnswer(callTokenId, callerAddress, answerData, broadcastFn) {
-    if (!broadcastFn) {
-      console.warn('[CallSignaling] No broadcast function provided')
-      return { callTokenId, txId: null }
-    }
-
-    try {
-      const result = await broadcastFn(callTokenId, callerAddress, answerData)
-
-      this.emit('call:answer-broadcasted', {
-        callTokenId: callTokenId,
-        txId: result.txId,
-        timestamp: Date.now()
-      })
-
-      console.log('[CallSignaling] Answer broadcasted:', result.txId)
-      return result
-    } catch (error) {
-      console.error('[CallSignaling] Failed to broadcast answer:', error.message)
-      throw error
-    }
-  }
-
-  /**
-   * Reject incoming call
-   * @param {string} callTokenId - Call token ID to reject
-   * @param {string} reason - Rejection reason
-   */
-  rejectCall(callTokenId, reason = 'user-declined') {
-    const callToken = this._validateCallToken(callTokenId)
-
-    callToken.status = 'rejected'
-    callToken.rejectedAt = Date.now()
-    callToken.rejectionReason = reason
-
-    this.emit('call:rejected', {
-      callTokenId: callTokenId,
-      reason: reason,
-      timestamp: Date.now()
-    })
-
-    console.log('[CallSignaling] Rejected call:', callTokenId)
-  }
-
-  /**
-   * Update call state
-   * @param {string} callTokenId - Call token ID
-   * @param {string} status - New status (connecting, connected, ended)
-   * @param {Object} metadata - Additional metadata to store
-   */
-  updateCallState(callTokenId, status, metadata = {}) {
-    const callToken = this._validateCallToken(callTokenId)
-
-    callToken.status = status
-    Object.assign(callToken, metadata)
-
-    this.emit('call:state-changed', {
-      callTokenId: callTokenId,
-      status: status,
-      metadata: metadata,
-      timestamp: Date.now()
-    })
-
-    console.log('[CallSignaling] Updated call state:', { callTokenId, status })
-  }
-
-  /**
-   * End call
-   * @param {string} callTokenId - Call token ID to end
-   * @param {Object} stats - Call statistics
-   */
-  endCall(callTokenId, stats = {}) {
-    const callToken = this._validateCallToken(callTokenId)
-
-    const duration = callToken.connectedAt
-      ? Date.now() - callToken.connectedAt
-      : 0
-
-    callToken.status = 'ended'
-    callToken.endedAt = Date.now()
-    callToken.duration = duration
-    callToken.stats = stats
-
-    this.emit('call:ended', {
-      callTokenId: callTokenId,
-      duration: duration,
-      stats: stats,
-      timestamp: Date.now()
-    })
-
-    console.log('[CallSignaling] Ended call:', {
-      callTokenId: callTokenId,
-      duration: duration
-    })
-  }
-
-  /**
-   * Get call token details
-   */
-  getCallToken(callTokenId) {
-    return this.callTokens.get(callTokenId)
-  }
-
-  /**
-   * Validate call token exists (helper)
-   * @private
-   */
-  _validateCallToken(callTokenId) {
-    const callToken = this.callTokens.get(callTokenId)
-    if (!callToken) {
-      throw new Error(`Call token not found: ${callTokenId}`)
-    }
-    return callToken
-  }
-
-  /**
-   * Generate ephemeral session key (base64-encoded random bytes)
-   * @private
-   */
-  generateSessionKey() {
-    const bytes = new Uint8Array(32)
-    crypto.getRandomValues(bytes)
-    return btoa(String.fromCharCode(...bytes))
-  }
-
-  /**
-   * Event emitter methods
-   */
-  on(eventName, callback) {
-    if (!this.listeners.has(eventName)) {
-      this.listeners.set(eventName, [])
-    }
-    this.listeners.get(eventName).push(callback)
-  }
-
-  off(eventName, callback) {
-    const callbacks = this.listeners.get(eventName)
-    if (callbacks) {
-      const index = callbacks.indexOf(callback)
-      if (index > -1) {
-        callbacks.splice(index, 1)
-      }
-    }
-  }
-
-  emit(eventName, data) {
-    const callbacks = this.listeners.get(eventName)
-    if (callbacks) {
-      callbacks.forEach(cb => {
-        try {
-          cb(data)
-        } catch (error) {
-          console.error(`[CallSignaling] Error in ${eventName} handler:`, error)
-        }
-      })
-    }
-  }
-}
-
-// Export for browser
-if (typeof window !== 'undefined') {
-  window.CallSignaling = CallSignaling
-}
-
-// Export for Node.js/modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = CallSignaling
-}
-
-/**
- * Microphone Tester (v06.04)
- *
- * Provides microphone testing with:
- * - Real-time audio level monitoring (VU meter)
- * - Volume control (0-200% gain)
- * - Mute toggle
- * - Recording and playback (max 10 seconds)
- *
- * Uses Web Audio API for audio processing and MediaRecorder for recording.
- */
-
-class MicrophoneTester {
-    constructor(logCallback) {
-        // Audio context and nodes
-        this.audioContext = null
-        this.mediaStream = null
-        this.sourceNode = null
-        this.gainNode = null
-        this.analyserNode = null
-        this.destinationNode = null
-
-        // Recording
-        this.mediaRecorder = null
-        this.recordedChunks = []
-        this.recordedBlob = null
-        this.recordingTimer = null
-        this.recordingStartTime = null
-        this.maxRecordingDuration = 10000 // 10 seconds
-
-        // UI state
-        this.isTestActive = false
-        this.isMuted = false
-        this.isRecording = false
-        this.currentGain = 1.0 // 100%
-
-        // Canvas animation
-        this.meterCanvas = null
-        this.meterContext = null
-        this.animationFrameId = null
-
-        // Logging function
-        this.log = logCallback || console.log
-
-        console.log('[MicrophoneTester] Initialized')
-    }
-
-    /**
-     * Start microphone test
-     * @returns {Promise<MediaStream>}
-     */
-    async startTest() {
-        try {
-            console.log('[MicrophoneTester] Starting test...')
-
-            // Check browser support with detailed diagnostics
-            console.log('[MicrophoneTester] Checking API availability:')
-            console.log('  navigator.mediaDevices:', navigator.mediaDevices)
-            console.log('  navigator.mediaDevices?.getUserMedia:', navigator.mediaDevices?.getUserMedia)
-            console.log('  window.location.protocol:', window.location.protocol)
-            console.log('  window.location.hostname:', window.location.hostname)
-
-            if (!navigator.mediaDevices) {
-                throw new Error('navigator.mediaDevices not available - check HTTPS/secure context')
-            }
-
-            if (!navigator.mediaDevices.getUserMedia) {
-                throw new Error('getUserMedia not available - possible permission denied or browser restriction')
-            }
-
-            if (!window.AudioContext && !window.webkitAudioContext) {
-                throw new Error('Your browser does not support Web Audio API')
-            }
-
-            // Request microphone access
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            })
-
-            console.log('[MicrophoneTester] Got media stream:', {
-                audioTracks: this.mediaStream.getAudioTracks().length
-            })
-
-            // Create audio context
-            const AudioContext = window.AudioContext || window.webkitAudioContext
-            this.audioContext = new AudioContext()
-
-            // Build audio graph
-            this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream)
-            this.gainNode = this.audioContext.createGain()
-            this.analyserNode = this.audioContext.createAnalyser()
-            this.destinationNode = this.audioContext.destination
-
-            // Configure analyser
-            this.analyserNode.fftSize = 2048
-            this.analyserNode.smoothingTimeConstant = 0.8
-
-            // Connect nodes: source → gain → analyser → destination
-            this.sourceNode.connect(this.gainNode)
-            this.gainNode.connect(this.analyserNode)
-            this.analyserNode.connect(this.destinationNode)
-
-            console.log('[MicrophoneTester] Audio graph connected')
-
-            // Initialize canvas
-            this.initializeCanvas()
-
-            // Set state
-            this.isTestActive = true
-            this.isMuted = false
-            this.currentGain = 1.0
-
-            // Start animation loop
-            this.startMeterAnimation()
-
-            // Log success
-            this.log('✓ Microphone test started - Speak to see audio levels', 'success')
-
-            return this.mediaStream
-        } catch (error) {
-            console.error('[MicrophoneTester] Failed to start test:', error)
-            this.handleError(error)
-            throw error
-        }
-    }
-
-    /**
-     * Stop microphone test and cleanup resources
-     */
-    stopTest() {
-        try {
-            console.log('[MicrophoneTester] Stopping test...')
-
-            // Stop recording if active
-            if (this.isRecording && this.mediaRecorder) {
-                this.stopRecording()
-            }
-
-            // Stop animation
-            if (this.animationFrameId) {
-                cancelAnimationFrame(this.animationFrameId)
-                this.animationFrameId = null
-            }
-
-            // Stop all media tracks
-            if (this.mediaStream) {
-                this.mediaStream.getTracks().forEach(track => track.stop())
-                this.mediaStream = null
-            }
-
-            // Close audio context
-            if (this.audioContext) {
-                this.audioContext.close()
-                this.audioContext = null
-            }
-
-            // Clear nodes
-            this.sourceNode = null
-            this.gainNode = null
-            this.analyserNode = null
-            this.destinationNode = null
-
-            // Clear canvas
-            if (this.meterContext && this.meterCanvas) {
-                this.meterContext.clearRect(0, 0, this.meterCanvas.width, this.meterCanvas.height)
-            }
-
-            // Reset state
-            this.isTestActive = false
-            this.isMuted = false
-            this.isRecording = false
-            this.currentGain = 1.0
-
-            this.log('Microphone test stopped', 'info')
-            console.log('[MicrophoneTester] Test stopped and resources cleaned up')
-        } catch (error) {
-            console.error('[MicrophoneTester] Error stopping test:', error)
-        }
-    }
-
-    /**
-     * Initialize canvas for VU meter
-     * @private
-     */
-    initializeCanvas() {
-        try {
-            this.meterCanvas = document.getElementById('micLevelMeter')
-            if (!this.meterCanvas) {
-                console.warn('[MicrophoneTester] Meter canvas not found')
-                return
-            }
-
-            this.meterContext = this.meterCanvas.getContext('2d')
-
-            // Set canvas size
-            const rect = this.meterCanvas.getBoundingClientRect()
-            this.meterCanvas.width = rect.width * window.devicePixelRatio
-            this.meterCanvas.height = rect.height * window.devicePixelRatio
-            this.meterContext.scale(window.devicePixelRatio, window.devicePixelRatio)
-
-            console.log('[MicrophoneTester] Canvas initialized:', {
-                width: this.meterCanvas.width,
-                height: this.meterCanvas.height
-            })
-        } catch (error) {
-            console.error('[MicrophoneTester] Error initializing canvas:', error)
-        }
-    }
-
-    /**
-     * Start meter animation loop
-     * @private
-     */
-    startMeterAnimation() {
-        const animate = () => {
-            if (this.isTestActive) {
-                try {
-                    this.drawMeter()
-                    this.animationFrameId = requestAnimationFrame(animate)
-                } catch (error) {
-                    console.error('[MicrophoneTester] Animation error:', error)
-                }
-            }
-        }
-        animate()
-    }
-
-    /**
-     * Draw audio level meter on canvas
-     * @private
-     */
-    drawMeter() {
-        if (!this.analyserNode || !this.meterContext || !this.meterCanvas) {
-            return
-        }
-
-        // Get time-domain data
-        const dataArray = new Uint8Array(this.analyserNode.fftSize)
-        this.analyserNode.getByteTimeDomainData(dataArray)
-
-        // Calculate RMS (root mean square)
-        let sum = 0
-        for (let i = 0; i < dataArray.length; i++) {
-            const normalized = (dataArray[i] - 128) / 128
-            sum += normalized * normalized
-        }
-        const rms = Math.sqrt(sum / dataArray.length)
-
-        // Convert to decibels (-60dB to 0dB range)
-        let db = 20 * Math.log10(rms)
-        db = Math.max(-60, Math.min(0, db))
-
-        // Normalize level (0 to 1)
-        const level = (db + 60) / 60
-
-        // Clear canvas
-        const width = this.meterCanvas.width / window.devicePixelRatio
-        const height = this.meterCanvas.height / window.devicePixelRatio
-        this.meterContext.fillStyle = 'rgba(0, 0, 0, 0.3)'
-        this.meterContext.fillRect(0, 0, width, height)
-
-        // Draw gradient bar
-        const gradient = this.meterContext.createLinearGradient(0, 0, width, 0)
-
-        // Color gradient: green → yellow → red
-        gradient.addColorStop(0, '#38ef7d')     // Green
-        gradient.addColorStop(0.5, '#ffa500')   // Orange
-        gradient.addColorStop(1.0, '#ff6b6b')   // Red
-
-        this.meterContext.fillStyle = gradient
-        this.meterContext.fillRect(0, 0, width * level, height)
-
-        // Draw border
-        this.meterContext.strokeStyle = 'rgba(255, 255, 255, 0.2)'
-        this.meterContext.lineWidth = 1
-        this.meterContext.strokeRect(0, 0, width, height)
-
-        // Update dB indicator
-        const levelIndicator = document.getElementById('levelIndicator')
-        if (levelIndicator) {
-            levelIndicator.textContent = db.toFixed(0) + ' dB'
-        }
-    }
-
-    /**
-     * Set volume gain (0-200%)
-     * @param {number} value - Volume percentage (0-200)
-     */
-    setVolume(value) {
-        if (!this.gainNode) {
-            console.warn('[MicrophoneTester] Gain node not initialized')
-            return
-        }
-
-        const gainValue = value / 100
-        this.currentGain = gainValue
-        this.gainNode.gain.value = this.isMuted ? 0 : gainValue
-
-        console.log('[MicrophoneTester] Volume set to:', value + '%')
-    }
-
-    /**
-     * Toggle mute state
-     * @param {boolean} isMuted - Mute state
-     */
-    setMute(isMuted) {
-        if (!this.gainNode) {
-            console.warn('[MicrophoneTester] Gain node not initialized')
-            return
-        }
-
-        this.isMuted = isMuted
-
-        if (isMuted) {
-            this.gainNode.gain.value = 0
-            console.log('[MicrophoneTester] Microphone muted')
-        } else {
-            this.gainNode.gain.value = this.currentGain
-            console.log('[MicrophoneTester] Microphone unmuted')
-        }
-    }
-
-    /**
-     * Start recording audio
-     * @returns {Promise<void>}
-     */
-    async startRecording() {
-        try {
-            if (!this.mediaStream) {
-                throw new Error('No media stream available')
-            }
-
-            console.log('[MicrophoneTester] Starting recording...')
-
-            // Check MediaRecorder support
-            const mimeType = this.getSupportedMimeType()
-            if (!mimeType) {
-                throw new Error('MediaRecorder not supported in this browser')
-            }
-
-            // Clear previous recording
-            this.recordedChunks = []
-            this.recordedBlob = null
-
-            // Create MediaRecorder
-            this.mediaRecorder = new MediaRecorder(this.mediaStream, { mimeType })
-
-            // Handle data available
-            this.mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    this.recordedChunks.push(event.data)
-                    console.log('[MicrophoneTester] Recorded chunk:', event.data.size, 'bytes')
-                }
-            }
-
-            // Handle recording stop
-            this.mediaRecorder.onstop = () => {
-                this.recordedBlob = new Blob(this.recordedChunks, { type: mimeType })
-                console.log('[MicrophoneTester] Recording stopped:', this.recordedBlob.size, 'bytes')
-                this.enablePlayback()
-            }
-
-            // Start recording
-            this.mediaRecorder.start()
-            this.isRecording = true
-            this.recordingStartTime = Date.now()
-
-            // Update UI
-            this.updateRecordingUI()
-
-            // Start timer
-            this.startRecordingTimer()
-
-            this.log('Recording started (10s max)...', 'info')
-        } catch (error) {
-            console.error('[MicrophoneTester] Recording error:', error)
-            this.log(`Recording error: ${error.message}`, 'error')
-            throw error
-        }
-    }
-
-    /**
-     * Stop recording
-     */
-    stopRecording() {
-        try {
-            if (!this.mediaRecorder || !this.isRecording) {
-                console.warn('[MicrophoneTester] Recording not active')
-                return
-            }
-
-            console.log('[MicrophoneTester] Stopping recording...')
-
-            // Stop recording
-            this.mediaRecorder.stop()
-            this.isRecording = false
-
-            // Clear timer
-            if (this.recordingTimer) {
-                clearInterval(this.recordingTimer)
-                this.recordingTimer = null
-            }
-
-            // Update UI
-            this.updateRecordingUI()
-
-            this.log('✓ Recording stopped', 'success')
-        } catch (error) {
-            console.error('[MicrophoneTester] Error stopping recording:', error)
-        }
-    }
-
-    /**
-     * Play recorded audio
-     */
-    playRecording() {
-        try {
-            if (!this.recordedBlob) {
-                console.warn('[MicrophoneTester] No recording available')
-                this.log('No recording to play', 'warning')
-                return
-            }
-
-            console.log('[MicrophoneTester] Playing recording...')
-
-            // Create audio element
-            const audioUrl = URL.createObjectURL(this.recordedBlob)
-            const audio = new Audio()
-            audio.src = audioUrl
-
-            // Clean up URL when done
-            audio.onended = () => {
-                URL.revokeObjectURL(audioUrl)
-                this.log('Playback finished', 'info')
-            }
-
-            // Handle errors
-            audio.onerror = (error) => {
-                console.error('[MicrophoneTester] Playback error:', error)
-                this.log('Playback error: ' + error, 'error')
-                URL.revokeObjectURL(audioUrl)
-            }
-
-            // Play
-            audio.play().catch(error => {
-                console.error('[MicrophoneTester] Failed to play audio:', error)
-                this.log('Failed to play audio: ' + error.message, 'error')
-            })
-
-            this.log('Playing recording...', 'info')
-        } catch (error) {
-            console.error('[MicrophoneTester] Playback error:', error)
-            this.log(`Playback error: ${error.message}`, 'error')
-        }
-    }
-
-    /**
-     * Start recording timer (10 second max)
-     * @private
-     */
-    startRecordingTimer() {
-        let elapsed = 0
-        const maxDuration = 10
-
-        this.recordingTimer = setInterval(() => {
-            elapsed++
-            this.updateTimerDisplay(elapsed, maxDuration)
-
-            if (elapsed >= maxDuration) {
-                console.log('[MicrophoneTester] Recording time limit reached')
-                this.stopRecording()
-            }
-        }, 1000)
-    }
-
-    /**
-     * Update timer display
-     * @private
-     */
-    updateTimerDisplay(elapsed, max) {
-        const timerEl = document.getElementById('recordingTime')
-        if (timerEl) {
-            const minutes = Math.floor(elapsed / 60)
-            const seconds = elapsed % 60
-            timerEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')} / 0:${max.toString().padStart(2, '0')}`
-        }
-    }
-
-    /**
-     * Update recording UI state
-     * @private
-     */
-    updateRecordingUI() {
-        const recordBtn = document.getElementById('startRecordBtn')
-        const stopBtn = document.getElementById('stopRecordBtn')
-
-        if (this.isRecording) {
-            if (recordBtn) recordBtn.disabled = true
-            if (stopBtn) stopBtn.disabled = false
-        } else {
-            if (recordBtn) recordBtn.disabled = false
-            if (stopBtn) stopBtn.disabled = true
-        }
-    }
-
-    /**
-     * Enable playback button
-     * @private
-     */
-    enablePlayback() {
-        const playBtn = document.getElementById('playRecordBtn')
-        if (playBtn) {
-            playBtn.disabled = false
-        }
-    }
-
-    /**
-     * Get supported MIME type for MediaRecorder
-     * @private
-     * @returns {string}
-     */
-    getSupportedMimeType() {
-        const types = [
-            'audio/webm;codecs=opus',
-            'audio/webm',
-            'audio/ogg;codecs=opus',
-            'audio/ogg',
-            'audio/mp4'
-        ]
-
-        for (const type of types) {
-            if (MediaRecorder.isTypeSupported(type)) {
-                console.log('[MicrophoneTester] Using MIME type:', type)
-                return type
-            }
-        }
-
-        // Return empty to let browser decide
-        console.warn('[MicrophoneTester] No preferred MIME type supported')
-        return ''
-    }
-
-    /**
-     * Handle errors with user-friendly messages
-     * @private
-     */
-    handleError(error) {
-        let userMessage = error.message
-
-        if (error.name === 'NotAllowedError') {
-            userMessage = 'Microphone permission denied. Please allow microphone access in your browser settings.'
-        } else if (error.name === 'NotFoundError') {
-            userMessage = 'No microphone detected. Please connect a microphone and try again.'
-        } else if (error.name === 'NotReadableError') {
-            userMessage = 'Microphone is in use by another application. Close other apps and try again.'
-        } else if (error.name === 'SecurityError') {
-            userMessage = 'Security error: This site requires HTTPS or secure context to access microphone.'
-        } else if (error.message && error.message.includes('does not support')) {
-            userMessage = error.message
-        } else if (error.message && error.message.includes('not available')) {
-            userMessage = error.message + '\n\nDiagnostics: Check browser console (F12) for detailed API status.'
-        }
-
-        console.error('[MicrophoneTester]', userMessage)
-        this.updateStatus(userMessage, 'error')
-    }
-
-    /**
-     * Update status display
-     * @private
-     */
-    updateStatus(message, type = 'info') {
-        const statusEl = document.getElementById('micTestStatus')
-        if (statusEl) {
-            statusEl.textContent = message
-            statusEl.className = 'mic-status ' + type
-        }
-
-        console.log('[MicrophoneTester] Status:', type, message)
-    }
-}
-
-// Export for browser
-if (typeof window !== 'undefined') {
-    window.MicrophoneTester = MicrophoneTester
-}
-
-// Export for modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = MicrophoneTester
-}
-
-/**
- * Camera Tester (v06.04)
- *
- * Provides camera testing with:
- * - Real-time video preview
- * - Resolution selection (VHD/HD/SD/LD)
- * - Full-size mode (600px height)
- * - Fullscreen mode (native browser fullscreen)
- *
- * Uses Web API (getUserMedia, Fullscreen API)
- */
-
-class CameraTester {
-    constructor(logCallback) {
-        // Media stream
-        this.mediaStream = null
-        this.videoElement = null
-
-        // State
-        this.isTestActive = false
-        this.currentQuality = 'hd'
-        this.isFullSize = false
-        this.isFullscreen = false
-
-        // Resolution presets (matching quality presets)
-        this.resolutionPresets = {
-            vhd: { width: 1920, height: 1080, frameRate: 60 },
-            hd:  { width: 1280, height: 720,  frameRate: 30 },
-            sd:  { width: 640,  height: 480,  frameRate: 24 },
-            ld:  { width: 320,  height: 240,  frameRate: 15 }
-        }
-
-        // Fullscreen change listener
-        this.fullscreenChangeListener = null
-
-        // Logging function
-        this.log = logCallback || console.log
-
-        console.log('[CameraTester] Initialized')
-    }
-
-    /**
-     * Start camera test
-     * @param {string} quality - Quality preset (vhd, hd, sd, ld)
-     * @returns {Promise<MediaStream>}
-     */
-    async startTest(quality = 'hd') {
-        try {
-            console.log('[CameraTester] Starting test with quality:', quality)
-
-            // Check browser support
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('Your browser does not support camera access')
-            }
-
-            // Get video element
-            this.videoElement = document.getElementById('cameraPreview')
-            if (!this.videoElement) {
-                throw new Error('Video preview element not found')
-            }
-
-            // Get resolution constraints
-            const constraints = this.resolutionPresets[quality] || this.resolutionPresets.hd
-            this.currentQuality = quality
-
-            // Request camera access
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: constraints.width },
-                    height: { ideal: constraints.height },
-                    frameRate: { ideal: constraints.frameRate }
-                },
-                audio: false  // No audio for camera test
-            })
-
-            console.log('[CameraTester] Got media stream:', {
-                videoTracks: this.mediaStream.getVideoTracks().length,
-                quality: quality,
-                constraints: constraints
-            })
-
-            // Attach stream to video element
-            this.videoElement.srcObject = this.mediaStream
-
-            // Set state
-            this.isTestActive = true
-            this.isFullSize = false
-            this.isFullscreen = false
-
-            // Enable controls
-            this.enableControls()
-
-            // Log success
-            this.log(`✓ Camera test started (${quality.toUpperCase()})`, 'success')
-
-            return this.mediaStream
-        } catch (error) {
-            console.error('[CameraTester] Failed to start test:', error)
-            this.handleError(error)
-            throw error
-        }
-    }
-
-    /**
-     * Stop camera test and cleanup resources
-     */
-    stopTest() {
-        try {
-            console.log('[CameraTester] Stopping test...')
-
-            // Exit fullscreen if active
-            if (this.isFullscreen && document.fullscreenElement) {
-                document.exitFullscreen().catch(err => {
-                    console.warn('[CameraTester] Error exiting fullscreen:', err)
-                })
-                this.isFullscreen = false
-            }
-
-            // Remove fullscreen change listener
-            if (this.fullscreenChangeListener) {
-                document.removeEventListener('fullscreenchange', this.fullscreenChangeListener)
-                this.fullscreenChangeListener = null
-            }
-
-            // Stop all video tracks
-            if (this.mediaStream) {
-                this.mediaStream.getVideoTracks().forEach(track => track.stop())
-                this.mediaStream = null
-            }
-
-            // Clear video element
-            if (this.videoElement) {
-                this.videoElement.srcObject = null
-            }
-
-            // Reset size to small
-            this.isFullSize = false
-            this.resetVideoSize()
-
-            // Reset state
-            this.isTestActive = false
-            this.currentQuality = 'hd'
-
-            // Disable controls
-            this.disableControls()
-
-            this.log('Camera test stopped', 'info')
-            console.log('[CameraTester] Test stopped and resources cleaned up')
-        } catch (error) {
-            console.error('[CameraTester] Error stopping test:', error)
-        }
-    }
-
-    /**
-     * Change camera resolution
-     * @param {string} quality - Quality preset (vhd, hd, sd, ld)
-     */
-    async changeResolution(quality) {
-        try {
-            if (!this.isTestActive) {
-                console.warn('[CameraTester] Test not active')
-                return
-            }
-
-            console.log('[CameraTester] Changing resolution to:', quality)
-
-            // Stop current stream
-            if (this.mediaStream) {
-                this.mediaStream.getVideoTracks().forEach(track => track.stop())
-            }
-
-            // Start new stream with new resolution
-            await this.startTest(quality)
-            this.log(`Resolution changed to ${quality.toUpperCase()}`, 'info')
-        } catch (error) {
-            console.error('[CameraTester] Error changing resolution:', error)
-            this.log(`Error changing resolution: ${error.message}`, 'error')
-        }
-    }
-
-    /**
-     * Toggle between small (250px) and full-size (600px) view
-     */
-    toggleSize() {
-        try {
-            if (!this.isTestActive || !this.videoElement) {
-                console.warn('[CameraTester] Test not active')
-                return
-            }
-
-            const toggleBtn = document.getElementById('toggleSizeBtn')
-            if (!toggleBtn) return
-
-            if (this.isFullSize) {
-                // Return to small
-                this.resetVideoSize()
-                this.isFullSize = false
-                toggleBtn.textContent = '📐 Full-Size'
-                this.log('Switched to small view', 'info')
-            } else {
-                // Expand to full-size
-                this.videoElement.style.height = '600px'
-                this.isFullSize = true
-                toggleBtn.textContent = '📐 View Small'
-                this.log('Switched to full-size view', 'info')
-            }
-
-            console.log('[CameraTester] Size toggled, isFullSize:', this.isFullSize)
-        } catch (error) {
-            console.error('[CameraTester] Error toggling size:', error)
-        }
-    }
-
-    /**
-     * Reset video size to default (250px)
-     * @private
-     */
-    resetVideoSize() {
-        if (this.videoElement) {
-            this.videoElement.style.height = '250px'
-        }
-    }
-
-    /**
-     * Enter fullscreen mode
-     */
-    async enterFullscreen() {
-        try {
-            if (!this.isTestActive || !this.videoElement) {
-                console.warn('[CameraTester] Test not active')
-                return
-            }
-
-            console.log('[CameraTester] Entering fullscreen...')
-
-            // Request fullscreen
-            await this.videoElement.requestFullscreen()
-            this.isFullscreen = true
-
-            // Listen for fullscreen exit
-            this.fullscreenChangeListener = () => {
-                if (!document.fullscreenElement) {
-                    this.isFullscreen = false
-                    this.updateFullscreenButton()
-                    console.log('[CameraTester] Exited fullscreen')
-                }
-            }
-            document.addEventListener('fullscreenchange', this.fullscreenChangeListener)
-
-            this.updateFullscreenButton()
-            this.log('Entered fullscreen mode (press ESC to exit)', 'info')
-        } catch (error) {
-            console.error('[CameraTester] Error entering fullscreen:', error)
-            this.log(`Fullscreen error: ${error.message}`, 'error')
-        }
-    }
-
-    /**
-     * Exit fullscreen mode
-     */
-    exitFullscreen() {
-        try {
-            if (document.fullscreenElement) {
-                document.exitFullscreen()
-                this.isFullscreen = false
-                this.updateFullscreenButton()
-                this.log('Exited fullscreen mode', 'info')
-                console.log('[CameraTester] Exited fullscreen')
-            }
-        } catch (error) {
-            console.error('[CameraTester] Error exiting fullscreen:', error)
-        }
-    }
-
-    /**
-     * Update fullscreen button state
-     * @private
-     */
-    updateFullscreenButton() {
-        const btn = document.getElementById('fullscreenBtn')
-        if (btn) {
-            btn.textContent = this.isFullscreen ? '↙ Exit Fullscreen' : '⛶ Fullscreen'
-        }
-    }
-
-    /**
-     * Enable UI controls
-     * @private
-     */
-    enableControls() {
-        // Start/Stop buttons
-        document.getElementById('startCameraTestBtn').style.display = 'none'
-        document.getElementById('stopCameraTestBtn').style.display = 'inline-block'
-
-        // Resolution selector
-        const resolutionSelect = document.getElementById('cameraResolution')
-        if (resolutionSelect) {
-            resolutionSelect.disabled = false
-            resolutionSelect.value = this.currentQuality
-        }
-
-        // Size toggle button
-        const toggleBtn = document.getElementById('toggleSizeBtn')
-        if (toggleBtn) {
-            toggleBtn.disabled = false
-            toggleBtn.textContent = '📐 Full-Size'
-        }
-
-        // Fullscreen button
-        const fullscreenBtn = document.getElementById('fullscreenBtn')
-        if (fullscreenBtn) {
-            fullscreenBtn.disabled = false
-            fullscreenBtn.textContent = '⛶ Fullscreen'
-        }
-    }
-
-    /**
-     * Disable UI controls
-     * @private
-     */
-    disableControls() {
-        // Start/Stop buttons
-        document.getElementById('startCameraTestBtn').style.display = 'inline-block'
-        document.getElementById('stopCameraTestBtn').style.display = 'none'
-
-        // Resolution selector
-        const resolutionSelect = document.getElementById('cameraResolution')
-        if (resolutionSelect) {
-            resolutionSelect.disabled = true
-            resolutionSelect.value = 'hd'
-        }
-
-        // Size toggle button
-        const toggleBtn = document.getElementById('toggleSizeBtn')
-        if (toggleBtn) {
-            toggleBtn.disabled = true
-            toggleBtn.textContent = '📐 Full-Size'
-        }
-
-        // Fullscreen button
-        const fullscreenBtn = document.getElementById('fullscreenBtn')
-        if (fullscreenBtn) {
-            fullscreenBtn.disabled = true
-            fullscreenBtn.textContent = '⛶ Fullscreen'
-        }
-
-        // Reset video size
-        this.resetVideoSize()
-        this.isFullSize = false
-    }
-
-    /**
-     * Handle errors with user-friendly messages
-     * @private
-     */
-    handleError(error) {
-        let userMessage = error.message
-
-        if (error.name === 'NotAllowedError') {
-            userMessage = 'Camera permission denied. Please allow camera access in your browser settings.'
-        } else if (error.name === 'NotFoundError') {
-            userMessage = 'No camera detected. Please connect a camera and try again.'
-        } else if (error.name === 'NotReadableError') {
-            userMessage = 'Camera is in use by another application. Close other apps and try again.'
-        } else if (error.name === 'SecurityError') {
-            userMessage = 'Security error: This site requires HTTPS or secure context to access camera.'
-        } else if (error.message && error.message.includes('does not support')) {
-            userMessage = error.message
-        }
-
-        console.error('[CameraTester]', userMessage)
-        this.updateStatus(userMessage, 'error')
-    }
-
-    /**
-     * Update status display
-     * @private
-     */
-    updateStatus(message, type = 'info') {
-        const statusEl = document.getElementById('cameraTestStatus')
-        if (statusEl) {
-            statusEl.textContent = message
-            statusEl.className = 'camera-status ' + type
-        }
-
-        console.log('[CameraTester] Status:', type, message)
-    }
-}
-
-// Export for browser
-if (typeof window !== 'undefined') {
-    window.CameraTester = CameraTester
-}
-
-// Export for modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = CameraTester
-}
-
-/**
- * SVphone Call Manager (v06.00)
- *
- * Orchestrates between signaling layer (blockchain) and media layer (WebRTC).
- * Manages the complete call lifecycle from initiation to termination.
- */
-
-const STUN_SERVER_HOST = 'stun.l.google.com'
-const STUN_SERVER_PORT = 19302
-const STUN_SERVER_URL  = `stun:${STUN_SERVER_HOST}:${STUN_SERVER_PORT}`
-
-class EventEmitter {
-  constructor() {
-    this.listeners = new Map()
-  }
-
-  on(eventName, callback) {
-    if (!this.listeners.has(eventName)) {
-      this.listeners.set(eventName, [])
-    }
-    this.listeners.get(eventName).push(callback)
-  }
-
-  off(eventName, callback) {
-    const callbacks = this.listeners.get(eventName)
-    if (callbacks) {
-      const index = callbacks.indexOf(callback)
-      if (index > -1) callbacks.splice(index, 1)
-    }
-  }
-
-  emit(eventName, data) {
-    const callbacks = this.listeners.get(eventName)
-    if (callbacks) {
-      callbacks.forEach(cb => {
-        try { cb(data) } catch (error) {
-          console.error(`[EventEmitter] Error in ${eventName} handler:`, error)
-        }
-      })
-    }
-  }
-}
-
-class CallManager extends EventEmitter {
-  constructor(signaling, peerConnection) {
-    super()
-    this.signaling = signaling
-    this.peerConnection = peerConnection
-    this.activeCallSessions = new Map() // Map<callTokenId, CallSession>
-
-    // Bind signaling events
-    this.signaling.on('call:initiated', (data) => this.onCallInitiated(data))
-    this.signaling.on('call:incoming', (data) => this.onIncomingCall(data))
-    this.signaling.on('call:answered', (data) => this.onCallAnswered(data))
-    this.signaling.on('call:rejected', (data) => this.onCallRejected(data))
-
-    // Bind peer connection events
-    this.peerConnection.on('peer:connected', (data) => this.onPeerConnected(data))
-    this.peerConnection.on('peer:connection-failed', (data) => this.onPeerConnectionFailed(data))
-    this.peerConnection.on('media:track-received', (data) => this.onRemoteTrackReceived(data))
-    this.peerConnection.on('peer:connection-state-changed', ({ peerId, state }) => {
-      this.emit('call:log', { msg: `[WebRTC] conn: ${state}`, type: state === 'failed' ? 'error' : 'info' })
-    })
-    this.peerConnection.on('ice:state-changed', ({ peerId, state }) => {
-      this.emit('call:log', { msg: `[ICE] state: ${state}`, type: state === 'failed' ? 'error' : 'info' })
-    })
-    this.peerConnection.on('ice:gathering-changed', ({ peerId, state }) => {
-      this.emit('call:log', { msg: `[ICE] gathering: ${state}`, type: 'info' })
-    })
-    this.peerConnection.on('ice:pairs-on-failure', ({ peerId, pairs }) => {
-      this.emit('call:log', { msg: `[ICE] ${pairs.length} pair(s) tried:`, type: 'error' })
-      for (const p of pairs) {
-        this.emit('call:log', { msg: `  ${p.state} L:${p.local} → R:${p.remote}`, type: 'error' })
-      }
-    })
-  }
-
-  /**
-   * Get the remote peer ID for a session (callee if caller, caller if callee)
-   * @private
-   */
-  _getPeerId(session, callToken) {
-    return session.role === 'caller' ? callToken.callee : callToken.caller
-  }
-
-  /**
-   * Initiate a call — 1-TX path when callee fingerprint is in contacts.
-   *
-   * 1-TX flow:
-   *   1. Derive ICE credentials from session key (deterministic)
-   *   2. Create offer with munged ICE (setLocalDescription with derived creds)
-   *   3. Wait for ICE gathering (STUN srflx lands in SDP)
-   *   4. Build synthetic callee answer (callee fingerprint + derived ICE)
-   *   5. setRemoteDescription(syntheticAnswer) — caller ICE agent listens for prflx
-   *   6. Broadcast single CALL TX (offer SDP + caller fingerprint)
-   *   Callee fires ICE checks → peer-reflexive → DTLS → connected. No ANS token.
-   *
-   * @param {string} calleeAddress - Recipient's BSV address
-   * @param {Object} options - Call options
-   * @returns {Promise<CallSession>}
-   */
-  async initiateCall(calleeAddress, options = {}) {
-    try {
-      const contactData       = window.contactsStore?.get(calleeAddress) ?? null
-      const calleeFingerprint = contactData?.fingerprint ?? null
-      const myFingerprint     = this.peerConnection._persistentCertFingerprint ?? null
-
-      if (!myFingerprint) {
-        throw new Error('Persistent DTLS cert not yet loaded — try again in a moment.')
-      }
-
-      // Initialize media stream, or re-initialize if video requirement changed
-      const needsVideo = options.video !== false
-      const hasVideo   = (this.peerConnection.mediaStream?.getVideoTracks().length ?? 0) > 0
-      if (!this.peerConnection.mediaStream || needsVideo !== hasVideo) {
-        if (this.peerConnection.mediaStream) {
-          this.peerConnection.mediaStream.getTracks().forEach(t => t.stop())
-          this.peerConnection.mediaStream = null
-        }
-        await this.peerConnection.initializeMediaStream({
-          audio: options.audio !== false,
-          video: needsVideo
-        })
-      }
-
-      // Generate ephemeral session key
-      const sessionKey = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
-
-      // Derive deterministic ICE credentials from session key
-      const iceCreds = await window.iceCredentials.deriveAll(sessionKey)
-      this.emit('call:log', { msg: `[ICE] Derived: callerUfrag=${iceCreds.callerUfrag} callerPwd=${iceCreds.callerPwd.slice(0,4)}...${iceCreds.callerPwd.slice(-4)}`, type: 'info' })
-      this.emit('call:log', { msg: `[ICE] Derived: calleeUfrag=${iceCreds.calleeUfrag} calleePwd=${iceCreds.calleePwd.slice(0,4)}...${iceCreds.calleePwd.slice(-4)}`, type: 'info' })
-      this.emit('call:log', { msg: `[ICE] SessionKey hash: ${sessionKey.slice(0,8)}...`, type: 'info' })
-
-      // Create call token
-      const callToken = this.signaling.createCallToken(calleeAddress, sessionKey, {
-        codec:      options.codec  || 'opus',
-        quality:    options.quality || 'hd',
-      })
-
-      // Create offer with munged ICE credentials + DataChannel for punch signaling
-      let mediaOffer = null
-      try {
-        this.emit('call:log', { msg: '[1-TX] Creating munged SDP offer...', type: 'info' })
-
-        // Ensure PC exists so we can add a DataChannel before the offer is created
-        if (!this.peerConnection.getPeerConnection(calleeAddress)) {
-          this.peerConnection.createPeerConnection(calleeAddress, this.peerConnection._persistentCert)
-        }
-        const callerPc = this.peerConnection.getPeerConnection(calleeAddress)
-        const punchCh = callerPc.createDataChannel('sv-punch')
-        this._setupPunchChannel(punchCh, 'caller')
-
-        await this.peerConnection.createOfferMunged(calleeAddress, iceCreds)
-        const finalOffer = await this.peerConnection.waitForIceGathering(calleeAddress)
-        mediaOffer = finalOffer
-        callToken.sdpOffer        = mediaOffer
-        callToken.callerFingerprint = myFingerprint
-
-        // Extract caller's srflx IP:port from gathered SDP so callee knows where to punch
-        const srflxMatch = (mediaOffer.sdp || '').match(/(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+srflx/)
-        if (srflxMatch) {
-          const srflxIp = srflxMatch[1]
-          callToken.senderPort = parseInt(srflxMatch[2], 10)
-          callToken.senderIp = srflxIp
-          // Update signaling for any later use
-          this.signaling.myIp = srflxIp
-          this.emit('call:log', { msg: `[1-TX] ✓ srflx ${srflxIp}:${srflxMatch[2]} (included in CALL token for callee punch target)`, type: 'info' })
-        }
-
-        this.emit('call:log', { msg: '[1-TX] ✓ Offer ready (ICE gathered)', type: 'info' })
-      } catch (error) {
-        console.warn('[CallManager] Failed to create munged offer:', error)
-        throw error
-      }
-
-      // Build synthetic callee answer if we have callee's fingerprint (known contact)
-      // For first-time calls (no fingerprint), caller waits for ANS token with real SDP answer
-      if (calleeFingerprint) {
-        try {
-          const syntheticSdp = window.syntheticSdp.build(
-            mediaOffer.sdp,
-            iceCreds.calleeUfrag,
-            iceCreds.calleePwd,
-            calleeFingerprint
-          )
-          await this.peerConnection.setRemoteDescription(calleeAddress, { type: 'answer', sdp: syntheticSdp })
-          this.emit('call:log', { msg: '[1-TX] ✓ Synthetic answer set — ICE listening for peer-reflexive', type: 'info' })
-        } catch (error) {
-          console.warn('[CallManager] Failed to set synthetic remote answer:', error)
-          throw error
-        }
-      } else {
-        this.emit('call:log', { msg: '[Call] First-time call — waiting for ANS with callee fingerprint + SDP answer', type: 'info' })
-      }
-
-      // Broadcast CALL TX — no spray yet. Contact IP may be stale.
-      // Caller waits for PORT token with callee's fresh IP:port before spraying.
-      const broadcastResult = await this.signaling.broadcastCallToken(callToken, options.mintTokenFn)
-      this.emit('call:log', { msg: '[1-TX] ✓ CALL TX broadcast — awaiting PORT token for callee IP:port', type: 'info' })
-
-      // Create session tracking
-      const session = {
-        callTokenId:  broadcastResult.callTokenId,
-        txId:         broadcastResult.txId,
-        calleeAddress,
-        role:         'caller',
-        status:       'initiating',
-        createdAt:    Date.now(),
-        sessionKey,
-        iceCreds,
-        mediaOffer,
-        mediaAnswer:  null,
-        iceCandidates: [],
-        stats: {},
-        oneTxMode: !!calleeFingerprint,
-        firstTimeCall: !calleeFingerprint,
-      }
-
-      this.activeCallSessions.set(broadcastResult.callTokenId, session)
-      this.emit('call:initiated-session', session)
-      console.log('[CallManager] 1-TX call initiated to:', calleeAddress)
-
-      return session
-    } catch (error) {
-      console.error('[CallManager] Failed to initiate call:', error)
-      this.emit('call:initiation-failed', { error })
-      throw error
-    }
-  }
-
-  /**
-   * Handle outgoing call initiated event
-   * @private
-   */
-  onCallInitiated(data) {
-    const session = this.activeCallSessions.get(data.callTokenId)
-    if (session) {
-      session.status = 'ringing'
-      this.emit('call:ringing', data)
-      console.log('[CallManager] Call ringing:', data.calleeAddress)
-    }
-  }
-
-  /**
-   * Handle incoming call
-   * @private
-   */
-  onIncomingCall(data) {
-    const callToken = this.signaling.getCallToken(data.callTokenId)
-    const sdpContent = typeof callToken?.sdpOffer === 'object' ? callToken?.sdpOffer?.sdp : callToken?.sdpOffer
-
-    // Check if caller is a known contact
-    const callerContact = window.contactsStore?.get(data.caller) ?? null
-    const isNewCaller = !callerContact
-
-    const session = {
-      callTokenId: data.callTokenId,
-      caller: data.caller,
-      role: 'callee',
-      status: 'incoming',
-      createdAt: Date.now(),
-      mediaOffer: null,
-      mediaAnswer: null,
-      iceCandidates: [],
-      stats: {},
-      isNewCaller,
-    }
-
-    this.activeCallSessions.set(data.callTokenId, session)
-
-    // For calls with caller's IP and SDP, start ICE pre-punch IMMEDIATELY
-    // (before user clicks Accept) so both sides punch simultaneously.
-    if (sdpContent && callToken?.senderIp) {
-      this._startPrePunch(data.callTokenId, callToken).catch(err => {
-        console.warn('[CallManager] Pre-punch failed:', err)
-        this.emit('call:log', { msg: `[PrePunch] Failed: ${err.message}`, type: 'error' })
-      })
-    }
-
-    this.emit('call:incoming-session', session)
-    console.log('[CallManager] Incoming', isIdentityExchange ? 'identity exchange' : 'call', 'from:', data.caller)
-  }
-
-  /**
-   * Accept incoming call — 0-TX callee path.
-   *
-   * 1-TX flow (callerFingerprint present in CALL token):
-   *   1. Derive ICE credentials from caller's session key
-   *   2. createAnswerMunged() — setRemoteDescription(offer) + munge ICE + setLocalDescription
-   *   3. Wait for ICE gathering
-   *   4. Inject caller's public IP:port as srflx candidates → ICE starts checking immediately
-   *   5. ICE peer-reflexive → DTLS → connected. NO ANS TOKEN SENT.
-   *
-   * Fallback (no callerFingerprint, old 2-TX caller):
-   *   Same ICE setup, but also broadcasts ANS token via broadcastAnswerFn.
-   *
-   * @param {string} callTokenId - Call token ID
-   * @param {Object} options     - { audio, video, broadcastAnswerFn }
-   * @returns {Promise<CallSession>}
-   */
-  async acceptCall(callTokenId, options = {}) {
-    try {
-      const session = this.activeCallSessions.get(callTokenId)
-      if (!session) throw new Error(`Call session not found: ${callTokenId}`)
-
-      const callToken = this.signaling.getCallToken(callTokenId)
-      const iceLog    = (msg, type = 'info') => this.emit('call:log', { msg, type })
-
-      // ── Save caller's fingerprint if this is a first-time call ──
-      if (session.isNewCaller && callToken?.callerFingerprint) {
-        window.contactsStore?.save(callToken.caller, callToken.callerFingerprint, callToken.senderIp || null)
-        iceLog(`[Contact] New caller — saved fingerprint for ${callToken.caller}`, 'success')
-      }
-
-      // ── Normal call accept flow ──
-
-      session.status = 'accepting'
-      this.signaling.acceptCall(callTokenId, {})
-
-      // ── Pre-punch path: PC already exists and is punching ──
-      if (session.prePunchActive) {
-        const rtcPc = this.peerConnection.getPeerConnection(callToken.caller)
-        if (rtcPc && rtcPc.connectionState !== 'failed' && rtcPc.connectionState !== 'closed') {
-          iceLog('[Accept] Pre-punch PC active — adding media tracks to existing connection')
-
-          // Get media permissions and add tracks to the existing PC
-          if (!this.peerConnection.mediaStream) {
-            await this.peerConnection.initializeMediaStream({
-              audio: options.audio !== false,
-              video: options.video !== false,
-            })
-          }
-          if (this.peerConnection.mediaStream) {
-            const existingSenders = rtcPc.getSenders()
-            this.peerConnection.mediaStream.getTracks().forEach(track => {
-              if (!existingSenders.find(s => s.track === track)) {
-                rtcPc.addTrack(track, this.peerConnection.mediaStream)
-              }
-            })
-            iceLog('[Accept] ✓ Media tracks added to pre-punched connection')
-          }
-
-          // If already connected during pre-punch, transition immediately
-          if (rtcPc.connectionState === 'connected') {
-            session.status = 'connected'
-            session.connectedAt = Date.now()
-            this.startStatsMonitoring(callTokenId)
-            this.emit('call:connected', { callTokenId, timestamp: Date.now() })
-            iceLog('[Accept] ✓ Already connected from pre-punch!', 'success')
-          } else {
-            session.status = 'connecting'
-          }
-
-          this.emit('call:accepted-session', session)
-          return session
-        }
-        // Pre-punch PC failed — fall through to normal flow
-        iceLog('[Accept] Pre-punch PC failed, falling back to normal flow')
-        session.prePunchActive = false
-      }
-
-      // ── Standard flow (no pre-punch or pre-punch failed) ──
-
-      if (!this.peerConnection.mediaStream) {
-        await this.peerConnection.initializeMediaStream({
-          audio: options.audio !== false,
-          video: options.video !== false
-        })
-      }
-
-      if (!callToken?.sdpOffer) {
-        session.status = 'connecting'
-        this.emit('call:accepted-session', session)
-        return session
-      }
-
-      const rawOfferSdp = typeof callToken.sdpOffer === 'object' ? callToken.sdpOffer.sdp : callToken.sdpOffer
-      const oneTxMode   = !!callToken.callerFingerprint
-
-      // Strip ICE candidates from offer — same as _startPrePunch.
-      // Prevents premature ICE checks that fail and put ICE into "failed" state.
-      const offerSdp = rawOfferSdp.replace(/^a=candidate:.*\r?\n/gm, '')
-        .replace(/^a=end-of-candidates.*\r?\n/gm, '')
-
-      iceLog(`[Accept] ${oneTxMode ? '1-TX mode (no ANS token)' : '2-TX mode (ANS token required)'}`)
-
-      try {
-        // Derive ICE credentials from the caller's session key
-        const iceCreds = await window.iceCredentials.deriveAll(callToken.sessionKey)
-        iceLog(`[Accept] Derived ICE creds: callee=${iceCreds.calleeUfrag} caller=${iceCreds.callerUfrag}`)
-        iceLog(`[Accept] SessionKey hash: ${(callToken.sessionKey || '').slice(0,8)}...`)
-
-        // Create answer with persistent cert + derived ICE credentials
-        const answer     = await this.peerConnection.createAnswerMunged(callToken.caller, offerSdp, iceCreds)
-        const finalAnswer = await this.peerConnection.waitForIceGathering(callToken.caller)
-        session.mediaAnswer = finalAnswer || answer
-
-        iceLog(`[Accept] ✓ Answer ready (candidates stripped, ICE in "new" state)`)
-
-        if (oneTxMode) {
-          // 1-TX: ICE fires checks to caller → peer-reflexive → DTLS → connected
-          iceLog('[Accept] ✓ 1-TX: ICE active. Callee firing checks to caller — waiting for peer-reflexive...')
-
-          // Targeted callee spray to caller's known srflx port ±20
-          const callerIp = callToken.senderIp ?? null
-          const callerPunchPort = callToken.senderPort || null
-          if (callerIp && callerPunchPort) {
-            await this._injectPortSpray(callToken.caller, callerIp, { knownPort: callerPunchPort, batch: 0 })
-
-            let sprayBatch = 1
-            this._calleePunchInterval = setInterval(async () => {
-              const pc = this.peerConnection.getPeerConnection(callToken.caller)
-              if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed') {
-                clearInterval(this._calleePunchInterval)
-                this._calleePunchInterval = null
-                if (pc?.connectionState === 'connected') {
-                  iceLog('[Spray] Callee connected!', 'success')
-                }
-                return
-              }
-              // Pause spray while DTLS is in progress
-              if (pc.connectionState === 'connecting') {
-                iceLog('[Spray] DTLS in progress — pausing spray')
-                return
-              }
-              await this._injectPortSpray(callToken.caller, callerIp, { knownPort: callerPunchPort, batch: sprayBatch++ })
-            }, 10000)
-          }
-        } else {
-          // 2-TX fallback: broadcast ANS token so caller can setRemoteDescription
-          if (options.broadcastAnswerFn) {
-            try {
-              const answerSdp = session.mediaAnswer?.sdp || answer.sdp
-              iceLog('[Accept] Broadcasting ANS token to caller (2-TX fallback)...')
-              await this.signaling.broadcastCallAnswer(
-                callTokenId,
-                callToken.caller,
-                {
-                  sdpAnswer:  answerSdp,
-                  senderIp:   this.signaling.myIp,
-                  senderPort: this.signaling.myPort,
-                  sessionKey: callToken.sessionKey,
-                  codec:      callToken.codec,
-                  quality:    callToken.quality,
-                  callee:     this.signaling.myAddress,
-                },
-                options.broadcastAnswerFn
-              )
-              iceLog('[Accept] ✓ ANS token sent')
-            } catch (err) {
-              console.warn('[CallManager] ANS broadcast failed:', err.message)
-            }
-          }
-        }
-      } catch (error) {
-        console.warn('[CallManager] WebRTC answer setup failed:', error)
-      }
-
-      session.status = 'connecting'
-      this.emit('call:accepted-session', session)
-      console.log('[CallManager] Accepted call:', callTokenId)
-      return session
-    } catch (error) {
-      console.error('[CallManager] Failed to accept call:', error)
-      this.emit('call:acceptance-failed', { callTokenId, error })
-      throw error
-    }
-  }
-
-  /**
-   * Reject incoming call
-   */
-  async rejectCall(callTokenId, reason = 'user-declined') {
-    try {
-      this.signaling.rejectCall(callTokenId, reason)
-
-      const session = this.activeCallSessions.get(callTokenId)
-      if (session) {
-        session.status = 'rejected'
-
-        // Clean up pre-punch PC if active
-        if (session.prePunchActive) {
-          if (this._calleePunchInterval) {
-            clearInterval(this._calleePunchInterval)
-            this._calleePunchInterval = null
-          }
-          const callToken = this.signaling.getCallToken(callTokenId)
-          if (callToken) {
-            this.peerConnection.closePeerConnection(callToken.caller)
-          }
-          session.prePunchActive = false
-        }
-      }
-
-      this.emit('call:rejected-session', { callTokenId, reason })
-      console.log('[CallManager] Rejected call:', callTokenId)
-    } catch (error) {
-      console.error('[CallManager] Failed to reject call:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Handle call answered event
-   * @private
-   */
-  async onCallAnswered(data) {
-    let session = this.activeCallSessions.get(data.callTokenId)
-
-    // Fallback: answer inscription txId ≠ call inscription txId. If direct lookup
-    // misses (e.g., session stored under call txId), find caller session by callee address.
-    if (!session && data.callee) {
-      for (const [, s] of this.activeCallSessions) {
-        if (s.role === 'caller' && s.calleeAddress === data.callee) {
-          session = s
-          break
-        }
-      }
-    }
-
-    // Callee detecting its own ANS token via UTXO polling — start callee spray.
-    // This synchronizes both sides: caller also starts spray when it detects the ANS token.
-    if (!session && data.caller) {
-      for (const [id, s] of this.activeCallSessions) {
-        if (s.role === 'callee' && s.caller === data.caller) {
-          this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Own ANS token detected via UTXO polling — starting callee spray`, type: 'success' })
-          this.startCalleeSpray(id)
-          return
-        }
-      }
-    }
-
-    if (session) {
-      this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Token seen in mempool from ${data.callee || 'unknown'}`, type: 'info' })
-      console.log('[CallManager] ANS token seen in mempool from:', data.callee || 'unknown', 'at', new Date().toLocaleTimeString())
-
-      // Save callee fingerprint from ANS (first-time call or fingerprint update)
-      if (data.callerFingerprint) {
-        window.contactsStore?.save(session.calleeAddress, data.callerFingerprint, data.calleeIp || null)
-        this.emit('call:log', { msg: `[Contact] Saved callee fingerprint for ${session.calleeAddress}`, type: 'success' })
-      }
-
-      // First-time call: caller didn't have callee fingerprint, so no synthetic answer was set.
-      // Use the real SDP answer from the ANS token to set remote description.
-      if (session.firstTimeCall && data.sdpAnswer) {
-        try {
-          const answerSdp = typeof data.sdpAnswer === 'object' ? data.sdpAnswer.sdp : data.sdpAnswer
-          if (answerSdp) {
-            // Strip candidates — spray handles candidate injection
-            const cleanAnswer = answerSdp.replace(/^a=candidate:.*\r?\n/gm, '')
-              .replace(/^a=end-of-candidates.*\r?\n/gm, '')
-            await this.peerConnection.setRemoteDescription(session.calleeAddress, { type: 'answer', sdp: cleanAnswer })
-            this.emit('call:log', { msg: '[ANS] ✓ Remote description set from ANS SDP answer', type: 'success' })
-            session.firstTimeCall = false  // connection setup complete
-          }
-        } catch (err) {
-          console.warn('[CallManager] Failed to set remote description from ANS:', err.message)
-          this.emit('call:log', { msg: `[ANS] Failed to set remote SDP: ${err.message}`, type: 'error' })
-        }
-      }
-
-      // ANS token with callee's srflx IP:port (+ SDP answer + fingerprint)
-      const calleePort = data.calleePort
-      const calleeIp   = data.calleeIp || null
-      if (calleePort && calleeIp) {
-        this.emit('call:log', { msg: `[ANS] ${new Date().toLocaleTimeString()} Callee answer received: ${calleeIp}:${calleePort} — starting targeted spray`, type: 'success' })
-
-        // Alternating SPI pattern: caller first on even batches (0,2,4...),
-        // callee first on odd batches (1,3,5...). Delay increases with each
-        // retry pair to cover wider timing windows. This ensures both spray
-        // orderings are tried regardless of which side has a strict SPI firewall.
-        const spiDelay = (batch) => 3000 + Math.floor(batch / 2) * 3000 // 3s, 3s, 6s, 6s, 9s, 9s...
-
-        // Batch 0: caller immediate (caller sprays first)
-        this.emit('call:log', { msg: `[Spray] Caller #0 immediate (caller first)`, type: 'info' })
-        this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch: 0 })
-
-        let sprayBatch = 1
-        const sprayStart = Date.now()
-        this._callerPunchInterval = setInterval(async () => {
-          const pc = this.peerConnection.getPeerConnection(session.calleeAddress)
-          const elapsed = Date.now() - sprayStart
-          if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed' || elapsed > 120000) {
-            clearInterval(this._callerPunchInterval)
-            this._callerPunchInterval = null
-            if (pc?.connectionState === 'connected') {
-              this.emit('call:log', { msg: '[ANS] Caller connected!', type: 'success' })
-            } else if (elapsed > 120000) {
-              this.emit('call:log', { msg: '[Spray] Caller spray timed out after 2 min', type: 'warn' })
-            }
-            return
-          }
-          const iceState = pc.iceConnectionState
-          if (iceState === 'connected' || iceState === 'completed') {
-            this.emit('call:log', { msg: '[Spray] ICE connected, DTLS negotiating — pausing spray', type: 'info' })
-            return
-          }
-          const batch = sprayBatch++
-          // Even: caller immediate (caller first). Odd: caller delays (callee first).
-          if (batch % 2 === 1) {
-            const d = spiDelay(batch)
-            this.emit('call:log', { msg: `[Spray] Caller #${batch} delay ${d}ms (callee first)`, type: 'info' })
-            await new Promise(r => setTimeout(r, d))
-          }
-          await this._injectPortSpray(session.calleeAddress, calleeIp, { knownPort: calleePort, batch })
-        }, 10000)
-
-        console.log('[CallManager] ANS token received — started targeted spray')
-        return  // Don't emit call:answered-session for port announcements
-      }
-
-      session.status = 'answered'
-      this.emit('call:answered-session', data)
-      console.log('[CallManager] Call answered')
-    }
-  }
-
-  /**
-   * Handle call rejected event
-   * @private
-   */
-  onCallRejected(data) {
-    const session = this.activeCallSessions.get(data.callTokenId)
-    if (session) {
-      session.status = 'rejected'
-      this.emit('call:rejected-session', data)
-    }
-  }
-
-  /**
-   * Add ICE candidate to peer connection
-   */
-  async addIceCandidate(callTokenId, candidate) {
-    try {
-      const session = this.activeCallSessions.get(callTokenId)
-      if (!session) {
-        throw new Error(`Call session not found: ${callTokenId}`)
-      }
-
-      const callToken = this.signaling.getCallToken(callTokenId)
-      const peerId = this._getPeerId(session, callToken)
-
-      await this.peerConnection.addIceCandidate(peerId, candidate)
-      session.iceCandidates.push(candidate)
-    } catch (error) {
-      console.error('[CallManager] Failed to add ICE candidate:', error)
-    }
-  }
-
-  /**
-   * Handle peer connected
-   * @private
-   */
-  onPeerConnected(data) {
-    // Find session by peer ID
-    let session = null
-    for (const [callTokenId, sess] of this.activeCallSessions) {
-      const callToken = this.signaling.getCallToken(callTokenId)
-      if (callToken) {
-        const peerId = this._getPeerId(sess, callToken)
-        if (peerId === data.peerId) {
-          session = sess
-          break
-        }
-      }
-    }
-
-    if (session) {
-      // If pre-punch connected before user accepted, defer the transition.
-      // acceptCall() will handle the connected state when the user clicks Accept.
-      if (session.prePunchActive && session.status === 'incoming') {
-        session.preConnected = true
-        this.emit('call:log', { msg: '[PrePunch] ICE connected before user accepted — waiting for Accept', type: 'success' })
-        console.log('[CallManager] Pre-punch connected, awaiting user accept')
-        return
-      }
-
-      console.debug('[CallManager] onPeerConnected: Found session, setting status to connected')
-      session.status = 'connected'
-      session.connectedAt = Date.now()
-
-      // Start collecting statistics
-      this.startStatsMonitoring(session.callTokenId)
-
-      this.emit('call:connected', {
-        callTokenId: session.callTokenId,
-        timestamp: Date.now()
-      })
-
-      console.log('[CallManager] Peer connected')
-    } else {
-      console.error('[CallManager] onPeerConnected: NO SESSION FOUND! This is the problem!')
-    }
-  }
-
-  /**
-   * Handle peer connection failed
-   * @private
-   */
-  onPeerConnectionFailed(data) {
-    console.error('[CallManager] Peer connection failed:', data.peerId)
-    this.emit('call:connection-failed', data)
-  }
-
-  /**
-   * Inject ICE candidates targeting ±20 ports around a known remote port.
-   * Opens NAT mappings so the peer's actual port is likely covered.
-   * (most broadband), any outgoing packet refreshes the port binding.
-  /**
-   * @private
-   * @param {string} peerId   - Remote peer address
-   * @param {string} remoteIp - Remote public IP
-   * @param {Object} options  - { knownPort, batch }
-   * @returns {Promise<number>} candidates injected
-   */
-  async _injectPortSpray(peerId, remoteIp, options = {}) {
-    const { knownPort = null, batch = 0 } = options
-    const iceLog = (msg, type = 'info') => this.emit('call:log', { msg, type })
-    const ports = []
-
-    if (knownPort) {
-      // Small spray: known port ± 5.  If the SPI firewall "poisons" the
-      // exact port after unsolicited inbound, nearby ports stay clean.
-      // 11 candidates total — well under flood-protection thresholds.
-      const spread = 5
-      for (let p = knownPort - spread; p <= knownPort + spread; p++) {
-        if (p > 0 && p <= 65535) ports.push(p)
-      }
-    } else {
-      // Fallback: VoIP range
-      for (let p = 3478; p <= 3497; p++) ports.push(p)
-    }
-
-    let ok = 0
-    const tasks = ports.map((port, i) =>
-      this.peerConnection.addIceCandidate(peerId, {
-        candidate: `candidate:spray${batch}_${i} 1 UDP ${1677729535 - i} ${remoteIp} ${port} typ srflx raddr 0.0.0.0 rport 0`,
-        sdpMid: '0',
-        sdpMLineIndex: 0,
-      }).then(() => ok++).catch(() => {})
-    )
-    await Promise.all(tasks)
-
-    const pc = this.peerConnection.getPeerConnection(peerId)
-    const iceState = pc?.iceConnectionState || '?'
-    const connState = pc?.connectionState || '?'
-    const sigState = pc?.signalingState || '?'
-    iceLog(`[Spray] ${new Date().toLocaleTimeString()} #${batch} ${ok}/${ports.length} → ${remoteIp}:${ports[0]}-${ports[ports.length - 1]} ice=${iceState} conn=${connState} sig=${sigState}`)
-
-    // Diagnostic: dump ICE candidate pair states + STUN check counts
-    if (pc) {
-      try {
-        const stats = await pc.getStats()
-        const pairs = []
-        const candidates = {}
-        const allCandTypes = { local: [], remote: [] }
-        stats.forEach(report => {
-          if (report.type === 'local-candidate' || report.type === 'remote-candidate') {
-            const addr = `${report.address || report.ip || '?'}:${report.port || '?'}(${report.candidateType || '?'})`
-            candidates[report.id] = addr
-            if (report.type === 'local-candidate') allCandTypes.local.push(addr)
-            else allCandTypes.remote.push(addr)
-          }
-        })
-        stats.forEach(report => {
-          if (report.type === 'candidate-pair') {
-            const local = candidates[report.localCandidateId] || '?'
-            const remote = candidates[report.remoteCandidateId] || '?'
-            const reqSent = report.requestsSent || 0
-            const resSent = report.responsesSent || 0
-            const reqRecv = report.requestsReceived || 0
-            const resRecv = report.responsesReceived || 0
-            pairs.push(`${report.state} ${local}↔${remote} stun:sent=${reqSent}/recv=${resRecv} stunIn:req=${reqRecv}/res=${resSent}`)
-          }
-        })
-        if (pairs.length > 0) {
-          iceLog(`[ICE-PAIRS] ${pairs.join(' | ')}`)
-        }
-        // Show all candidates (especially look for prflx)
-        iceLog(`[ICE-CANDS] local=[${allCandTypes.local.join(', ')}] remote=[${allCandTypes.remote.join(', ')}]`)
-      } catch {}
-    }
-
-    return ok
-  }
-
-  /**
-   * Set up a DataChannel for punch-hit/ack signaling.
-   * When ICE connects and the channel opens, both sides exchange
-   * confirmation messages so they know the exact addresses that worked.
-   * @private
-   */
-  _setupPunchChannel(channel, role) {
-    const iceLog = (msg, type = 'info') => this.emit('call:log', { msg, type })
-    channel.onopen = () => {
-      iceLog(`[PUNCH] DataChannel open (${role}) — sending PUNCH_HIT`, 'success')
-      channel.send(JSON.stringify({ type: 'PUNCH_HIT', role, ts: Date.now() }))
-    }
-    channel.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data)
-        if (msg.type === 'PUNCH_HIT') {
-          iceLog(`[PUNCH] Received PUNCH_HIT from ${msg.role}`, 'success')
-          channel.send(JSON.stringify({ type: 'PUNCH_ACK', role, ts: Date.now() }))
-        } else if (msg.type === 'PUNCH_ACK') {
-          iceLog('[PUNCH] Received PUNCH_ACK — connection confirmed!', 'success')
-        }
-      } catch { /* ignore malformed messages */ }
-    }
-    channel.onerror = (e) => iceLog(`[PUNCH] DataChannel error: ${e.message || e}`, 'error')
-    this._punchChannel = channel
-  }
-
-  /**
-   * Start ICE pre-punch immediately when a 1-TX CALL TX arrives.
-   * Creates the PeerConnection and begins punching to the caller's IP
-   * BEFORE the user clicks Accept — so both sides punch simultaneously.
-   * The same PC is reused when acceptCall() runs.
-   * @private
-   */
-  async _startPrePunch(callTokenId, callToken) {
-    const iceLog = (msg, type = 'info') => this.emit('call:log', { msg, type })
-    const offerSdp = typeof callToken.sdpOffer === 'object' ? callToken.sdpOffer.sdp : callToken.sdpOffer
-
-    // Derive ICE credentials from the caller's session key
-    const iceCreds = await window.iceCredentials.deriveAll(callToken.sessionKey)
-    iceLog(`[PrePunch] Derived ICE creds: callee=${iceCreds.calleeUfrag}`)
-
-    // Strip ICE candidates from the offer before setting as remote description.
-    // The offer contains the caller's srflx candidate, which would cause the callee's
-    // ICE agent to immediately send connectivity checks to the caller. These checks
-    // ALWAYS fail (caller's NAT hasn't opened for callee yet) and put ICE into "failed"
-    // state. Spray candidates added after ICE "failed" are ignored by Chrome.
-    // Stripping candidates keeps ICE in "new" state until spray provides the first
-    // remote candidates, ensuring fresh connectivity checks.
-    const strippedOffer = offerSdp.replace(/^a=candidate:.*\r?\n/gm, '')
-      .replace(/^a=end-of-candidates.*\r?\n/gm, '')
-
-    // Create PC WITH STUN for port discovery (null = use default STUN servers)
-    const answer   = await this.peerConnection.createAnswerMunged(
-      callToken.caller, strippedOffer, iceCreds, { iceServers: null }
-    )
-    const finalAns = await this.peerConnection.waitForIceGathering(callToken.caller)
-
-    const session = this.activeCallSessions.get(callTokenId)
-    const rtcPc = this.peerConnection.getPeerConnection(callToken.caller)
-
-    // Listen for srflx candidate (STUN port discovery)
-    if (rtcPc) {
-      let srflxAnnounced = false
-      const announceSrflx = (ip, port, source) => {
-        if (srflxAnnounced) return
-        srflxAnnounced = true
-        iceLog(`[PrePunch] STUN discovered (${source}): ${ip}:${port}`, 'success')
-        if (session) session.calleeSrflx = { ip, port }
-        // Set callee's public IP from STUN (no HTTP detection needed)
-        this.signaling.myIp = ip
-        this.emit('call:port-discovered', {
-          callTokenId,
-          callerAddress: callToken.caller,
-          sessionKey: callToken.sessionKey,
-          ip,
-          port,
-          sdpAnswer: finalAns?.sdp || answer?.sdp || '',
-          calleeFingerprint: this.peerConnection._persistentCertFingerprint ?? '',
-        })
-      }
-
-      // Async listener — catches srflx even if STUN responds after gathering timeout
-      rtcPc.addEventListener('icecandidate', (event) => {
-        if (!event.candidate) return
-        const cand = event.candidate.candidate
-        if (cand.includes('typ srflx')) {
-          const parts = cand.split(' ')
-          const ip = parts[4]
-          const port = parseInt(parts[5])
-          if (ip && port) announceSrflx(ip, port, 'event')
-        }
-      })
-
-      // Also check gathered SDP (in case STUN completed before listener was added)
-      // Note: Chrome uses lowercase "udp", so match case-insensitively with \w+
-      const gatheredSdp = (finalAns?.sdp || answer?.sdp || '')
-      const srflxMatch = gatheredSdp.match(/(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+typ\s+srflx/)
-      if (srflxMatch) announceSrflx(srflxMatch[1], parseInt(srflxMatch[2]), 'SDP')
-
-      // Fallback: if no srflx found, use host candidate port with our known public IP.
-      // Covers two cases:
-      //  1. Machine has public IP on interface → browser deduplicates srflx with host (RFC 8445)
-      //  2. STUN didn't respond → only host candidates available
-      // Chrome uses mDNS hostnames (xxx.local) instead of IPs, so match any address with \S+
-      if (!srflxAnnounced) {
-        const myPublicIp = this.signaling.myIp
-        if (myPublicIp) {
-          // Try matching our public IP directly in host candidates
-          const escapedIp = myPublicIp.replace(/\./g, '\\.')
-          const hostMatch = gatheredSdp.match(new RegExp(
-            `(?:^|\\n)a=candidate:\\S+\\s+1\\s+\\w+\\s+\\d+\\s+${escapedIp}\\s+(\\d+)\\s+typ\\s+host`
-          ))
-          if (hostMatch) {
-            announceSrflx(myPublicIp, parseInt(hostMatch[1]), 'host-public')
-          } else {
-            // Last resort: use any host candidate's port (may be mDNS hostname)
-            const anyHostMatch = gatheredSdp.match(
-              /a=candidate:\S+\s+1\s+\w+\s+\d+\s+(\S+)\s+(\d+)\s+typ\s+host/
-            )
-            if (anyHostMatch) {
-              const hostPort = parseInt(anyHostMatch[2])
-              iceLog(`[PrePunch] No srflx — using public IP + host port: ${myPublicIp}:${hostPort}`)
-              announceSrflx(myPublicIp, hostPort, 'host-fallback')
-            } else {
-              iceLog(`[PrePunch] No candidates found in SDP (${gatheredSdp.length}B)`, 'warn')
-            }
-          }
-        } else {
-          iceLog('[PrePunch] No public IP detected — cannot announce port', 'warn')
-        }
-      }
-
-      // DataChannel handler for incoming punch channel from caller
-      rtcPc.ondatachannel = (event) => {
-        iceLog('[PrePunch] DataChannel received from caller')
-        this._setupPunchChannel(event.channel, 'callee')
-      }
-    }
-
-    // NOTE: _buildPublicIpCandidates removed — injecting caller's IP before both
-    // sides are ready causes premature ICE failure (NAT blocks the checks).
-    // The spray handles candidate injection after both sides are synchronized.
-
-    // Save caller spray target — spray deferred until PORT TX is in mempool
-    // so both sides punch simultaneously (caller waits for PORT TX too).
-    const callerIp = callToken.senderIp ?? null
-    const callerPort = callToken.senderPort || null
-
-    // Update session so acceptCall() can reuse this PC
-    if (session) {
-      session.prePunchActive = true
-      session.iceCreds = iceCreds
-      session.mediaAnswer = finalAns || answer
-      session.callerSprayTarget = { ip: callerIp, port: callerPort, callerPeerId: callToken.caller }
-    }
-    // Debug: log exact connection data on callee side
-    if (rtcPc) {
-      const localDesc = rtcPc.localDescription?.sdp || ''
-      const remoteDesc = rtcPc.remoteDescription?.sdp || ''
-      const localUfrag = localDesc.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
-      const localPwd = localDesc.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
-      const remoteUfrag = remoteDesc.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
-      const remotePwd = remoteDesc.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
-      const localFp = localDesc.match(/a=fingerprint:(\S+ \S+)/)?.[1] || '?'
-      const remoteFp = remoteDesc.match(/a=fingerprint:(\S+ \S+)/)?.[1] || '?'
-      const localSetup = localDesc.match(/a=setup:(\S+)/)?.[1] || '?'
-      const remoteSetup = remoteDesc.match(/a=setup:(\S+)/)?.[1] || '?'
-      const localCands = (localDesc.match(/a=candidate:/g) || []).length
-      const remoteCands = (remoteDesc.match(/a=candidate:/g) || []).length
-      iceLog(`[CALLEE-DBG] localUfrag=${localUfrag} localPwd=${localPwd.slice(0,4)}…${localPwd.slice(-4)}`)
-      iceLog(`[CALLEE-DBG] remoteUfrag=${remoteUfrag} remotePwd=${remotePwd.slice(0,4)}…${remotePwd.slice(-4)}`)
-      iceLog(`[CALLEE-DBG] localFP=…${localFp.slice(-20)} remoteFP=…${remoteFp.slice(-20)}`)
-      iceLog(`[CALLEE-DBG] localSetup=${localSetup} remoteSetup=${remoteSetup} localCands=${localCands} remoteCands=${remoteCands}`)
-    }
-    iceLog('[PrePunch] ICE active — awaiting PORT TX broadcast before spraying')
-  }
-
-  /**
-   * Start callee spray after PORT TX has been broadcast to mempool.
-   * Called by phone-controller after broadcastCallAnswer() completes.
-   * Both sides spray simultaneously — caller starts when it sees the PORT token,
-   * callee starts here after broadcasting it.
-   * @param {string} callTokenId - Call token ID
-   */
-  async startCalleeSpray(callTokenId) {
-    const session = this.activeCallSessions.get(callTokenId)
-    if (!session?.callerSprayTarget) {
-      this.emit('call:log', { msg: '[Spray] No caller spray target saved — skipping callee spray', type: 'warn' })
-      return
-    }
-
-    const { ip, port, callerPeerId } = session.callerSprayTarget
-    if (!ip || !port) {
-      this.emit('call:log', { msg: '[Spray] Caller IP/port missing — skipping callee spray', type: 'warn' })
-      return
-    }
-
-    // Alternating SPI pattern (mirrors caller): callee delays on even batches
-    // (0,2,4...), caller first on even batches. Delay grows with each retry pair.
-    const spiDelay = (batch) => 3000 + Math.floor(batch / 2) * 3000
-
-    // Batch 0: callee delays (caller sprays first)
-    const d0 = spiDelay(0)
-    this.emit('call:log', { msg: `[Spray] Callee #0 delay ${d0}ms (caller first) to ${ip}:${port}`, type: 'info' })
-    await new Promise(r => setTimeout(r, d0))
-    this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch: 0 })
-
-    let sprayBatch = 1
-    const sprayStart = Date.now()
-    this._calleePunchInterval = setInterval(async () => {
-      const pc = this.peerConnection.getPeerConnection(callerPeerId)
-      const elapsed = Date.now() - sprayStart
-      if (!pc || pc.connectionState === 'connected' || pc.connectionState === 'closed' || elapsed > 120000) {
-        clearInterval(this._calleePunchInterval)
-        this._calleePunchInterval = null
-        if (pc?.connectionState === 'connected') {
-          this.emit('call:log', { msg: '[Spray] Callee connected!', type: 'success' })
-        } else if (elapsed > 120000) {
-          this.emit('call:log', { msg: '[Spray] Callee spray timed out after 2 min', type: 'warn' })
-        }
-        return
-      }
-      const iceState = pc.iceConnectionState
-      if (iceState === 'connected' || iceState === 'completed') {
-        this.emit('call:log', { msg: '[Spray] ICE connected, DTLS negotiating — pausing spray', type: 'info' })
-        return
-      }
-      const batch = sprayBatch++
-      // Even: callee delays (caller first). Odd: callee immediate (callee first).
-      if (batch % 2 === 0) {
-        const d = spiDelay(batch)
-        this.emit('call:log', { msg: `[Spray] Callee #${batch} delay ${d}ms (caller first)`, type: 'info' })
-        await new Promise(r => setTimeout(r, d))
-      }
-      await this._injectPortSpray(callerPeerId, ip, { knownPort: port, batch })
-    }, 10000)
-  }
-
-  /**
-   * Handle remote media track received
-   * @private
-   */
-  onRemoteTrackReceived(data) {
-    this.emit('media:remote-track', data)
-    console.log('[CallManager] Received remote', data.track.kind, 'track')
-  }
-
-  /**
-   * Start monitoring call statistics
-   * @private
-   */
-  startStatsMonitoring(callTokenId) {
-    const session = this.activeCallSessions.get(callTokenId)
-    if (!session) return
-
-    const callToken = this.signaling.getCallToken(callTokenId)
-    const peerId = this._getPeerId(session, callToken)
-
-    const monitorInterval = setInterval(async () => {
-      if (session.status !== 'connected') {
-        clearInterval(monitorInterval)
-        return
-      }
-
-      try {
-        const stats = await this.peerConnection.getStats(peerId)
-        if (stats) {
-          session.stats = {
-            ...session.stats,
-            lastUpdated: Date.now(),
-            ...stats
-          }
-          this.emit('call:stats-updated', {
-            callTokenId: callTokenId,
-            stats: stats
-          })
-        }
-      } catch (error) {
-        console.warn('[CallManager] Failed to collect stats:', error)
-      }
-    }, 5000) // Collect stats every 5 seconds
-
-    session.statsMonitor = monitorInterval
-  }
-
-  /**
-   * End call
-   *
-   * @param {string} callTokenId - Call token ID
-   * @param {Object} options - End options
-   */
-  async endCall(callTokenId, options = {}) {
-    try {
-      const session = this.activeCallSessions.get(callTokenId)
-      if (!session) {
-        throw new Error(`Call session not found: ${callTokenId}`)
-      }
-
-      // Stop stats monitoring
-      if (session.statsMonitor) {
-        clearInterval(session.statsMonitor)
-      }
-
-      if (this._callerPunchInterval) {
-        clearInterval(this._callerPunchInterval)
-        this._callerPunchInterval = null
-      }
-      if (this._punchChannel) {
-        try { this._punchChannel.close() } catch {}
-        this._punchChannel = null
-      }
-      if (this._calleePunchInterval) {
-        clearInterval(this._calleePunchInterval)
-        this._calleePunchInterval = null
-      }
-
-      // Close peer connection
-      const callToken = this.signaling.getCallToken(callTokenId)
-      if (callToken) {
-        const peerId = this._getPeerId(session, callToken)
-        this.peerConnection.closePeerConnection(peerId)
-      }
-
-      // Update signaling
-      const duration = session.connectedAt ? Date.now() - session.connectedAt : 0
-      this.signaling.endCall(callTokenId, {
-        duration: duration,
-        quality: session.stats
-      })
-
-      // Remove session so stale entries don't interfere with subsequent calls
-      this.activeCallSessions.delete(callTokenId)
-
-      this.emit('call:ended-session', {
-        callTokenId: callTokenId,
-        duration: duration,
-        stats: session.stats
-      })
-
-      console.log('[CallManager] Ended call:', callTokenId, `(${duration}ms)`)
-    } catch (error) {
-      console.error('[CallManager] Failed to end call:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Get call session
-   */
-  getSession(callTokenId) {
-    return this.activeCallSessions.get(callTokenId)
-  }
-
-  /**
-   * Get all active sessions
-   */
-  getActiveSessions() {
-    return Array.from(this.activeCallSessions.values())
-  }
-
-  /**
-   * Get local media stream
-   */
-  getLocalMediaStream() {
-    return this.peerConnection.mediaStream
-  }
-
-  /**
-   * Get remote media stream
-   */
-  getRemoteMediaStream(callTokenId) {
-    const session = this.activeCallSessions.get(callTokenId)
-    if (!session) return null
-
-    const callToken = this.signaling.getCallToken(callTokenId)
-    const peerId = this._getPeerId(session, callToken)
-    const pc = this.peerConnection.getPeerConnection(peerId)
-
-    if (pc) {
-      const receivers = pc.getReceivers()
-      if (receivers.length > 0) {
-        const tracks = receivers.map(r => r.track)
-        return new MediaStream(tracks)
-      }
-    }
-
-    return null
-  }
-
-}
-
-// Export for browser
-if (typeof window !== 'undefined') {
-  window.CallManager = CallManager
-}
-
-// Export for Node.js/modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = CallManager
-}
-
-/**
- * WebRTC Peer Connection Manager (v06.00)
- *
- * Manages peer-to-peer media connections for voice and video calls.
- * Uses direct P2P with mDNS discovery for NAT traversal.
- * Firewalls typically allow ports 3478-3497 (standard VoIP ports), enabling traversal.
- * Uses DTLS-SRTP for encryption.
- */
-
-class PeerConnection extends EventEmitter {
-  constructor(options = {}) {
-    super()
-    this.peerConnections = new Map() // Map<peerId, RTCPeerConnection>
-
-    // ICE configuration: STUN server for NAT/CGNAT traversal
-    // Reflects each peer's real public UDP IP:port so ICE can build
-    // srflx candidates and punch through carrier NAT.
-    this.iceServers = options.iceServers || [
-      { urls: STUN_SERVER_URL },
-    ]
-
-    // Optional TURN server if caller provides one (for restricted networks)
-    // Defaults to port 3478 (standard STUN/TURN port)
-    if (options.turnServer) {
-      this.iceServers.push({
-        urls: [`turn:${options.turnServer.host}:${options.turnServer.port || 3478}`],
-        username: options.turnServer.username,
-        credential: options.turnServer.credential
-      })
-    }
-
-    // Media constraints
-    this.audioConstraints = options.audioConstraints || {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true
-    }
-
-    this.videoConstraints = options.videoConstraints || {
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-      frameRate: { ideal: 30 }
-    }
-
-    // State tracking
-    this.mediaStream = null
-    this.pendingCandidates = new Map() // Map<peerId, [RTCIceCandidate]>
-
-    // Persistent DTLS certificate (set by phone-controller after DtlsCertStore loads)
-    this._persistentCert        = null
-    this._persistentCertFingerprint = null
-  }
-
-  /**
-   * Initialize media stream (audio/video)
-   *
-   * @param {Object} options - Media options
-   * @param {boolean} options.audio - Enable audio
-   * @param {boolean} options.video - Enable video
-   * @returns {Promise<MediaStream>}
-   */
-  /**
-   * Check if an error is a media permission/security error
-   * @private
-   */
-  _isPermissionError(error) {
-    return error.name === 'NotAllowedError' ||
-           error.name === 'SecurityError' ||
-           error.message?.includes('Permission denied')
-  }
-
-  async initializeMediaStream(options = { audio: true, video: true }) {
-    const audioOnly = { audio: this.audioConstraints, video: false }
-
-    const tryAudioOnly = async (fromError) => {
-      if (!options.audio) {
-        if (this._isPermissionError(fromError)) this.emitPermissionError(fromError)
-        throw this.createPermissionErrorMessage(fromError)
-      }
-      try {
-        this.mediaStream = await navigator.mediaDevices.getUserMedia(audioOnly)
-        console.log('[PeerConnection] Audio-only stream initialized')
-        this.emit('media:ready', { mediaStream: this.mediaStream, audioOnly: true })
-        return this.mediaStream
-      } catch (audioError) {
-        if (this._isPermissionError(audioError)) this.emitPermissionError(audioError)
-        throw this.createPermissionErrorMessage(audioError)
-      }
-    }
-
-    try {
-      // Attempt 1: full constraints
-      try {
-        const constraints = {
-          audio: options.audio ? this.audioConstraints : false,
-          video: options.video ? this.videoConstraints : false
-        }
-        this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
-        console.log('[PeerConnection] Media stream initialized')
-        this.emit('media:ready', { mediaStream: this.mediaStream })
-        return this.mediaStream
-      } catch (err1) {
-        if (!options.video || this._isPermissionError(err1)) {
-          return await tryAudioOnly(err1)
-        }
-        console.warn('[PeerConnection] Strict video constraints failed, relaxing:', err1.message)
-      }
-
-      // Attempt 2: relaxed video constraints
-      try {
-        const relaxed = {
-          audio: options.audio ? this.audioConstraints : false,
-          video: true
-        }
-        this.mediaStream = await navigator.mediaDevices.getUserMedia(relaxed)
-        console.log('[PeerConnection] Media stream initialized with relaxed video constraints')
-        this.emit('media:ready', { mediaStream: this.mediaStream })
-        return this.mediaStream
-      } catch (err2) {
-        console.warn('[PeerConnection] Relaxed video failed, falling back to audio-only:', err2.message)
-        return await tryAudioOnly(err2)
-      }
-    } catch (error) {
-      console.error('[PeerConnection] Failed to get media stream:', error)
-      this.emit('media:error', { error })
-      throw error
-    }
-  }
-
-  /**
-   * Stop all media streams
-   */
-  stopMediaStream() {
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(track => track.stop())
-      this.mediaStream = null
-      console.log('[PeerConnection] Media stream stopped')
-    }
-  }
-
-  /**
-   * Create a user-friendly error message for permission errors
-   * @private
-   */
-  createPermissionErrorMessage(error) {
-    const errorName = error.name || 'Unknown'
-    const errorMessage = error.message || ''
-
-    if (errorName === 'NotAllowedError') {
-      return new Error(
-        'Media access denied. Please:\n' +
-        '1. Check browser permission settings\n' +
-        '2. Make sure this site is allowed to access microphone/camera\n' +
-        '3. Try allowing permissions when prompted'
-      )
-    } else if (errorName === 'SecurityError' || errorMessage.includes('secure')) {
-      return new Error(
-        'Security error accessing media. This may be due to:\n' +
-        '1. Site requires HTTPS connection\n' +
-        '2. Browser security restrictions\n' +
-        '3. Try using HTTPS instead of HTTP'
-      )
-    } else if (errorMessage.includes('Permission denied')) {
-      return new Error(
-        'Permission denied by system:\n' +
-        '1. Check OS-level privacy settings\n' +
-        '2. Allow this browser access to microphone/camera in System Settings\n' +
-        '3. Restart the browser and try again'
-      )
-    } else {
-      return new Error(
-        `Media access error (${errorName}): ${errorMessage}\n` +
-        'Please check browser and system permission settings.'
-      )
-    }
-  }
-
-  /**
-   * Emit permission error event with detailed info
-   * @private
-   */
-  emitPermissionError(error) {
-    console.error('[PeerConnection] Permission error:', {
-      name: error.name,
-      message: error.message,
-      code: error.code
-    })
-    this.emit('media:permission-denied', {
-      error: error,
-      errorName: error.name,
-      errorMessage: error.message
-    })
-  }
-
-  /**
-   * Create peer connection for a call
-   *
-   * @param {string} peerId - Peer identifier
-   * @param {Object} offerSdp - Optional SDP offer to set as remote
-   * @returns {RTCPeerConnection}
-   */
-  createPeerConnection(peerId, cert = null, iceServersOverride = null) {
-    try {
-      const config = {
-        iceServers: iceServersOverride !== null ? iceServersOverride : this.iceServers,
-        bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require',
-      }
-      if (cert) config.certificates = [cert]
-      const peerConnection = new RTCPeerConnection(config)
-
-      // Store connection
-      this.peerConnections.set(peerId, peerConnection)
-      this.pendingCandidates.set(peerId, [])
-
-      // Add media tracks from local stream
-      if (this.mediaStream) {
-        this.mediaStream.getTracks().forEach(track => {
-          peerConnection.addTrack(track, this.mediaStream)
-        })
-      }
-
-      // ICE candidate handling
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          this.emit('ice:candidate', {
-            peerId: peerId,
-            candidate: event.candidate
-          })
-          console.log('[PeerConnection] ICE candidate generated for', peerId)
-        } else {
-          console.log('[PeerConnection] ICE gathering complete for', peerId)
-        }
-      }
-
-      // Remote track handling
-      peerConnection.ontrack = (event) => {
-        this.emit('media:track-received', {
-          peerId: peerId,
-          stream: event.streams[0],
-          track: event.track
-        })
-        console.log('[PeerConnection] Received remote track:', event.track.kind)
-      }
-
-      // Connection state monitoring
-      peerConnection.onconnectionstatechange = () => {
-        console.log('[PeerConnection] Connection state:', peerId, peerConnection.connectionState)
-        this.emit('peer:connection-state-changed', {
-          peerId: peerId,
-          state: peerConnection.connectionState
-        })
-
-        if (peerConnection.connectionState === 'failed') {
-          this.emit('peer:connection-failed', { peerId })
-        } else if (peerConnection.connectionState === 'connected') {
-          this.emit('peer:connected', { peerId })
-        }
-      }
-
-      // ICE connection state
-      peerConnection.oniceconnectionstatechange = () => {
-        const state = peerConnection.iceConnectionState
-        console.log('[PeerConnection] ICE connection state:', peerId, state)
-        this.emit('ice:state-changed', { peerId, state })
-
-        // On failure, dump all candidate pairs so we can see what was tried
-        if (state === 'failed') {
-          peerConnection.getStats().then(stats => {
-            const pairs = []
-            const locals = new Map()
-            const remotes = new Map()
-            stats.forEach(s => {
-              if (s.type === 'local-candidate')  locals.set(s.id, s)
-              if (s.type === 'remote-candidate') remotes.set(s.id, s)
-            })
-            stats.forEach(s => {
-              if (s.type !== 'candidate-pair') return
-              const l = locals.get(s.localCandidateId)
-              const r = remotes.get(s.remoteCandidateId)
-              pairs.push({
-                state: s.state,
-                local:  l ? `${l.candidateType} ${l.address ?? l.ip}:${l.port}` : '?',
-                remote: r ? `${r.candidateType} ${r.address ?? r.ip}:${r.port}` : '?',
-                nominated: s.nominated
-              })
-            })
-            this.emit('ice:pairs-on-failure', { peerId, pairs })
-          }).catch(() => {})
-        }
-      }
-
-      // ICE gathering state
-      peerConnection.onicegatheringstatechange = () => {
-        const s = peerConnection.iceGatheringState
-        console.log('[PeerConnection] ICE gathering state:', peerId, s)
-        this.emit('ice:gathering-changed', { peerId, state: s })
-      }
-
-      // Signaling state
-      peerConnection.onsignalingstatechange = () => {
-        console.log('[PeerConnection] Signaling state:', peerId, peerConnection.signalingState)
-      }
-
-      console.log('[PeerConnection] Created peer connection for:', peerId)
-
-      return peerConnection
-    } catch (error) {
-      console.error('[PeerConnection] Failed to create peer connection:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Create and send offer
-   *
-   * @param {string} peerId - Peer identifier
-   * @returns {Promise<RTCSessionDescription>}
-   */
-  async createOffer(peerId) {
-    try {
-      let peerConnection = this.peerConnections.get(peerId)
-      if (!peerConnection) {
-        peerConnection = this.createPeerConnection(peerId)
-      }
-
-      const offer = await peerConnection.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true
-      })
-
-      await peerConnection.setLocalDescription(offer)
-
-      console.log('[PeerConnection] Created offer for:', peerId)
-
-      return offer
-    } catch (error) {
-      console.error('[PeerConnection] Failed to create offer:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Create offer with deterministic ICE credentials (1-TX path).
-   * Munges a=ice-ufrag/a=ice-pwd BEFORE setLocalDescription so the ICE agent
-   * uses derived credentials that the callee can independently compute.
-   *
-   * @param {string} peerId    - Callee address (peer ID)
-   * @param {Object} iceCreds  - { callerUfrag, callerPwd } from IceCredentials.deriveAll()
-   * @returns {Promise<RTCSessionDescription>} munged offer
-   */
-  async createOfferMunged(peerId, iceCreds) {
-    try {
-      let pc = this.peerConnections.get(peerId)
-      if (!pc) pc = this.createPeerConnection(peerId, this._persistentCert)
-
-      const raw       = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
-      const mungedSdp = window.iceCredentials.mungeSdp(raw.sdp, iceCreds.callerUfrag, iceCreds.callerPwd)
-      const munged    = new RTCSessionDescription({ type: 'offer', sdp: mungedSdp })
-      await pc.setLocalDescription(munged)
-
-      console.log('[PeerConnection] Created munged offer for:', peerId)
-      return munged
-    } catch (error) {
-      console.error('[PeerConnection] createOfferMunged failed:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Create answer with deterministic ICE credentials (1-TX path, callee side).
-   * Uses the persistent DTLS cert and munged ICE credentials so the caller's
-   * synthetic answer matches exactly what the callee will use.
-   *
-   * @param {string} peerId    - Caller address (peer ID)
-   * @param {string} offerSdp  - Offer SDP string from CALL token
-   * @param {Object} iceCreds  - { calleeUfrag, calleePwd } from IceCredentials.deriveAll()
-   * @returns {Promise<RTCSessionDescription>} munged answer
-   */
-  async createAnswerMunged(peerId, offerSdp, iceCreds, options = {}) {
-    try {
-      // Always start fresh — stale PCs from failed calls have wrong iceServers config
-      if (this.peerConnections.has(peerId)) this.closePeerConnection(peerId)
-      // Default: no STUN (iceServers: []) to avoid CGNAT timeout.
-      // Pass options.iceServers = null to use default STUN servers (port discovery).
-      const iceServersOverride = options.iceServers !== undefined ? options.iceServers : []
-      const pc = this.createPeerConnection(peerId, this._persistentCert, iceServersOverride)
-
-      await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }))
-      const raw       = await pc.createAnswer()
-      const mungedSdp = window.iceCredentials.mungeSdp(raw.sdp, iceCreds.calleeUfrag, iceCreds.calleePwd)
-      const munged    = new RTCSessionDescription({ type: 'answer', sdp: mungedSdp })
-      await pc.setLocalDescription(munged)
-
-      // Flush any candidates that arrived before setRemoteDescription
-      const pending = this.pendingCandidates.get(peerId) || []
-      this.pendingCandidates.set(peerId, [])
-      for (const c of pending) {
-        await pc.addIceCandidate(c).catch(e => console.warn('[PeerConnection] Pending cand rejected:', e.message))
-      }
-
-      console.log('[PeerConnection] Created munged answer for:', peerId)
-      return munged
-    } catch (error) {
-      console.error('[PeerConnection] createAnswerMunged failed:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Prepare an answer and gather local ICE candidates WITHOUT starting connectivity
-   * checks yet.  Checks are deferred until the caller explicitly calls
-   * activateDeferredChecking(peerId, callerCandidates).
-   *
-   * How it works:
-   *   setLocalDescription triggers gathering but NOT checking.
-   *   Checking only starts once the remote description has at least one candidate pair.
-   *   By stripping candidates from the offer before setRemoteDescription we get
-   *   gathering without checking — giving us a complete local SDP (with real ports)
-   *   to put in the ANS TX, while allowing checking to start later once the caller
-   *   is known to have received the ANS TX and started their own ICE.
-   *
-   * @param {string} peerId - Peer identifier (= caller address)
-   * @param {string} offerSdp - Full SDP from CALL TX (may have host/mDNS candidates)
-   * @returns {Promise<{answerSdp: string, callerCandidates: Array}>}
-   */
-  async prepareAnswerDeferred(peerId, offerSdp) {
-    try {
-      let peerConnection = this.peerConnections.get(peerId)
-      if (!peerConnection) {
-        peerConnection = this.createPeerConnection(peerId)
-      }
-
-      // Extract candidate lines so we can add them later (triggering ICE checking).
-      // Skip port-9 "bundle-only" placeholder candidates — they discard all UDP
-      // and will always fail connectivity checks, wasting ICE attempts.
-      const callerCandidates = []
-      let mid = null, mIdx = -1
-      for (const line of offerSdp.split(/\r?\n/)) {
-        if (line.startsWith('m=')) { mIdx++; mid = null }
-        else if (line.startsWith('a=mid:')) mid = line.slice(6).trim()
-        else if (line.startsWith('a=candidate:')) {
-          const parts = line.split(' ')
-          const port = parseInt(parts[5])
-          if (port === 9 || port === 0) continue  // discard / bundle-only placeholder
-          callerCandidates.push({ candidate: line.slice(2), sdpMid: mid, sdpMLineIndex: mIdx })
-        }
-      }
-
-      // Remove candidate lines from offer — setLocalDescription won't trigger checking
-      // because there are no candidate pairs without remote candidates
-      const offerNoCandidates = offerSdp
-        .split(/\r?\n/)
-        .filter(l => !l.startsWith('a=candidate:'))
-        .join('\r\n')
-
-      await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerNoCandidates }))
-      const answer = await peerConnection.createAnswer()
-      await peerConnection.setLocalDescription(answer)
-      // ICE gathering starts here (host candidates ready in <200ms), but NO checking
-      // because the remote description has no candidates → no candidate pairs formed yet
-
-      console.log('[PeerConnection] Prepared deferred answer for:', peerId, `(${callerCandidates.length} caller candidates held)`)
-      return { answer, callerCandidates }
-    } catch (error) {
-      console.error('[PeerConnection] Failed to prepare deferred answer:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Activate ICE checking that was deferred by prepareAnswerDeferred().
-   * Call this after broadcasting the ANS TX and waiting for the caller to start ICE.
-   * Adds the caller's candidates to the peer connection, forming candidate pairs
-   * and triggering ICE connectivity checks.
-   *
-   * @param {string} peerId - Caller address
-   * @param {Array} callerCandidates - [{candidate, sdpMid, sdpMLineIndex}]
-   */
-  async activateDeferredChecking(peerId, callerCandidates) {
-    for (const c of callerCandidates) {
-      try {
-        await this.addIceCandidate(peerId, c)
-      } catch (e) {
-        console.warn('[PeerConnection] Deferred candidate rejected:', e.message)
-      }
-    }
-    console.log('[PeerConnection] Deferred ICE checking activated for:', peerId)
-  }
-
-  /**
-   * Create and send answer
-   *
-   * @param {string} peerId - Peer identifier
-   * @param {Object} offerSdp - Remote offer SDP
-   * @returns {Promise<RTCSessionDescription>}
-   */
-  async createAnswer(peerId, offerSdp) {
-    try {
-      let peerConnection = this.peerConnections.get(peerId)
-      if (!peerConnection) {
-        peerConnection = this.createPeerConnection(peerId)
-      }
-
-      // Set remote description from offer
-      const offer = new RTCSessionDescription({
-        type: 'offer',
-        sdp: offerSdp
-      })
-      await peerConnection.setRemoteDescription(offer)
-
-      // Create answer
-      const answer = await peerConnection.createAnswer()
-      await peerConnection.setLocalDescription(answer)
-
-      console.log('[PeerConnection] Created answer for:', peerId)
-
-      return answer
-    } catch (error) {
-      console.error('[PeerConnection] Failed to create answer:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Set remote description (for receiving offer/answer)
-   *
-   * @param {string} peerId - Peer identifier
-   * @param {Object} description - SDP description
-   */
-  async setRemoteDescription(peerId, description) {
-    try {
-      const peerConnection = this.peerConnections.get(peerId)
-      if (!peerConnection) {
-        throw new Error(`Peer connection not found: ${peerId}`)
-      }
-
-      const desc = new RTCSessionDescription({
-        type: description.type,
-        sdp: description.sdp
-      })
-
-      await peerConnection.setRemoteDescription(desc)
-
-      // Add any pending ICE candidates
-      const pending = this.pendingCandidates.get(peerId) || []
-      for (const candidate of pending) {
-        try {
-          await peerConnection.addIceCandidate(candidate)
-        } catch (error) {
-          console.warn('[PeerConnection] Failed to add pending ICE candidate:', error)
-        }
-      }
-      this.pendingCandidates.set(peerId, [])
-
-      console.log('[PeerConnection] Set remote description for:', peerId)
-    } catch (error) {
-      console.error('[PeerConnection] Failed to set remote description:', error)
-      throw error
-    }
-  }
-
-  /** @private Convert IPv4 string to well-known NAT64 prefix IPv6 (64:ff9b::/96) */
-  _ipv4ToNat64(ipv4) {
-    const [a, b, c, d] = ipv4.split('.').map(Number)
-    const hi = ((a << 8) | b).toString(16).padStart(4, '0')
-    const lo = ((c << 8) | d).toString(16).padStart(4, '0')
-    return `64:ff9b::${hi}:${lo}`
-  }
-
-  /**
-   * Build server-reflexive ICE candidates by pairing a known public IP with
-   * the host candidate ports found in a remote SDP.
-   *
-   * Works without STUN/TURN on full-cone and address-restricted NAT (typical
-   * home broadband) because the NAT preserves the internal port in its mapping.
-   * The remote peer's public IP comes from the blockchain inscription; the ports
-   * come from the 'typ host' candidates in the offer/answer SDP.
-   *
-   * Supports dual-stack: pass publicIp4 and/or publicIp6. Each host candidate is
-   * paired with the matching address-family public IP to produce valid srflx candidates.
-   *
-   * @param {string} sdp - Remote SDP (offer or answer)
-   * @param {string|null} publicIp4 - Remote peer's public IPv4 (or null)
-   * @param {string|null} publicIp6 - Remote peer's public IPv6 (or null)
-   * @returns {Array<{candidate, sdpMid, sdpMLineIndex}>}
-   */
-  _buildPublicIpCandidates(sdp, publicIp4, publicIp6, uiLog = null) {
-    const log = (msg) => { console.log(msg); if (uiLog) uiLog(msg, 'info') }
-    // Legacy single-IP call: detect type and route to correct slot
-    if (publicIp4 && !publicIp6 && publicIp4.includes(':')) {
-      publicIp6 = publicIp4; publicIp4 = null
-    }
-    if (!sdp || (!publicIp4 && !publicIp6)) return []
-
-    const candidates = []
-    const lines = sdp.split(/\r?\n/)
-    let sdpMid = null
-    let sdpMLineIndex = -1
-
-    // Log a summary of candidate lines in the SDP (exclude port-9 bundle-only placeholders)
-    const allCandLines = lines.filter(l => {
-      if (!l.startsWith('a=candidate:')) return false
-      const p = l.split(' '); const port = parseInt(p[5])
-      return port !== 9 && port !== 0
-    })
-    log(`[ICE] Remote SDP: ${allCandLines.length} candidates`)
-    for (const cl of allCandLines) {
-      const p = cl.slice('a=candidate:'.length).split(' ')
-      const ip = p[4] || '?'; const port = p[5] || '?'; const typ = p[7] || '?'
-      const label = ip.endsWith('.local') ? 'mDNS' : ip.includes(':') ? 'IPv6' : 'IPv4'
-      log(`[ICE]   ${label} ${typ} ${ip}:${port}`)
-    }
-
-    for (const line of lines) {
-      if (line.startsWith('m=')) {
-        sdpMLineIndex++
-        sdpMid = null
-      } else if (line.startsWith('a=mid:')) {
-        sdpMid = line.slice(6).trim()
-      } else if (line.startsWith('a=candidate:') && line.includes('typ host')) {
-        if (!line.toLowerCase().includes(' udp ')) continue
-
-        // candidate:<foundation> <component> <transport> <priority> <ip> <port> typ host ...
-        const parts = line.slice('a=candidate:'.length).split(' ')
-        if (parts.length < 6) continue
-        const component = parts[1]
-        const port = parseInt(parts[5])
-        const localIp = parts[4]
-        if (isNaN(port) || !localIp) continue
-        if (port === 9 || port === 0) continue  // bundle-only placeholder, skip
-
-        const isIpv6Host = localIp.includes(':')
-
-        // Pick matching public IP for this host candidate's address family
-        const publicIp = isIpv6Host ? publicIp6 : publicIp4
-        if (!publicIp) continue // No public IP for this address family
-
-        const mid = sdpMid ?? String(Math.max(0, sdpMLineIndex))
-        const mIdx = Math.max(0, sdpMLineIndex)
-
-        // IPv4 gets higher priority than IPv6 — more reliable across mixed networks
-        const priority = isIpv6Host ? 1677000000 : 1677729535
-
-        log(`[ICE] srflx (${isIpv6Host ? 'IPv6' : 'IPv4'}): ${localIp}:${port} → ${publicIp}:${port}`)
-        candidates.push({
-          candidate: `candidate:pub${port} ${component} UDP ${priority} ${publicIp} ${port} typ srflx raddr ${localIp} rport ${port}`,
-          sdpMid: mid,
-          sdpMLineIndex: mIdx
-        })
-
-        // NAT64 synthesis: if remote is IPv4-only, also inject a 64:ff9b::<ipv4> candidate.
-        // An IPv6-only local peer (e.g. mobile on LTE) can send to this address via the
-        // carrier's NAT64 gateway. The Mac then sees the packet from the NAT64 gateway IPv4,
-        // creates a peer-reflexive candidate, and responds back — enabling bidirectional ICE.
-        if (!isIpv6Host && publicIp4 && !publicIp6) {
-          const nat64Ip = this._ipv4ToNat64(publicIp4)
-          log(`[ICE] nat64: ${localIp}:${port} → ${nat64Ip}:${port}`)
-          candidates.push({
-            candidate: `candidate:nat${port} ${component} UDP 1677000000 ${nat64Ip} ${port} typ srflx raddr ${localIp} rport ${port}`,
-            sdpMid: mid,
-            sdpMLineIndex: mIdx
-          })
-        }
-      }
-    }
-
-    const label = [publicIp4, publicIp6].filter(Boolean).join(' / ')
-    log(`[ICE] Built ${candidates.length} candidates for remote ${label}`)
-    return candidates
-  }
-
-  /**
-   * Add ICE candidate
-   *
-   * @param {string} peerId - Peer identifier
-   * @param {Object} candidate - ICE candidate
-   */
-  async addIceCandidate(peerId, candidate) {
-    try {
-      const peerConnection = this.peerConnections.get(peerId)
-      if (!peerConnection) {
-        // Store candidate for later if connection not yet created
-        if (!this.pendingCandidates.has(peerId)) {
-          this.pendingCandidates.set(peerId, [])
-        }
-        this.pendingCandidates.get(peerId).push(candidate)
-        return
-      }
-
-      const iceCandidate = new RTCIceCandidate(candidate)
-      await peerConnection.addIceCandidate(iceCandidate)
-
-      console.log('[PeerConnection] Added ICE candidate for:', peerId)
-    } catch (error) {
-      console.warn('[PeerConnection] Failed to add ICE candidate:', error)
-    }
-  }
-
-  /**
-   * Wait for ICE gathering to finish for a peer connection.
-   * Resolves with the final localDescription (SDP with all candidates).
-   * Times out after 5 seconds so inscriptions aren't delayed indefinitely.
-   *
-   * @param {string} peerId - Peer identifier
-   * @returns {Promise<RTCSessionDescription>}
-   */
-  async waitForIceGathering(peerId) {
-    const pc = this.peerConnections.get(peerId)
-    if (!pc) throw new Error(`Peer connection not found: ${peerId}`)
-    if (pc.iceGatheringState === 'complete') return pc.localDescription
-
-    return new Promise((resolve) => {
-      const onStateChange = () => {
-        if (pc.iceGatheringState === 'complete') {
-          pc.removeEventListener('icegatheringstatechange', onStateChange)
-          clearTimeout(timer)
-          console.log('[PeerConnection] ICE gathering complete for', peerId)
-          resolve(pc.localDescription)
-        }
-      }
-      // 1.5-second timeout — host candidates gather in <200ms without STUN
-      const timer = setTimeout(() => {
-        pc.removeEventListener('icegatheringstatechange', onStateChange)
-        console.warn('[PeerConnection] ICE gathering timeout for', peerId, '— using partial SDP')
-        resolve(pc.localDescription)
-      }, 1500)
-      pc.addEventListener('icegatheringstatechange', onStateChange)
-    })
-  }
-
-  /**
-   * Get peer connection
-   */
-  getPeerConnection(peerId) {
-    return this.peerConnections.get(peerId)
-  }
-
-  /**
-   * Get connection state
-   */
-  getConnectionState(peerId) {
-    const pc = this.peerConnections.get(peerId)
-    if (!pc) return null
-    return {
-      connectionState: pc.connectionState,
-      iceConnectionState: pc.iceConnectionState,
-      signalingState: pc.signalingState,
-      iceGatheringState: pc.iceGatheringState
-    }
-  }
-
-  /**
-   * Close peer connection
-   */
-  closePeerConnection(peerId) {
-    const peerConnection = this.peerConnections.get(peerId)
-    if (peerConnection) {
-      peerConnection.close()
-      this.peerConnections.delete(peerId)
-      this.pendingCandidates.delete(peerId)
-      console.log('[PeerConnection] Closed peer connection for:', peerId)
-    }
-  }
-
-  /**
-   * Close all connections
-   */
-  closeAllConnections() {
-    for (const [peerId, pc] of this.peerConnections) {
-      pc.close()
-    }
-    this.peerConnections.clear()
-    this.pendingCandidates.clear()
-    this.stopMediaStream()
-    console.log('[PeerConnection] Closed all peer connections')
-  }
-
-  /**
-   * Get connection statistics
-   */
-  async getStats(peerId) {
-    const peerConnection = this.peerConnections.get(peerId)
-    if (!peerConnection) return null
-
-    try {
-      const stats = await peerConnection.getStats()
-      const report = {
-        audio: {},
-        video: {},
-        connection: {}
-      }
-
-      stats.forEach(stat => {
-        if (stat.type === 'inbound-rtp' && stat.kind === 'audio') {
-          report.audio.inbound = {
-            bytesReceived: stat.bytesReceived,
-            packetsReceived: stat.packetsReceived,
-            packetsLost: stat.packetsLost,
-            jitter: stat.jitter,
-            audioLevel: stat.audioLevel
-          }
-        }
-        if (stat.type === 'outbound-rtp' && stat.kind === 'audio') {
-          report.audio.outbound = {
-            bytesSent: stat.bytesSent,
-            packetsSent: stat.packetsSent,
-            audioLevel: stat.audioLevel
-          }
-        }
-        if (stat.type === 'inbound-rtp' && stat.kind === 'video') {
-          report.video.inbound = {
-            bytesReceived: stat.bytesReceived,
-            packetsReceived: stat.packetsReceived,
-            packetsLost: stat.packetsLost,
-            frameDecodedRate: stat.framesDecoded,
-            jitter: stat.jitter
-          }
-        }
-        if (stat.type === 'outbound-rtp' && stat.kind === 'video') {
-          report.video.outbound = {
-            bytesSent: stat.bytesSent,
-            packetsSent: stat.packetsSent,
-            frameEncodedRate: stat.framesEncoded
-          }
-        }
-        if (stat.type === 'candidate-pair' && stat.state === 'succeeded') {
-          report.connection = {
-            currentRoundTripTime: stat.currentRoundTripTime,
-            availableOutgoingBitrate: stat.availableOutgoingBitrate,
-            availableIncomingBitrate: stat.availableIncomingBitrate
-          }
-        }
-      })
-
-      return report
-    } catch (error) {
-      console.error('[PeerConnection] Failed to get stats:', error)
-      return null
-    }
-  }
-
-}
-
-// Export for browser
-if (typeof window !== 'undefined') {
-  window.PeerConnection = PeerConnection
-}
-
-// Export for Node.js/modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = PeerConnection
-}
-
-/**
- * Codec Negotiation Module (v06.01)
- *
- * Handles audio and video codec selection, SDP negotiation, and quality preferences.
- * Supports Opus for audio and VP9/H.264 for video with adaptive bitrate.
- */
-
-class CodecNegotiation {
-  constructor(options = {}) {
-    this.listeners = new Map()
-
-    // Supported codecs in priority order
-    this.audioCodecs = [
-      {
-        name: 'opus',
-        mimeType: 'audio/opus',
-        channels: 2,
-        clockRate: 48000,
-        bitrate: { min: 6000, max: 510000, preferred: 64000 }, // bps
-        latency: 26.5, // ms
-        jitterBuffer: true,
-        dtx: true, // Discontinuous Transmission
-        fec: true // Forward Error Correction
-      }
-    ]
-
-    this.videoCodecs = [
-      {
-        name: 'vp9',
-        mimeType: 'video/VP9',
-        profile: 0,
-        bitrate: { min: 100000, max: 5000000, preferred: 1000000 }, // bps
-        framerate: { min: 5, max: 60, preferred: 30 },
-        scalability: 'temporal', // L0T2, L0T3, etc.
-        adaptiveQuality: true,
-        dynamicPayloadType: true,
-        ssrc: null
-      },
-      {
-        name: 'h264',
-        mimeType: 'video/H264',
-        profile: 'baseline',
-        level: '3.1',
-        bitrate: { min: 100000, max: 5000000, preferred: 1000000 }, // bps
-        framerate: { min: 5, max: 60, preferred: 30 },
-        adaptiveQuality: true,
-        dynamicPayloadType: true,
-        ssrc: null
-      }
-    ]
-
-    // Quality presets
-    this.qualityPresets = {
-      vhd: { // Very High Definition
-        audio: { bitrate: 128000, channels: 2 },
-        video: { bitrate: 5000000, framerate: 60, resolution: '1920x1080' }
-      },
-      hd: { // High Definition
-        audio: { bitrate: 64000, channels: 2 },
-        video: { bitrate: 2500000, framerate: 30, resolution: '1280x720' }
-      },
-      sd: { // Standard Definition
-        audio: { bitrate: 48000, channels: 1 },
-        video: { bitrate: 500000, framerate: 24, resolution: '640x480' }
-      },
-      ld: { // Low Definition (low bandwidth)
-        audio: { bitrate: 24000, channels: 1 },
-        video: { bitrate: 100000, framerate: 15, resolution: '320x240' }
-      }
-    }
-
-    // Configuration
-    this.preferredAudioCodec = options.preferredAudioCodec || 'opus'
-    this.preferredVideoCodec = options.preferredVideoCodec || 'vp9'
-    this.preferredQuality = options.preferredQuality || 'hd'
-    this.maxBitrate = options.maxBitrate || 5000000 // 5 Mbps default
-  }
-
-  /**
-   * Get SDP offer with codec preferences
-   *
-   * @param {RTCPeerConnection} peerConnection
-   * @param {Object} options - Negotiation options
-   * @returns {Promise<RTCSessionDescription>}
-   */
-  async createOfferWithCodecs(peerConnection, options = {}) {
-    try {
-      // Set transceivers with codec preferences BEFORE creating offer
-      this.applyCodecPreferences(peerConnection, options)
-
-      const offer = await peerConnection.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true
-      })
-
-      // Parse and modify SDP if needed
-      const modifiedSdp = this.modifySdpForCodecs(offer.sdp, options)
-
-      const modifiedOffer = new RTCSessionDescription({
-        type: 'offer',
-        sdp: modifiedSdp
-      })
-
-      return modifiedOffer
-    } catch (error) {
-      console.error('[CodecNegotiation] Failed to create offer with codecs:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Get SDP answer with codec preferences
-   *
-   * @param {RTCPeerConnection} peerConnection
-   * @param {Object} options - Negotiation options
-   * @returns {Promise<RTCSessionDescription>}
-   */
-  async createAnswerWithCodecs(peerConnection, options = {}) {
-    try {
-      // Set transceivers with codec preferences BEFORE creating answer
-      this.applyCodecPreferences(peerConnection, options)
-
-      const answer = await peerConnection.createAnswer()
-
-      // Parse and modify SDP if needed
-      const modifiedSdp = this.modifySdpForCodecs(answer.sdp, options)
-
-      const modifiedAnswer = new RTCSessionDescription({
-        type: 'answer',
-        sdp: modifiedSdp
-      })
-
-      return modifiedAnswer
-    } catch (error) {
-      console.error('[CodecNegotiation] Failed to create answer with codecs:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Apply codec preferences to peer connection
-   * @private
-   */
-  applyCodecPreferences(peerConnection, options = {}) {
-    try {
-      // Get transceivers
-      const transceivers = peerConnection.getTransceivers()
-
-      for (const transceiver of transceivers) {
-        if (transceiver.receiver.track.kind === 'audio') {
-          const audioCodecs = RTCRtpReceiver.getCapabilities('audio').codecs
-          const preferredCodecs = this.filterCodecsByPreference(audioCodecs, 'audio', options)
-          transceiver.setCodecPreferences(preferredCodecs)
-        } else if (transceiver.receiver.track.kind === 'video') {
-          const videoCodecs = RTCRtpReceiver.getCapabilities('video').codecs
-          const preferredCodecs = this.filterCodecsByPreference(videoCodecs, 'video', options)
-          transceiver.setCodecPreferences(preferredCodecs)
-        }
-      }
-
-      console.log('[CodecNegotiation] Applied codec preferences')
-    } catch (error) {
-      console.warn('[CodecNegotiation] Failed to apply codec preferences:', error)
-    }
-  }
-
-  /**
-   * Filter and prioritize codecs based on preferences
-   * @private
-   */
-  filterCodecsByPreference(availableCodecs, kind, options = {}) {
-    const preferred = kind === 'audio'
-      ? options.audioCodec || this.preferredAudioCodec
-      : options.videoCodec || this.preferredVideoCodec
-
-    // Filter for preferred codec
-    const preferredCodecs = availableCodecs.filter(codec => {
-      const mime = codec.mimeType.toLowerCase()
-      return mime.includes(preferred.toLowerCase())
-    })
-
-    // Sort by preference, putting preferred codec first
-    const sorted = availableCodecs.sort((a, b) => {
-      const aIsPreferred = preferredCodecs.find(c => c.mimeType === a.mimeType) ? 0 : 1
-      const bIsPreferred = preferredCodecs.find(c => c.mimeType === b.mimeType) ? 0 : 1
-      return aIsPreferred - bIsPreferred
-    })
-
-    return sorted
-  }
-
-  /**
-   * Modify SDP for codec bitrate constraints
-   * @private
-   */
-  modifySdpForCodecs(sdp, options = {}) {
-    const quality = options.quality || this.preferredQuality
-    const preset = this.qualityPresets[quality]
-
-    if (!preset) {
-      console.warn('[CodecNegotiation] Unknown quality preset:', quality)
-      return sdp
-    }
-
-    let modifiedSdp = sdp
-
-    // Add bitrate constraints to SDP
-    // GOOG REMB (RTCP feedback) for congestion control
-    if (preset.audio?.bitrate) {
-      modifiedSdp = this.setSdpBitrate(modifiedSdp, 'audio', preset.audio.bitrate)
-    }
-
-    if (preset.video?.bitrate) {
-      modifiedSdp = this.setSdpBitrate(modifiedSdp, 'video', preset.video.bitrate)
-    }
-
-    return modifiedSdp
-  }
-
-  /**
-   * Set bitrate in SDP
-   * @private
-   */
-  setSdpBitrate(sdp, kind, bitrate) {
-    const lines = sdp.split('\n')
-    let result = []
-    let mediaSection = null
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      result.push(line)
-
-      // Detect media section
-      if (line.startsWith('m=')) {
-        mediaSection = line.substring(2).split(' ')[0]
-      }
-
-      // Add bitrate constraint after media line or codec line
-      if (mediaSection === kind && (line.startsWith('m=') || line.startsWith('a=rtpmap:'))) {
-        // Add b=TIAS (Transport Independent Application Specific) bandwidth modifier
-        if (i + 1 < lines.length && !lines[i + 1].startsWith('b=')) {
-          result.push(`b=TIAS:${bitrate}`)
-        }
-        mediaSection = null // Reset after adding
-      }
-    }
-
-    return result.join('\n')
-  }
-
-  /**
-   * Analyze remote SDP and extract codec information
-   */
-  analyzeRemoteSdp(sdp) {
-    const analysis = {
-      audioCodec: null,
-      videoCodec: null,
-      audioBitrate: null,
-      videoBitrate: null,
-      audioChannels: null,
-      videoFramerate: null,
-      videoResolution: null
-    }
-
-    const lines = sdp.split('\n')
-    let currentMedia = null
-
-    for (const line of lines) {
-      // Detect media sections
-      if (line.startsWith('m=audio')) {
-        currentMedia = 'audio'
-      } else if (line.startsWith('m=video')) {
-        currentMedia = 'video'
-      }
-
-      // Extract codec from rtpmap
-      if (line.startsWith('a=rtpmap:')) {
-        const match = line.match(/a=rtpmap:(\d+)\s+([^/]+)/)
-        if (match) {
-          const codec = match[2].split('/')[0].toLowerCase()
-          if (currentMedia === 'audio' && codec.includes('opus')) {
-            analysis.audioCodec = 'opus'
-          } else if (currentMedia === 'video') {
-            if (codec.includes('vp9')) analysis.videoCodec = 'vp9'
-            else if (codec.includes('h264')) analysis.videoCodec = 'h264'
-          }
-        }
-      }
-
-      // Extract bitrate
-      if (line.startsWith('b=TIAS:')) {
-        const bitrate = parseInt(line.split(':')[1])
-        if (currentMedia === 'audio') analysis.audioBitrate = bitrate
-        if (currentMedia === 'video') analysis.videoBitrate = bitrate
-      }
-
-      // Extract fmtp parameters (audio channels, video resolution, etc.)
-      if (line.startsWith('a=fmtp:')) {
-        const params = line.split(' ')
-        for (const param of params) {
-          if (param.includes('useinbandfec')) analysis.audioFEC = true
-          if (param.includes('stereo=1')) analysis.audioChannels = 2
-        }
-      }
-    }
-
-    return analysis
-  }
-
-  /**
-   * Get codec capabilities
-   */
-  getCodecCapabilities() {
-    return {
-      audioCodecs: this.audioCodecs,
-      videoCodecs: this.videoCodecs,
-      qualityPresets: Object.keys(this.qualityPresets),
-      preferredAudio: this.preferredAudioCodec,
-      preferredVideo: this.preferredVideoCodec,
-      preferredQuality: this.preferredQuality
-    }
-  }
-
-  /**
-   * Recommend quality based on available bandwidth
-   *
-   * @param {number} availableBitrate - Available bandwidth in bps
-   * @returns {string} Recommended quality preset
-   */
-  recommendQuality(availableBitrate) {
-    // Very rough estimation based on bandwidth
-    if (availableBitrate >= 5000000) return 'vhd'
-    if (availableBitrate >= 2500000) return 'hd'
-    if (availableBitrate >= 500000) return 'sd'
-    return 'ld'
-  }
-
-  /**
-   * Event emitter methods
-   */
-  on(eventName, callback) {
-    if (!this.listeners.has(eventName)) {
-      this.listeners.set(eventName, [])
-    }
-    this.listeners.get(eventName).push(callback)
-  }
-
-  off(eventName, callback) {
-    const callbacks = this.listeners.get(eventName)
-    if (callbacks) {
-      const index = callbacks.indexOf(callback)
-      if (index > -1) {
-        callbacks.splice(index, 1)
-      }
-    }
-  }
-
-  emit(eventName, data) {
-    const callbacks = this.listeners.get(eventName)
-    if (callbacks) {
-      callbacks.forEach(cb => {
-        try {
-          cb(data)
-        } catch (error) {
-          console.error(`[CodecNegotiation] Error in ${eventName} handler:`, error)
-        }
-      })
-    }
-  }
-}
-
-// Export for browser
-if (typeof window !== 'undefined') {
-  window.CodecNegotiation = CodecNegotiation
-}
-
-// Export for Node.js/modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = CodecNegotiation
-}
-
-/**
- * Quality Adaptation Module (v06.01)
- *
- * Dynamically adjusts audio/video quality based on network conditions.
- * Monitors bandwidth, jitter, packet loss, and adjusts bitrate/framerate accordingly.
- */
-
-class QualityAdaptation {
-  constructor(options = {}) {
-    this.listeners = new Map()
-
-    // Configuration
-    this.statsInterval = options.statsInterval || 1000 // Collect stats every 1s
-    this.qualityChangeThreshold = options.qualityChangeThreshold || 0.15 // 15% change triggers adjustment
-    this.maxBitrate = options.maxBitrate || 5000000 // 5 Mbps
-    this.minBitrate = options.minBitrate || 100000 // 100 kbps
-
-    // Current state
-    this.currentQuality = options.initialQuality || 'hd'
-    this.videoSettings = {
-      bitrate: 2500000, // 2.5 Mbps for HD
-      framerate: 30,
-      width: 1280,
-      height: 720
-    }
-    this.audioSettings = {
-      bitrate: 64000, // 64 kbps for stereo
-      channels: 2
-    }
-
-    // Statistics tracking
-    this.stats = {
-      bandwidth: { available: 0, used: 0 },
-      packet: { loss: 0, lateArrival: 0, jitter: 0 },
-      latency: { rtt: 0, delay: 0 },
-      video: { bitrate: 0, framerate: 0 },
-      audio: { bitrate: 0 }
-    }
-
-    // History for trend analysis
-    this.history = {
-      bandwidth: [],
-      packetLoss: [],
-      jitter: []
-    }
-    this.maxHistorySize = 10
-
-    // State
-    this.isMonitoring = false
-    this.monitorHandle = null
-    this.lastQualityChange = Date.now()
-    this.qualityChangeDebounce = 5000 // 5s between quality changes
-  }
-
-  /**
-   * Start monitoring network quality
-   *
-   * @param {PeerConnection} peerConnection - PeerConnection instance
-   * @param {string} callTokenId - Current call token ID
-   */
-  startMonitoring(peerConnection, peerId) {
-    if (this.isMonitoring) {
-      console.warn('[QualityAdaptation] Already monitoring quality')
-      return
-    }
-
-    this.isMonitoring = true
-    this.peerConnection = peerConnection
-    this.peerId = peerId
-
-    console.log('[QualityAdaptation] Started monitoring network quality')
-
-    const collectStats = async () => {
-      try {
-        await this.collectAndAnalyzeStats()
-
-        // Check if quality adjustment is needed
-        const recommendation = this.analyzeAndRecommend()
-        if (recommendation.shouldAdjust) {
-          await this.adjustQuality(recommendation)
-        }
-      } catch (error) {
-        console.error('[QualityAdaptation] Error during monitoring:', error)
-      }
-
-      if (this.isMonitoring) {
-        this.monitorHandle = setTimeout(collectStats, this.statsInterval)
-      }
-    }
-
-    this.monitorHandle = setTimeout(collectStats, this.statsInterval)
-  }
-
-  /**
-   * Stop monitoring
-   */
-  stopMonitoring() {
-    if (this.monitorHandle) {
-      clearTimeout(this.monitorHandle)
-      this.monitorHandle = null
-    }
-    this.isMonitoring = false
-    console.log('[QualityAdaptation] Stopped monitoring network quality')
-  }
-
-  /**
-   * Collect RTC statistics and calculate network metrics
-   * @private
-   */
-  async collectAndAnalyzeStats() {
-    try {
-      const pc = this.peerConnection.getPeerConnection(this.peerId)
-      if (!pc) return
-
-      const stats = await pc.getStats()
-      let audioInbound = null
-      let videoInbound = null
-      let candidatePair = null
-
-      stats.forEach(report => {
-        if (report.type === 'inbound-rtp') {
-          if (report.kind === 'audio') audioInbound = report
-          else if (report.kind === 'video') videoInbound = report
-        } else if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-          candidatePair = report
-        }
-      })
-
-      // Calculate bandwidth
-      if (videoInbound) {
-        const bytesReceived = videoInbound.bytesReceived || 0
-        const timeElapsed = (videoInbound.timestamp - (this.lastStatsTimestamp || videoInbound.timestamp)) / 1000
-        if (timeElapsed > 0) {
-          this.stats.video.bitrate = (bytesReceived * 8) / timeElapsed
-        }
-        this.lastStatsTimestamp = videoInbound.timestamp
-
-        // Packet loss and jitter
-        this.stats.packet.loss = videoInbound.packetsLost || 0
-        this.stats.packet.jitter = videoInbound.jitter || 0
-        const totalPackets = (videoInbound.packetsReceived || 0) + this.stats.packet.loss
-        this.stats.packet.lossPercentage = totalPackets > 0 ? (this.stats.packet.loss / totalPackets) * 100 : 0
-      }
-
-      if (audioInbound) {
-        const bytesReceived = audioInbound.bytesReceived || 0
-        const timeElapsed = (audioInbound.timestamp - (this.lastAudioTimestamp || audioInbound.timestamp)) / 1000
-        if (timeElapsed > 0) {
-          this.stats.audio.bitrate = (bytesReceived * 8) / timeElapsed
-        }
-        this.lastAudioTimestamp = audioInbound.timestamp
-      }
-
-      if (candidatePair) {
-        this.stats.latency.rtt = candidatePair.currentRoundTripTime || 0
-        this.stats.bandwidth.available = candidatePair.availableOutgoingBitrate || 0
-      }
-
-      // Keep history for trend analysis
-      this.updateHistory()
-    } catch (error) {
-      console.warn('[QualityAdaptation] Failed to collect stats:', error)
-    }
-  }
-
-  /**
-   * Update history for trend analysis
-   * @private
-   */
-  updateHistory() {
-    this.history.bandwidth.push(this.stats.bandwidth.available)
-    this.history.packetLoss.push(this.stats.packet.lossPercentage)
-    this.history.jitter.push(this.stats.packet.jitter)
-
-    // Keep only recent history
-    if (this.history.bandwidth.length > this.maxHistorySize) {
-      this.history.bandwidth.shift()
-      this.history.packetLoss.shift()
-      this.history.jitter.shift()
-    }
-  }
-
-  /**
-   * Analyze network conditions and recommend quality adjustments
-   * @private
-   */
-  analyzeAndRecommend() {
-    const recommendation = {
-      shouldAdjust: false,
-      quality: this.currentQuality,
-      reason: null,
-      metrics: {}
-    }
-
-    // Time-based debounce: don't change quality too frequently
-    if (Date.now() - this.lastQualityChange < this.qualityChangeDebounce) {
-      return recommendation
-    }
-
-    // Analyze trends
-    const avgBandwidth = this.getAverageHistory(this.history.bandwidth)
-    const avgPacketLoss = this.getAverageHistory(this.history.packetLoss)
-    const avgJitter = this.getAverageHistory(this.history.jitter)
-
-    recommendation.metrics = {
-      avgBandwidth,
-      avgPacketLoss,
-      avgJitter,
-      currentQuality: this.currentQuality
-    }
-
-    // Decision logic: adjust if conditions are significantly different from current quality needs
-    const qualityBitrate = this.getQualityBitrate(this.currentQuality)
-    const bandwidthMargin = 1.5 // Require 50% more bandwidth than needed
-
-    // Network is congested
-    if (avgPacketLoss > 5 || avgJitter > 100) {
-      const downgrade = this.getDowngradedQuality()
-      if (downgrade !== this.currentQuality) {
-        recommendation.shouldAdjust = true
-        recommendation.quality = downgrade
-        recommendation.reason = `High packet loss (${avgPacketLoss.toFixed(1)}%) or jitter (${avgJitter.toFixed(0)}ms)`
-        return recommendation
-      }
-    }
-
-    // Insufficient bandwidth
-    if (avgBandwidth < qualityBitrate * 0.8) {
-      const downgrade = this.getDowngradedQuality()
-      if (downgrade !== this.currentQuality) {
-        recommendation.shouldAdjust = true
-        recommendation.quality = downgrade
-        recommendation.reason = `Insufficient bandwidth: ${(avgBandwidth / 1000000).toFixed(2)} Mbps < ${(qualityBitrate / 1000000).toFixed(2)} Mbps`
-        return recommendation
-      }
-    }
-
-    // Network conditions improved
-    if (avgBandwidth > qualityBitrate * bandwidthMargin && avgPacketLoss < 1) {
-      const upgrade = this.getUpgradedQuality()
-      if (upgrade !== this.currentQuality) {
-        recommendation.shouldAdjust = true
-        recommendation.quality = upgrade
-        recommendation.reason = `Good conditions: ${(avgBandwidth / 1000000).toFixed(2)} Mbps available`
-        return recommendation
-      }
-    }
-
-    return recommendation
-  }
-
-  /**
-   * Adjust quality settings based on recommendation
-   * @private
-   */
-  async adjustQuality(recommendation) {
-    try {
-      const oldQuality = this.currentQuality
-      this.currentQuality = recommendation.quality
-
-      const qualitySettings = this.getQualitySettings(recommendation.quality)
-
-      this.videoSettings = {
-        bitrate: qualitySettings.video.bitrate,
-        framerate: qualitySettings.video.framerate,
-        width: qualitySettings.video.width,
-        height: qualitySettings.video.height
-      }
-
-      this.audioSettings = {
-        bitrate: qualitySettings.audio.bitrate,
-        channels: qualitySettings.audio.channels
-      }
-
-      this.lastQualityChange = Date.now()
-
-      this.emit('quality:changed', {
-        oldQuality,
-        newQuality: recommendation.quality,
-        reason: recommendation.reason,
-        videoSettings: this.videoSettings,
-        audioSettings: this.audioSettings,
-        metrics: recommendation.metrics
-      })
-
-      console.log('[QualityAdaptation] Adjusted quality:', {
-        from: oldQuality,
-        to: recommendation.quality,
-        reason: recommendation.reason
-      })
-    } catch (error) {
-      console.error('[QualityAdaptation] Failed to adjust quality:', error)
-    }
-  }
-
-  /**
-   * Get bitrate for quality level
-   * @private
-   */
-  getQualityBitrate(quality) {
-    const presets = {
-      vhd: 5000000,
-      hd: 2500000,
-      sd: 500000,
-      ld: 100000
-    }
-    return presets[quality] || presets.hd
-  }
-
-  /**
-   * Get settings for quality level
-   * @private
-   */
-  getQualitySettings(quality) {
-    const settings = {
-      vhd: {
-        video: { bitrate: 5000000, framerate: 60, width: 1920, height: 1080 },
-        audio: { bitrate: 128000, channels: 2 }
-      },
-      hd: {
-        video: { bitrate: 2500000, framerate: 30, width: 1280, height: 720 },
-        audio: { bitrate: 64000, channels: 2 }
-      },
-      sd: {
-        video: { bitrate: 500000, framerate: 24, width: 640, height: 480 },
-        audio: { bitrate: 48000, channels: 1 }
-      },
-      ld: {
-        video: { bitrate: 100000, framerate: 15, width: 320, height: 240 },
-        audio: { bitrate: 24000, channels: 1 }
-      }
-    }
-    return settings[quality] || settings.hd
-  }
-
-  /**
-   * Get downgraded quality
-   * @private
-   */
-  getDowngradedQuality() {
-    const levels = ['vhd', 'hd', 'sd', 'ld']
-    const currentIndex = levels.indexOf(this.currentQuality)
-    if (currentIndex < levels.length - 1) {
-      return levels[currentIndex + 1]
-    }
-    return this.currentQuality // Already at lowest
-  }
-
-  /**
-   * Get upgraded quality
-   * @private
-   */
-  getUpgradedQuality() {
-    const levels = ['vhd', 'hd', 'sd', 'ld']
-    const currentIndex = levels.indexOf(this.currentQuality)
-    if (currentIndex > 0) {
-      return levels[currentIndex - 1]
-    }
-    return this.currentQuality // Already at highest
-  }
-
-  /**
-   * Calculate average from history
-   * @private
-   */
-  getAverageHistory(history) {
-    if (history.length === 0) return 0
-    const sum = history.reduce((a, b) => a + b, 0)
-    return sum / history.length
-  }
-
-  /**
-   * Get current quality settings
-   */
-  getCurrentSettings() {
-    return {
-      quality: this.currentQuality,
-      video: this.videoSettings,
-      audio: this.audioSettings,
-      stats: this.stats
-    }
-  }
-
-  /**
-   * Force quality to specific level
-   */
-  forceQuality(quality) {
-    const valid = ['vhd', 'hd', 'sd', 'ld']
-    if (!valid.includes(quality)) {
-      throw new Error(`Invalid quality: ${quality}`)
-    }
-
-    const oldQuality = this.currentQuality
-    const qualitySettings = this.getQualitySettings(quality)
-
-    this.currentQuality = quality
-    this.videoSettings = qualitySettings.video
-    this.audioSettings = qualitySettings.audio
-    this.lastQualityChange = Date.now()
-
-    this.emit('quality:forced', {
-      oldQuality,
-      newQuality: quality,
-      videoSettings: this.videoSettings,
-      audioSettings: this.audioSettings
-    })
-
-    console.log('[QualityAdaptation] Forced quality:', quality)
-  }
-
-  /**
-   * Event emitter methods
-   */
-  on(eventName, callback) {
-    if (!this.listeners.has(eventName)) {
-      this.listeners.set(eventName, [])
-    }
-    this.listeners.get(eventName).push(callback)
-  }
-
-  off(eventName, callback) {
-    const callbacks = this.listeners.get(eventName)
-    if (callbacks) {
-      const index = callbacks.indexOf(callback)
-      if (index > -1) {
-        callbacks.splice(index, 1)
-      }
-    }
-  }
-
-  emit(eventName, data) {
-    const callbacks = this.listeners.get(eventName)
-    if (callbacks) {
-      callbacks.forEach(cb => {
-        try {
-          cb(data)
-        } catch (error) {
-          console.error(`[QualityAdaptation] Error in ${eventName} handler:`, error)
-        }
-      })
-    }
-  }
-}
-
-// Export for browser
-if (typeof window !== 'undefined') {
-  window.QualityAdaptation = QualityAdaptation
-}
-
-// Export for Node.js/modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = QualityAdaptation
-}
-
-/**
- * Media Security Module (v06.01)
- *
- * Manages DTLS-SRTP encryption for RTP/RTCP media streams.
- * Handles certificate generation, fingerprints, and encryption setup.
- */
-
-class MediaSecurity {
-  constructor(options = {}) {
-    this.listeners = new Map()
-
-    // DTLS Configuration
-    this.dtls = {
-      version: '1.2', // DTLS 1.2 (RFC 6347)
-      cipherSuites: [
-        'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256', // Preferred
-        'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
-        'TLS_AES_128_GCM_SHA256' // TLS 1.3
-      ]
-    }
-
-    // SRTP Configuration
-    this.srtp = {
-      profile: 'SRTP_AES128_CM_SHA1_80', // SRTP with AES-128 CM and HMAC-SHA1 (80-bit)
-      alternatives: [
-        'SRTP_AES128_CM_SHA1_32', // 32-bit HMAC
-        'SRTP_AEAD_AES_128_GCM', // AES-128 GCM
-        'SRTP_AEAD_AES_256_GCM' // AES-256 GCM
-      ]
-    }
-
-    // Certificate configuration
-    this.certificate = null
-    this.fingerprint = null
-    this.dtlsFingerprints = new Map() // Map<peerId, fingerprint>
-
-    // Encryption state
-    this.encryptionEnabled = options.encryptionEnabled !== false
-    this.securityLevel = options.securityLevel || 'high' // low, medium, high
-  }
-
-  /**
-   * Initialize media security (generate or load certificate)
-   *
-   * @returns {Promise<Object>} Certificate with fingerprint
-   */
-  async initialize() {
-    try {
-      // In WebRTC, DTLS certificates are generated automatically by the browser
-      // We mainly need to monitor and verify the certificate information
-
-      // Note: RTCPeerConnection will generate its own certificate internally
-      // We can't directly create certificates in the browser for security reasons
-      // Instead, we verify that DTLS is properly configured
-
-      console.log('[MediaSecurity] Media security initialized')
-      console.log('[MediaSecurity] DTLS:', this.dtls)
-      console.log('[MediaSecurity] SRTP:', this.srtp)
-
-      this.emit('security:initialized', {
-        dtls: this.dtls,
-        srtp: this.srtp,
-        encryptionEnabled: this.encryptionEnabled
-      })
-
-      return {
-        dtlsVersion: this.dtls.version,
-        cipherSuites: this.dtls.cipherSuites,
-        srtpProfile: this.srtp.profile
-      }
-    } catch (error) {
-      console.error('[MediaSecurity] Failed to initialize:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Extract DTLS fingerprint from SDP
-   *
-   * @param {string} sdp - Session Description Protocol
-   * @returns {string} Fingerprint hash
-   */
-  extractFingerprint(sdp) {
-    // Look for a=fingerprint: line
-    const lines = sdp.split('\n')
-    for (const line of lines) {
-      if (line.startsWith('a=fingerprint:')) {
-        // Format: a=fingerprint:sha-256 AA:BB:CC:...
-        const match = line.match(/a=fingerprint:\s*(\S+)\s+(.+)/)
-        if (match) {
-          return {
-            algorithm: match[1],
-            hash: match[2]
-          }
-        }
-      }
-    }
-    return null
-  }
-
-  /**
-   * Verify DTLS fingerprint
-   *
-   * @param {string} peerId - Peer identifier
-   * @param {string} sdp - Remote SDP
-   * @returns {boolean} True if fingerprint is valid
-   */
-  verifyFingerprint(peerId, sdp) {
-    try {
-      const fingerprint = this.extractFingerprint(sdp)
-      if (!fingerprint) {
-        console.warn('[MediaSecurity] No fingerprint found in remote SDP')
-        return false
-      }
-
-      // Store fingerprint for this peer
-      this.dtlsFingerprints.set(peerId, fingerprint)
-
-      // Verify fingerprint format
-      const hashPattern = /^[A-F0-9]{2}(:[A-F0-9]{2})*$/i
-      if (!hashPattern.test(fingerprint.hash)) {
-        console.warn('[MediaSecurity] Invalid fingerprint format:', fingerprint.hash)
-        return false
-      }
-
-      this.emit('security:fingerprint-verified', {
-        peerId,
-        algorithm: fingerprint.algorithm,
-        hash: fingerprint.hash
-      })
-
-      console.log('[MediaSecurity] Verified DTLS fingerprint for:', peerId)
-      return true
-    } catch (error) {
-      console.error('[MediaSecurity] Failed to verify fingerprint:', error)
-      return false
-    }
-  }
-
-  /**
-   * Monitor DTLS connection state
-   *
-   * @param {RTCPeerConnection} peerConnection
-   * @param {string} peerId
-   */
-  monitorDtlsState(peerConnection, peerId) {
-    try {
-      // Create a listener for ICE connection state changes
-      // When ICE completes and DTLS begins, we'll get notifications
-
-      const originalOnconnectionstatechange = peerConnection.onconnectionstatechange
-      peerConnection.onconnectionstatechange = (event) => {
-        const state = peerConnection.connectionState
-        const iceState = peerConnection.iceConnectionState
-        const dtlsState = peerConnection.dtlsTransport?.state || 'unknown'
-
-        console.log('[MediaSecurity] DTLS state:', {
-          peerId,
-          connectionState: state,
-          iceState: iceState,
-          dtlsState: dtlsState
-        })
-
-        if (dtlsState === 'connected') {
-          this.emit('security:dtls-connected', {
-            peerId,
-            timestamp: Date.now()
-          })
-        } else if (dtlsState === 'failed') {
-          this.emit('security:dtls-failed', {
-            peerId,
-            error: 'DTLS connection failed'
-          })
-        }
-
-        // Call original handler if exists
-        if (originalOnconnectionstatechange) {
-          originalOnconnectionstatechange.call(peerConnection, event)
-        }
-      }
-
-      console.log('[MediaSecurity] Started monitoring DTLS state for:', peerId)
-    } catch (error) {
-      console.warn('[MediaSecurity] Failed to monitor DTLS state:', error)
-    }
-  }
-
-  /**
-   * Get SDP with security parameters
-   *
-   * @param {string} sdp - Base SDP
-   * @returns {string} SDP with DTLS and SRTP parameters
-   */
-  addSecurityToSdp(sdp) {
-    try {
-      let result = sdp
-
-      // Ensure DTLS fingerprint is in SDP
-      if (!result.includes('a=fingerprint:')) {
-        // Add fingerprint line (actual fingerprint will be generated by browser)
-        result = result.replace(/^(m=)/m, 'a=fingerprint:sha-256 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00\n$1')
-      }
-
-      // Ensure SRTP is negotiated
-      if (!result.includes('SAVPF')) {
-        // Replace RTP profile with Secure RTP profile
-        result = result.replace(/\bRTPF\b/g, 'SAVPF')
-      }
-
-      // Add SRTP crypto line if not present
-      if (!result.includes('a=crypto:')) {
-        // Modern browsers use DTLS-SRTP implicitly, but add for compatibility
-        result = result.replace(/(m=audio[^\n]*)\n/, `$1\na=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:WVNiey1jbmFmLWMySDhVeFZlNisrUUtIL1ZlaEV3PT0=`)
-      }
-
-      return result
-    } catch (error) {
-      console.warn('[MediaSecurity] Failed to add security to SDP:', error)
-      return sdp
-    }
-  }
-
-  /**
-   * Verify SRTP key derivation
-   * @private
-   */
-  async verifySrtpSetup() {
-    try {
-      // SRTP keys are derived from DTLS master secret by both sides
-      // In WebRTC, this is handled transparently by the browser
-      // We just verify that it's enabled
-
-      console.log('[MediaSecurity] SRTP setup verified')
-      return true
-    } catch (error) {
-      console.warn('[MediaSecurity] Failed to verify SRTP setup:', error)
-      return false
-    }
-  }
-
-  /**
-   * Get security status
-   */
-  getSecurityStatus() {
-    return {
-      encryptionEnabled: this.encryptionEnabled,
-      securityLevel: this.securityLevel,
-      dtls: {
-        version: this.dtls.version,
-        cipherSuites: this.dtls.cipherSuites
-      },
-      srtp: {
-        profile: this.srtp.profile,
-        alternatives: this.srtp.alternatives
-      },
-      verifiedPeers: Array.from(this.dtlsFingerprints.keys())
-    }
-  }
-
-  /**
-   * Check if call is encrypted
-   *
-   * @param {RTCPeerConnection} peerConnection
-   * @returns {boolean}
-   */
-  isEncrypted(peerConnection) {
-    try {
-      // Check if DTLS transport exists and is connected
-      const dtlsTransport = peerConnection.dtlsTransport
-      if (!dtlsTransport) return false
-
-      return dtlsTransport.state === 'connected'
-    } catch (error) {
-      console.warn('[MediaSecurity] Failed to check encryption status:', error)
-      return false
-    }
-  }
-
-  /**
-   * Event emitter methods
-   */
-  on(eventName, callback) {
-    if (!this.listeners.has(eventName)) {
-      this.listeners.set(eventName, [])
-    }
-    this.listeners.get(eventName).push(callback)
-  }
-
-  off(eventName, callback) {
-    const callbacks = this.listeners.get(eventName)
-    if (callbacks) {
-      const index = callbacks.indexOf(callback)
-      if (index > -1) {
-        callbacks.splice(index, 1)
-      }
-    }
-  }
-
-  emit(eventName, data) {
-    const callbacks = this.listeners.get(eventName)
-    if (callbacks) {
-      callbacks.forEach(cb => {
-        try {
-          cb(data)
-        } catch (error) {
-          console.error(`[MediaSecurity] Error in ${eventName} handler:`, error)
-        }
-      })
-    }
-  }
-}
-
-// Export for browser
-if (typeof window !== 'undefined') {
-  window.MediaSecurity = MediaSecurity
-}
-
-// Export for Node.js/modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = MediaSecurity
-}
-
-/**
- * Call Token Manager (v09.03) - P Protocol Conformant Signal Tokens
- *
- * Signal tokens (CALL, ANS) use the standard P v03 OP_RETURN format
- * with proper field separation:
- *
- *   tokenName:       "CALL-v1" | "ANS-v1"
- *   tokenScript:     "" (empty, P2PKH fallback)
- *   tokenRules:      4-byte format (supply=1, divisibility=0)
- *   tokenAttributes: Compact connection metadata (IP, port, session key, codec, addresses, fingerprint)
- *   stateData:       SDP offer/answer (the large payload)
- *
- * TX structure:
- *   Output 0: OP_RETURN (0 sats) — P v03 format
- *   Output 1: P2PKH 1-sat → recipient (WoC address history indexing)
- *   Output 2: P2PKH change → sender
- */
-
-const CODECS = { opus: 0, pcm: 1, aac: 2 }
-const CODEC_IDS = ['opus', 'pcm', 'aac']
-const QUALITIES = { sd: 0, hd: 1, vhd: 2 }
-const QUALITY_IDS = ['sd', 'hd', 'vhd']
-
-class CallTokenManager {
-  constructor(uiLogger) {
-    this.log = uiLogger
-  }
-
-  /**
-   * Encode connection metadata into tokenAttributes (no SDP — that goes in stateData).
-   * @param {Object} callToken - {senderIp, senderPort, sessionKey, codec, quality, caller, callee, callerFingerprint}
-   * @returns {string} Hex-encoded binary
-   */
-  encodeCallAttributes(callToken) {
-    try {
-      const bytes = []
-
-      // Version marker (0x03 = binary sessionKey, saves 12 bytes over base64)
-      bytes.push(0x03)
-
-      // IP address: 1 byte type (0=IPv4, 1=IPv6) + 4 or 16 bytes
-      const ip = callToken.senderIp || '0.0.0.0'
-      const port = callToken.senderPort
-      const isIPv6 = ip.includes(':')
-
-      if (!isIPv6) {
-        bytes.push(0x00)
-        bytes.push(...ip.split('.').map(p => parseInt(p, 10)))
-      } else {
-        bytes.push(0x01)
-        bytes.push(...this._ipv6ToBytes(ip))
-      }
-
-      // Port (2 bytes, big-endian)
-      bytes.push((port >> 8) & 0xFF)
-      bytes.push(port & 0xFF)
-
-      // Session key (1-byte length prefix + raw binary bytes)
-      // Base64 string → raw bytes (32 bytes instead of 44-char base64 string)
-      const keyB64 = callToken.sessionKey || ''
-      const keyBin = atob(keyB64)
-      const keyBuf = new Uint8Array(keyBin.length)
-      for (let i = 0; i < keyBin.length; i++) keyBuf[i] = keyBin.charCodeAt(i)
-      bytes.push(keyBuf.length)
-      bytes.push(...keyBuf)
-
-      // Codec (1 byte enum)
-      bytes.push(CODECS[callToken.codec] ?? 0)
-
-      // Quality (1 byte enum)
-      bytes.push(QUALITIES[callToken.quality] ?? 1)
-
-      // Caller address (1-byte length prefix + N bytes UTF-8)
-      const callerBuf = new TextEncoder().encode(callToken.caller || '')
-      bytes.push(callerBuf.length)
-      bytes.push(...callerBuf)
-
-      // Callee address (1-byte length prefix + N bytes UTF-8)
-      const calleeBuf = new TextEncoder().encode(callToken.callee || '')
-      bytes.push(calleeBuf.length)
-      bytes.push(...calleeBuf)
-
-      // callerFingerprint (1-byte length + N bytes UTF-8)
-      const fpBuf = new TextEncoder().encode(callToken.callerFingerprint || '')
-      bytes.push(fpBuf.length)
-      bytes.push(...fpBuf)
-
-      return bytes.map(b => ('0' + b.toString(16)).slice(-2)).join('')
-    } catch (error) {
-      console.error('[CallToken] Failed to encode attributes:', error)
-      return '00'
-    }
-  }
-
-  /**
-   * Encode SDP into stateData hex string.
-   * @param {Object} callToken - {sdpOffer|sdpAnswer}
-   * @returns {string} Hex-encoded SDP string, or '00' if empty
-   */
-  encodeStateData(callToken) {
-    let sdpData = callToken.sdpOffer || callToken.sdpAnswer || ''
-    if (sdpData && typeof sdpData === 'object') sdpData = sdpData.sdp || ''
-    if (!sdpData) return '00'
-    const sdpBuf = new TextEncoder().encode(sdpData)
-    const hex = Array.from(sdpBuf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
-    // Self-test: decode immediately and verify round-trip
-    const rt = this.decodeStateData(hex)
-    if (rt !== sdpData) {
-      console.error('[CallToken] ❌ SDP round-trip MISMATCH! encoded:', sdpData.length, 'decoded:', rt.length)
-    } else {
-      console.log(`[CallToken] ✓ SDP round-trip OK (${sdpData.length} chars, ${hex.length/2} bytes)`)
-    }
-    return hex
-  }
-
-  /**
-   * Decode stateData hex string back to SDP string.
-   * @param {string} stateHex - Hex-encoded stateData from OP_RETURN
-   * @returns {string} SDP string, or '' if empty
-   */
-  decodeStateData(stateHex) {
-    if (!stateHex || stateHex === '00' || stateHex === '') return ''
-    const bytes = []
-    for (let i = 0; i < stateHex.length; i += 2) {
-      bytes.push(parseInt(stateHex.substring(i, i + 2), 16))
-    }
-    return new TextDecoder().decode(new Uint8Array(bytes))
-  }
-
-  /**
-   * Build 4-byte tokenRules for signal tokens.
-   * Format: supply(2) + divisibility(2), uint16 LE.
-   * @returns {string} 8-char hex string (4 bytes)
-   */
-  encodeSignalRules() {
-    const supply = 1
-    const divisibility = 0
-    const buf = new Uint8Array(4)
-    buf[0] = supply & 0xFF;       buf[1] = (supply >> 8) & 0xFF
-    buf[2] = divisibility & 0xFF; buf[3] = (divisibility >> 8) & 0xFF
-    return Array.from(buf).map(b => ('0' + b.toString(16)).slice(-2)).join('')
-  }
-
-  /**
-   * Decode connection metadata from tokenAttributes (no SDP — that's in stateData).
-   * @param {string} hexStr - Hex-encoded binary tokenAttributes
-   * @returns {Object|null} {senderIp, senderPort, sessionKey, codec, quality, caller, callee, callerFingerprint}
-   */
-  decodeCallAttributes(hexStr) {
-    if (!hexStr || hexStr === '00') return null
-    try {
-      const bytes = []
-      for (let i = 0; i < hexStr.length; i += 2) {
-        bytes.push(parseInt(hexStr.substring(i, i + 2), 16))
-      }
-      if (bytes.length < 10) return null
-
-      let offset = 1 // Skip version byte
-
-      // IP address: 1 byte type (0=IPv4, 1=IPv6) + 4 or 16 bytes
-      const ipType = bytes[offset++]
-      const isIPv6 = ipType === 0x01
-      let senderIp
-      if (!isIPv6) {
-        senderIp = `${bytes[offset]}.${bytes[offset+1]}.${bytes[offset+2]}.${bytes[offset+3]}`
-        offset += 4
-      } else {
-        senderIp = this._bytesToIPv6(bytes.slice(offset, offset + 16))
-        offset += 16
-      }
-
-      // Port
-      const senderPort = (bytes[offset] << 8) | bytes[offset + 1]
-      offset += 2
-
-      // Session key (raw binary bytes → base64 string)
-      const keyLen = bytes[offset++]
-      const keyBuf = bytes.slice(offset, offset + keyLen)
-      const sessionKey = btoa(String.fromCharCode(...keyBuf))
-      offset += keyLen
-
-      // Codec and Quality
-      const codec = CODEC_IDS[bytes[offset++]] || 'opus'
-      const quality = QUALITY_IDS[bytes[offset++]] || 'hd'
-
-      // Caller address
-      let caller = ''
-      if (offset < bytes.length) {
-        const callerLen = bytes[offset++]
-        const callerBuf = bytes.slice(offset, offset + callerLen)
-        caller = new TextDecoder().decode(new Uint8Array(callerBuf))
-        offset += callerLen
-      }
-
-      // Callee address
-      let callee = ''
-      if (offset < bytes.length) {
-        const calleeLen = bytes[offset++]
-        const calleeBuf = bytes.slice(offset, offset + calleeLen)
-        callee = new TextDecoder().decode(new Uint8Array(calleeBuf))
-        offset += calleeLen
-      }
-
-      // callerFingerprint (1-byte length + N bytes UTF-8)
-      let callerFingerprint = null
-      if (offset < bytes.length) {
-        const fpLen = bytes[offset++]
-        if (fpLen > 0 && offset + fpLen <= bytes.length) {
-          const fpBuf = bytes.slice(offset, offset + fpLen)
-          callerFingerprint = new TextDecoder().decode(new Uint8Array(fpBuf))
-          offset += fpLen
-        }
-      }
-
-      return { senderIp, senderPort, sessionKey, codec, quality, caller, callee, callerFingerprint }
-    } catch (error) {
-      console.error('[CallToken] Failed to decode attributes:', error)
-      return null
-    }
-  }
-
-  /** @private Convert IPv6 string to 16-byte array */
-  _ipv6ToBytes(ip) {
-    const parts = ip.split(':').filter(p => p.length > 0)
-    const bytes = new Uint8Array(16)
-    let byteIndex = 0
-    for (let i = 0; i < parts.length && byteIndex < 16; i++) {
-      const val = parseInt(parts[i], 16) || 0
-      bytes[byteIndex++] = (val >> 8) & 0xFF
-      bytes[byteIndex++] = val & 0xFF
-    }
-    return Array.from(bytes)
-  }
-
-  /** @private Convert 16-byte array to IPv6 string */
-  _bytesToIPv6(bytes) {
-    const parts = []
-    for (let i = 0; i < 16; i += 2) {
-      parts.push(((bytes[i] << 8) | bytes[i + 1]).toString(16))
-    }
-    return parts.join(':')
-  }
-
-  /**
-   * Create and broadcast a CALL signal to the callee.
-   * Single TX: OP_RETURN (call data) + 1-sat to callee + change.
-   * @param {Object} callToken - {caller, callee, senderIp, senderPort, sessionKey, codec, quality, sdpOffer}
-   * @returns {Promise<{txId: string}>}
-   */
-  async createAndBroadcastCallToken(callToken) {
-    this.log(`Sending call signal to ${callToken.callee}`, 'info')
-    try {
-      const prefix = callToken.tokenPrefix || 'CALL'
-      const tokenName = `${prefix}-v1`
-      const rules = this.encodeSignalRules()
-      const attrs = this.encodeCallAttributes(callToken)
-      const stateData = this.encodeStateData(callToken)
-
-      const feePerKb = callToken.feePerKb || 1.1
-      const result = await window.tokenBuilder.createCallSignalTx(
-        tokenName,
-        rules,
-        attrs,
-        callToken.callee,
-        feePerKb,
-        stateData,
-      )
-
-      this.log(`✓ Call signal sent: ${result.txId}`, 'success')
-      this.log(`https://whatsonchain.com/tx/${result.txId}`, 'info')
-
-      return { txId: result.txId, tokenId: result.txId }
-    } catch (err) {
-      this.log(`Call signal failed: ${err.message}`, 'error')
-      throw err
-    }
-  }
-
-  /**
-   * Broadcast an ANS signal back to the caller.
-   * Same TX structure as CALL but with ANS- prefix.
-   * The callerFingerprint field carries the callee's fingerprint in this direction.
-   * @param {string} callerAddress - Caller's BSV address (recipient)
-   * @param {Object} answerData - {callee, senderIp, senderPort, sessionKey, codec, quality, sdpAnswer, calleeFingerprint}
-   * @returns {Promise<{txId: string}>}
-   */
-  async broadcastCallAnswer(callerAddress, answerData) {
-    this.log('Sending answer signal to caller...', 'info')
-    try {
-      const ansToken = {
-        senderIp:    answerData.senderIp || '0.0.0.0',
-        senderPort:  answerData.senderPort || 0,
-        sessionKey:  answerData.sessionKey || '',
-        codec:       answerData.codec || 'opus',
-        quality:     answerData.quality || 'hd',
-        caller:      callerAddress,
-        callee:      answerData.callee || '',
-        callerFingerprint: answerData.calleeFingerprint || '',
-        sdpAnswer:   answerData.sdpAnswer || '',
-      }
-
-      const rules = this.encodeSignalRules()
-      const attrs = this.encodeCallAttributes(ansToken)
-      const stateData = this.encodeStateData(ansToken)
-
-      const feePerKb = answerData.feePerKb || 1.1
-      const result = await window.tokenBuilder.createCallSignalTx(
-        'ANS-v1',
-        rules,
-        attrs,
-        callerAddress,
-        feePerKb,
-        stateData,
-      )
-
-      this.log(`✓ Answer sent: ${result.txId}`, 'success')
-      this.log(`https://whatsonchain.com/tx/${result.txId}`, 'info')
-
-      return { txId: result.txId }
-    } catch (err) {
-      this.log(`Answer signal failed: ${err.message}`, 'error')
-      throw err
-    }
-  }
-
-}
-
-// Export for browser
-if (typeof window !== 'undefined') {
-  window.CallTokenManager = CallTokenManager
-}
-
-// Export for modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = CallTokenManager
-}
-
-/**
- * SVphone Phone UI Layer (v07.00)
- *
- * Handles:
- * - UI rendering and updates
- * - DOM state management
- * - Logging and debugging console
- * - Call status display
- * - Media/stats display
- */
-
-class PhoneUI {
-    constructor() {
-        // UI element references
-        this.addressElements = {
-            myAddress: document.getElementById('myAddress'),
-            myIp: document.getElementById('myIp'),
-            myPort: document.getElementById('myPort'),
-            calleeAddress: document.getElementById('calleeAddress'),
-        }
-
-        this.buttonElements = {
-            initiateCallBtn: document.getElementById('initiateCallBtn'),
-            acceptBtn: document.getElementById('acceptBtn'),
-            rejectBtn: document.getElementById('rejectBtn'),
-            endCallBtn: document.getElementById('endCallBtn'),
-            mediaBtn: document.getElementById('mediaBtn'),
-            lastCalledBtn: document.getElementById('lastCalledBtn'),
-        }
-
-        this.statusElements = {
-            callStatus: document.getElementById('callStatus'),
-            callStatusText: document.getElementById('callStatusText'),
-            statusValue: document.getElementById('statusValue'),
-            qualityValue: document.getElementById('qualityValue'),
-            durationValue: document.getElementById('durationValue'),
-            encryptionValue: document.getElementById('encryptionValue'),
-        }
-
-        this.displayElements = {
-            incomingCall: document.getElementById('incomingCall'),
-            incomingFrom: document.getElementById('incomingFrom'),
-            videoContainer: document.getElementById('videoContainer'),
-            statsGrid: document.getElementById('statsGrid'),
-            debugConsole: document.getElementById('debugConsole'),
-        }
-
-        this.mediaElements = {
-            localVideo: document.getElementById('localVideo'),
-            remoteVideo: document.getElementById('remoteVideo'),
-        }
-
-        this.state = {
-            isMediaActive: false,
-            callStartTime: null,
-            durationInterval: null,
-        }
-
-        this.console = {
-            scrollTop: 0,
-        }
-
-        // Pre-unlock Web Audio API on first user gesture so ringtone plays
-        // immediately when an incoming call arrives (browsers block audio
-        // until the user has interacted with the page).
-        this._ringtoneCtx = null
-        this._ringtonePlaying = false
-        this._ringtoneTimer = null
-        const unlock = () => {
-            if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
-            this._ringtoneCtx.resume()
-        }
-        document.addEventListener('click', unlock, { once: true })
-        document.addEventListener('touchstart', unlock, { once: true })
-    }
-
-    /**
-     * Update call button status and UI
-     */
-    updateCallButtonStatus(status) {
-        const btn = this.buttonElements.initiateCallBtn
-        if (!btn) return
-
-        if (status === 'calling') {
-            btn.textContent = '📞 Call Ringing'
-            btn.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)'
-        } else {
-            btn.textContent = '☎️ Make a Call'
-            btn.style.background = 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)'
-        }
-        btn.disabled = false
-    }
-
-    /**
-     * Update call status indicator
-     */
-    updateCallStatus(status, text) {
-        const statusEl = this.statusElements.callStatus
-        const statusText = this.statusElements.callStatusText
-        statusEl.className = `call-status ${status}`
-        statusText.textContent = text
-        statusEl.style.display = 'block'
-        this.statusElements.statusValue.textContent = status.toUpperCase()
-    }
-
-    /**
-     * Update quality indicator
-     */
-    updateQuality(quality) {
-        this.statusElements.qualityValue.innerHTML =
-            `<span class="quality-indicator quality-${quality}">${quality.toUpperCase()}</span>`
-    }
-
-    /**
-     * Update encryption status
-     */
-    updateEncryption(status) {
-        this.statusElements.encryptionValue.textContent = status
-    }
-
-    /**
-     * Display call stats grid
-     */
-    showCallStats() {
-        console.debug('[showCallStats] Called')
-        const videoContainer = this.displayElements.videoContainer
-        const statsGrid = this.displayElements.statsGrid
-
-        if (videoContainer) {
-            videoContainer.style.display = 'grid'
-        } else {
-            console.error('[showCallStats] ERROR: videoContainer not found!')
-        }
-
-        if (statsGrid) {
-            statsGrid.style.display = 'grid'
-        } else {
-            console.error('[showCallStats] ERROR: statsGrid not found!')
-        }
-    }
-
-    /**
-     * Update call statistics display
-     */
-    updateStats(stats) {
-        if (stats.video?.outbound) {
-            const bitrate = (stats.video.outbound.bytesSent * 8 / 1000).toFixed(0)
-            document.getElementById('videoBitrate').textContent = bitrate + ' kbps'
-        }
-        if (stats.audio?.outbound) {
-            const bitrate = (stats.audio.outbound.bytesSent * 8 / 1000).toFixed(0)
-            document.getElementById('audioBitrate').textContent = bitrate + ' kbps'
-        }
-        if (stats.video?.inbound) {
-            const loss = ((stats.video.inbound.packetsLost /
-                (stats.video.inbound.packetsReceived + stats.video.inbound.packetsLost)) * 100).toFixed(2)
-            document.getElementById('packetLoss').textContent = loss + '%'
-            document.getElementById('jitter').textContent =
-                ((stats.video.inbound.jitter || 0) * 1000).toFixed(0) + ' ms'
-        }
-    }
-
-    /**
-     * Attach local video stream
-     */
-    attachLocalVideo(stream) {
-        if (stream) {
-            this.mediaElements.localVideo.srcObject = stream
-            this.log('Local video attached', 'success')
-        }
-    }
-
-    /**
-     * Attach remote video stream
-     */
-    attachRemoteVideo(stream) {
-        this.mediaElements.remoteVideo.srcObject = stream
-        this.log('Remote video attached', 'success')
-    }
-
-    /**
-     * Show incoming call UI
-     */
-    showIncomingCall(caller, isNewCaller = false) {
-        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${caller}`)
-        this.displayElements.incomingCall.style.display = 'block'
-        this.displayElements.incomingFrom.textContent = caller
-        this.buttonElements.acceptBtn.style.display = 'inline-block'
-        this.buttonElements.rejectBtn.style.display = 'inline-block'
-        const titleEl = document.getElementById('incomingTitle')
-        if (isNewCaller) {
-            if (titleEl) titleEl.textContent = 'New Caller'
-            this.updateCallStatus('ringing', 'New caller...')
-            this.log(`New caller: ${caller}`, 'info')
-        } else {
-            if (titleEl) titleEl.textContent = 'Incoming Call'
-            this.updateCallStatus('ringing', 'Incoming call...')
-            this.log(`Incoming call from: ${caller}`, 'info')
-        }
-        // Pre-fill callee field so user can call back after the call ends
-        const calleeField = this.addressElements.calleeAddress
-        if (calleeField && !calleeField.value) calleeField.value = caller
-        this.startRingtone()
-    }
-
-    /**
-     * Reset call UI to idle state
-     */
-    resetCallUI() {
-        this.stopRingtone()
-        this.stopOutgoingRing()
-        this.statusElements.callStatus.style.display = 'none'
-        this.buttonElements.acceptBtn.style.display = 'none'
-        this.buttonElements.rejectBtn.style.display = 'none'
-        this.buttonElements.endCallBtn.style.display = 'none'
-        this.displayElements.incomingCall.style.display = 'none'
-        this.displayElements.videoContainer.style.display = 'none'
-        this.displayElements.statsGrid.style.display = 'none'
-        this.statusElements.statusValue.textContent = 'Ready'
-        this.statusElements.qualityValue.textContent = '-'
-        this.statusElements.durationValue.textContent = '0s'
-        this.statusElements.encryptionValue.textContent = '-'
-        this.updateCallButtonStatus('none')
-    }
-
-    /**
-     * Start duration timer display
-     */
-    startDurationTimer() {
-        this.state.durationInterval = setInterval(() => {
-            if (this.state.callStartTime) {
-                const duration = Math.floor((Date.now() - this.state.callStartTime) / 1000)
-                const mins = Math.floor(duration / 60)
-                const secs = duration % 60
-                this.statusElements.durationValue.textContent =
-                    `${mins}:${secs.toString().padStart(2, '0')}`
-            }
-        }, 1000)
-    }
-
-    /**
-     * Stop duration timer
-     */
-    stopDurationTimer() {
-        if (this.state.durationInterval) {
-            clearInterval(this.state.durationInterval)
-            this.state.durationInterval = null
-        }
-    }
-
-    // ── Audio tones ──────────────────────────────────────────────────
-
-    _startRing(key) {
-        if (this[`_${key}Playing`]) return
-        if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
-        this._ringtoneCtx.resume().then(() => {
-            this[`_${key}Playing`] = true
-            this._ringCycle(key)
-        })
-    }
-
-    _ringCycle(key) {
-        if (!this[`_${key}Playing`]) return
-        const ctx = this._ringtoneCtx
-        if (key === 'incoming') {
-            // US payphone mechanical bell: two strikes per ring cycle
-            this._bellStrike(ctx, ctx.currentTime)
-            this._bellStrike(ctx, ctx.currentTime + 0.7)
-        } else {
-            // Outgoing: standard dual-tone 440Hz+480Hz, 2s on
-            const gain = ctx.createGain()
-            gain.gain.value = 0.25
-            gain.connect(ctx.destination)
-            const now = ctx.currentTime
-            ;[440, 480].forEach(freq => {
-                const osc = ctx.createOscillator()
-                osc.frequency.value = freq
-                osc.connect(gain)
-                osc.start(now)
-                osc.stop(now + 2)
-            })
-        }
-        this[`_${key}Timer`] = setTimeout(() => this._ringCycle(key), 6000)
-    }
-
-    /**
-     * Single mechanical bell strike — multiple harmonic partials with a sharp
-     * attack and exponential decay. Two slightly detuned fundamentals create
-     * the beating/vibrato of a physical bell.
-     */
-    _bellStrike(ctx, t) {
-        // [frequency, relative volume] — fundamental ~550Hz + bell harmonics
-        const partials = [
-            [550,  0.40],
-            [554,  0.30],  // slight detune for physical "beating" effect
-            [1100, 0.20],  // 2nd harmonic
-            [1654, 0.12],  // 3rd harmonic (slightly inharmonic)
-            [2750, 0.06],  // 5th — adds "clang"
-        ]
-        const master = ctx.createGain()
-        master.gain.setValueAtTime(0.7, t)
-        master.gain.exponentialRampToValueAtTime(0.001, t + 0.8)
-        master.connect(ctx.destination)
-        partials.forEach(([freq, vol]) => {
-            const osc = ctx.createOscillator()
-            const g   = ctx.createGain()
-            g.gain.value = vol
-            osc.type = 'sine'
-            osc.frequency.value = freq
-            osc.connect(g)
-            g.connect(master)
-            osc.start(t)
-            osc.stop(t + 0.85)
-        })
-    }
-
-    _stopRing(key) {
-        this[`_${key}Playing`] = false
-        if (this[`_${key}Timer`]) { clearTimeout(this[`_${key}Timer`]); this[`_${key}Timer`] = null }
-    }
-
-    /**
-     * Incoming ring — tries ring.mp3 first, falls back to synthesized bell.
-     */
-    startRingtone() {
-        if (this._ringtoneAudio) return
-        const audio = new Audio('ring.mp3')
-        audio.loop = true
-        audio.volume = 0.8
-        audio.play()
-            .then(() => { this._ringtoneAudio = audio })
-            .catch(() => {
-                // ring.mp3 not found or blocked — fall back to synthesized bell
-                this._ringtoneAudio = null
-                this._startRing('incoming')
-            })
-    }
-
-    stopRingtone() {
-        if (this._ringtoneAudio) {
-            this._ringtoneAudio.pause()
-            this._ringtoneAudio.currentTime = 0
-            this._ringtoneAudio = null
-        }
-        this._stopRing('incoming')
-    }
-
-    /** Outgoing ring tone — caller hears this while waiting for answer */
-    startOutgoingRing() { this._startRing('outgoing') }
-    stopOutgoingRing()  { this._stopRing('outgoing') }
-
-    /**
-     * Classic disconnected / reorder tone: 480Hz + 620Hz, 0.25s on / 0.25s off.
-     * Plays for durationMs then calls onDone().
-     */
-    playDisconnectedTone(durationMs, onDone) {
-        if (!this._ringtoneCtx) this._ringtoneCtx = new AudioContext()
-        this._ringtoneCtx.resume().then(() => {
-            const ctx = this._ringtoneCtx
-            const end = ctx.currentTime + durationMs / 1000
-            const pulse = (t) => {
-                if (t >= end) { if (onDone) onDone(); return }
-                const gain = ctx.createGain()
-                gain.gain.value = 0.3
-                gain.connect(ctx.destination)
-                ;[480, 620].forEach(freq => {
-                    const osc = ctx.createOscillator()
-                    osc.frequency.value = freq
-                    osc.connect(gain)
-                    osc.start(t)
-                    osc.stop(t + 0.25)
-                })
-                setTimeout(() => pulse(ctx.currentTime + 0.25), (t + 0.5 - ctx.currentTime) * 1000)
-            }
-            pulse(ctx.currentTime)
-        })
-    }
-
-    /**
-     * Log message to debug console
-     */
-    log(message, type = 'info') {
-        const consoleDom = this.displayElements.debugConsole
-        console.log(`[${type.toUpperCase()}] ${message}`)
-        if (!consoleDom) return
-        const timestamp = new Date().toLocaleTimeString()
-
-        if (message.includes('\n')) {
-            const lines = message.split('\n')
-            lines.forEach((line, index) => {
-                const logLine = document.createElement('div')
-                logLine.className = `console-line ${type}`
-                if (index === 0) {
-                    logLine.textContent = `[${timestamp}] ${line}`
-                } else {
-                    logLine.textContent = `            ${line}`
-                    logLine.style.paddingLeft = '2em'
-                }
-                consoleDom.appendChild(logLine)
-            })
-        } else {
-            const line = document.createElement('div')
-            line.className = `console-line ${type}`
-            line.textContent = `[${timestamp}] ${message}`
-            consoleDom.appendChild(line)
-        }
-
-        consoleDom.scrollTop = consoleDom.scrollHeight
-    }
-
-    /**
-     * Clear debug console
-     */
-    clearConsole() {
-        this.displayElements.debugConsole.innerHTML = ''
-    }
-
-}
-
-// Export for use in phone-controller.js
-window.PhoneUI = PhoneUI
-
-/**
- * SVphone Phone Handlers Layer (v07.00)
- * Handles call events, media tests, and user interactions
- */
-
-class CallHandlers {
-    constructor(app, ui) {
-        this.app = app
-        this.ui = ui
-    }
-
-    /**
-     * Initialize and make a call
-     */
-    async initializeCall() {
-        try {
-            const walletAddress = document.getElementById('myAddress')?.value
-            if (!walletAddress || walletAddress === '...' || walletAddress === '') {
-                this.ui.log('Error: Wallet address not loaded', 'error')
-                return
-            }
-
-            const ip = document.getElementById('myIp').value
-            const port = parseInt(document.getElementById('myPort').value)
-            await this.app.signaling.initialize(walletAddress, ip, port)
-            this.ui.log(`Initialized as ${walletAddress}`, 'success')
-
-            const calleeAddress = document.getElementById('calleeAddress').value
-            if (!calleeAddress) {
-                this.ui.log('Error: Enter recipient address', 'error')
-                return
-            }
-
-            if (!this.app.callTokenManager) {
-                this.ui.log('Error: CallTokenManager not initialized', 'error')
-                return
-            }
-
-            this.app.saveLastCalled(calleeAddress)
-            const callMode = document.getElementById('callMode')?.value || 'video-hd'
-            const video    = callMode.startsWith('video')
-            const quality  = callMode.endsWith('hd') ? 'hd' : 'ld'
-
-            const feePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
-            const mintTokenFn = async (token) =>
-                this.app.callTokenManager.createAndBroadcastCallToken({ ...token, feePerKb })
-
-            this.ui.updateCallButtonStatus('calling')
-            this.ui.log(`📞 Calling ${calleeAddress}... (${callMode}, fee ${feePerKb} sats/KB)`, 'info')
-
-            // Start outgoing ring immediately — before ICE/TX which takes several seconds
-            this.ui.startOutgoingRing()
-
-            const session = await this.app.callManager.initiateCall(calleeAddress, {
-                audio: true,
-                video,
-                quality,
-                mintTokenFn
-            })
-
-            this.app.currentCallToken = session.callTokenId
-
-            if (session.firstTimeCall) {
-                this.ui.log('First-time call — waiting for callee to accept...', 'info')
-            }
-
-            this.ui.log('✓ Call initiated successfully', 'success')
-            document.getElementById('endCallBtn').style.display = 'inline-block'
-            this.app._unansweredTimeout = setTimeout(() => {
-                this.ui.stopOutgoingRing()
-                this.ui.log('⏱ No answer — call timed out', 'warning')
-                this.ui.updateCallStatus('ended', 'No answer')
-                this.ui.playDisconnectedTone(30000, () => this.endCall())
-            }, 3 * 60 * 1000)
-
-        } catch (error) {
-            const errorMsg = error.message || error.toString()
-            if (errorMsg.includes('Persistent DTLS cert not yet loaded')) {
-                this.ui.log(`⚠️  ${errorMsg}`, 'error')
-                this.ui.updateCallButtonStatus('idle')
-                return
-            } else if (errorMsg.includes('Permission denied') || errorMsg.includes('Permission')) {
-                this.ui.log(`⚠️  ${errorMsg}`, 'error')
-            } else if (errorMsg.includes('Requested device not found')) {
-                this.ui.log('⚠️  No microphone or camera found. Attempting audio-only call...', 'warning')
-                try {
-                    const calleeAddress = document.getElementById('calleeAddress').value
-                    const callMode2 = document.getElementById('callMode')?.value || 'video-hd'
-                    const quality2  = callMode2.endsWith('hd') ? 'hd' : 'ld'
-                    this.ui.startOutgoingRing()
-                    const session = await this.app.callManager.initiateCall(calleeAddress, {
-                        audio: true,
-                        video: false,
-                        quality: quality2,
-                        mintTokenFn: async (token) =>
-                            this.app.callTokenManager.createAndBroadcastCallToken({ ...token, feePerKb })
-                    })
-                    this.app.currentCallToken = session.callTokenId
-                    this.ui.log('✓ Audio-only call initiated', 'success')
-                    this.app._unansweredTimeout = setTimeout(() => {
-                        this.ui.stopOutgoingRing()
-                        this.ui.log('⏱ No answer — call timed out', 'warning')
-                        this.ui.updateCallStatus('ended', 'No answer')
-                        this.ui.playDisconnectedTone(30000, () => this.endCall())
-                    }, 3 * 60 * 1000)
-                } catch (audioError) {
-                    this.ui.log(`Error: ${audioError.message || audioError.toString()}`, 'error')
-                }
-            } else {
-                this.ui.log(`Error: ${errorMsg}`, 'error')
-            }
-        }
-    }
-
-    /**
-     * Toggle media stream on/off
-     */
-    async toggleMediaStream() {
-        try {
-            if (!this.app.isMediaActive) {
-                try {
-                    await this.app.peerConnection.initializeMediaStream({
-                        audio: true,
-                        video: true
-                    })
-                } catch (error) {
-                    const errorMsg = error.message || error.toString()
-
-                    // If audio+video fails, try audio-only
-                    if (errorMsg.includes('Requested device not found')) {
-                        this.ui.log('🎥 Video not available, using audio-only', 'warning')
-                        await this.app.peerConnection.initializeMediaStream({
-                            audio: true,
-                            video: false
-                        })
-                    } else if (errorMsg.includes('Permission denied') || errorMsg.includes('Permission')) {
-                        this.ui.log(`⚠️  ${errorMsg}`, 'error')
-                        throw error
-                    } else {
-                        throw error
-                    }
-                }
-                this.app.isMediaActive = true
-                document.getElementById('mediaBtn').textContent = '🎤 Stop Media'
-                this.ui.log('✓ Media stream started', 'success')
-            } else {
-                this.app.peerConnection.stopMediaStream()
-                this.app.isMediaActive = false
-                document.getElementById('mediaBtn').textContent = '🎤 Start Media'
-                this.ui.log('Media stream stopped', 'info')
-            }
-        } catch (error) {
-            const errorMsg = error.message || error.toString()
-            this.ui.log(`Media error: ${errorMsg}`, 'error')
-        }
-    }
-
-    /**
-     * Accept incoming call
-     */
-    async acceptCall() {
-        try {
-            if (!this.app.currentCallToken) {
-                this.ui.log('Error: No active call to accept', 'error')
-                return
-            }
-
-            if (this.app._incomingTimeout) { clearTimeout(this.app._incomingTimeout); this.app._incomingTimeout = null }
-            const callTokenId = this.app.currentCallToken
-
-            // Dismiss incoming call UI and stop ringtone immediately
-            this.ui.stopRingtone()
-            document.getElementById('incomingCall').style.display = 'none'
-            document.getElementById('acceptBtn').style.display = 'none'
-            document.getElementById('rejectBtn').style.display = 'none'
-
-            // Ensure signaling has callee's IP/port — signaling.initialize() is only called
-            // on the caller side (initializeCall), so callee must set these before accepting.
-            const myIp = document.getElementById('myIp')?.value
-            const myPort = parseInt(document.getElementById('myPort')?.value, 10) || null
-            if (myIp) this.app.signaling.myIp = myIp
-            if (myPort) this.app.signaling.myPort = myPort
-
-            // broadcastAnswerFn: send answer signal back to caller
-            const ansFeePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
-            const broadcastAnswerFn = async (_callTokenId, callerAddress, answerData) => {
-                this.ui.log(`📤 Sending answer signal to caller...`, 'info')
-                const answerWithCallee = {
-                    ...answerData,
-                    callee: this.app.signaling.myAddress,
-                    feePerKb: ansFeePerKb,
-                }
-                const result = await this.app.callTokenManager.broadcastCallAnswer(callerAddress, answerWithCallee)
-                this.ui.log(`✓ Answer sent: ${result.txId}`, 'success')
-                return result
-            }
-
-            await this.app.callManager.acceptCall(callTokenId, {
-                audio: true,
-                video: true,
-                broadcastAnswerFn,
-            })
-
-            this.ui.stopRingtone()
-            document.getElementById('incomingCall').style.display = 'none'
-            document.getElementById('acceptBtn').style.display = 'none'
-            document.getElementById('rejectBtn').style.display = 'none'
-
-            document.getElementById('endCallBtn').style.display = 'inline-block'
-            this.ui.log('✓ Call accepted', 'success')
-        } catch (error) {
-            this.ui.log(`Error accepting call: ${error.message}`, 'error')
-        }
-    }
-
-    /**
-     * Reject incoming call
-     */
-    rejectCall() {
-        try {
-            if (!this.app.currentCallToken) {
-                this.ui.log('Error: No active call to reject', 'error')
-                return
-            }
-
-            if (this.app._incomingTimeout) { clearTimeout(this.app._incomingTimeout); this.app._incomingTimeout = null }
-            this.app.callManager.rejectCall(this.app.currentCallToken, 'user-declined')
-            this.ui.resetCallUI()
-            this.ui.log('Call rejected', 'info')
-        } catch (error) {
-            this.ui.log(`Error rejecting call: ${error.message}`, 'error')
-        }
-    }
-
-    /**
-     * End active call
-     */
-    async endCall() {
-        try {
-            if (this.app._unansweredTimeout) { clearTimeout(this.app._unansweredTimeout); this.app._unansweredTimeout = null }
-            if (this.app._incomingTimeout) { clearTimeout(this.app._incomingTimeout); this.app._incomingTimeout = null }
-            this.ui.stopOutgoingRing()
-            if (!this.app.currentCallToken) {
-                this.ui.log('Error: No active call to end', 'error')
-                return
-            }
-
-            await this.app.callManager.endCall(this.app.currentCallToken)
-            this.app.currentCallToken = null
-            this.ui.resetCallUI()
-            this.ui.log('Call ended', 'info')
-        } catch (error) {
-            this.ui.log(`Error ending call: ${error.message}`, 'error')
-        }
-    }
-}
-
-class MicrophoneTestHandlers {
-    constructor(app, ui) {
-        this.app = app
-        this.ui = ui
-    }
-
-    /**
-     * Toggle a collapsible test section open/closed
-     */
-    _toggleTestSection(contentId, toggleId) {
-        const content = document.getElementById(contentId)
-        const icon = document.getElementById(toggleId)
-        const collapsed = content.classList.contains('collapsed')
-        content.classList.toggle('collapsed', !collapsed)
-        icon.classList.toggle('collapsed', !collapsed)
-        icon.textContent = collapsed ? '▼' : '▶'
-    }
-
-    toggleMicTest() { this._toggleTestSection('micTestContent', 'micTestToggle') }
-
-    /**
-     * Start microphone test
-     */
-    async startMicTest() {
-        try {
-            if (!this.app.micTester) {
-                this.ui.log('Error: Microphone tester not initialized', 'error')
-                return
-            }
-
-            // Update UI
-            document.getElementById('startMicTestBtn').style.display = 'none'
-            document.getElementById('stopMicTestBtn').style.display = 'inline-block'
-            document.getElementById('micVolumeSlider').disabled = false
-            document.getElementById('micMuteCheckbox').disabled = false
-            document.getElementById('recordingSection').style.display = 'block'
-            document.getElementById('startRecordBtn').disabled = false
-
-            // Start test
-            await this.app.micTester.startTest()
-        } catch (error) {
-            const errorMsg = error.message || error.toString()
-            this.ui.log(`⚠️  ${errorMsg}`, 'error')
-
-            // Reset UI on error
-            document.getElementById('startMicTestBtn').style.display = 'inline-block'
-            document.getElementById('stopMicTestBtn').style.display = 'none'
-            document.getElementById('micVolumeSlider').disabled = true
-            document.getElementById('micMuteCheckbox').disabled = true
-            document.getElementById('recordingSection').style.display = 'none'
-        }
-    }
-
-    /**
-     * Stop microphone test
-     */
-    stopMicTest() {
-        try {
-            if (!this.app.micTester) {
-                return
-            }
-
-            // Stop test
-            this.app.micTester.stopTest()
-
-            // Update UI
-            document.getElementById('startMicTestBtn').style.display = 'inline-block'
-            document.getElementById('stopMicTestBtn').style.display = 'none'
-            document.getElementById('micVolumeSlider').disabled = true
-            document.getElementById('micMuteCheckbox').disabled = true
-            document.getElementById('micMuteCheckbox').checked = false
-            document.getElementById('micVolumeSlider').value = 100
-            document.getElementById('volumeValue').textContent = '100%'
-            document.getElementById('recordingSection').style.display = 'none'
-            document.getElementById('recordingTime').textContent = '0:00 / 0:10'
-        } catch (error) {
-            console.error('Error stopping mic test:', error)
-        }
-    }
-
-    /**
-     * Update microphone volume
-     */
-    updateMicVolume(value) {
-        if (this.app.micTester && this.app.micTester.isTestActive) {
-            this.app.micTester.setVolume(value)
-            document.getElementById('volumeValue').textContent = value + '%'
-        }
-    }
-
-    /**
-     * Toggle microphone mute
-     */
-    toggleMicMute(isMuted) {
-        if (this.app.micTester && this.app.micTester.isTestActive) {
-            this.app.micTester.setMute(isMuted)
-            this.ui.log(`Microphone ${isMuted ? 'muted' : 'unmuted'}`, 'info')
-        }
-    }
-
-    /**
-     * Start recording microphone input
-     */
-    async startRecording() {
-        try {
-            if (!this.app.micTester) {
-                this.ui.log('Error: Microphone tester not initialized', 'error')
-                return
-            }
-
-            await this.app.micTester.startRecording()
-        } catch (error) {
-            const errorMsg = error.message || error.toString()
-            this.ui.log(`Error: ${errorMsg}`, 'error')
-        }
-    }
-
-    /**
-     * Stop recording microphone input
-     */
-    stopRecording() {
-        try {
-            if (this.app.micTester) {
-                this.app.micTester.stopRecording()
-            }
-        } catch (error) {
-            console.error('Error stopping recording:', error)
-        }
-    }
-
-    /**
-     * Play microphone recording
-     */
-    playRecording() {
-        try {
-            if (this.app.micTester) {
-                this.app.micTester.playRecording()
-            }
-        } catch (error) {
-            const errorMsg = error.message || error.toString()
-            this.ui.log(`Playback error: ${errorMsg}`, 'error')
-        }
-    }
-}
-
-class CameraTestHandlers {
-    constructor(app, ui) {
-        this.app = app
-        this.ui = ui
-    }
-
-    _toggleTestSection(contentId, toggleId) {
-        const content = document.getElementById(contentId)
-        const icon = document.getElementById(toggleId)
-        const collapsed = content.classList.contains('collapsed')
-        content.classList.toggle('collapsed', !collapsed)
-        icon.classList.toggle('collapsed', !collapsed)
-        icon.textContent = collapsed ? '▼' : '▶'
-    }
-
-    toggleCameraTest() { this._toggleTestSection('cameraTestContent', 'cameraTestToggle') }
-
-    /**
-     * Start camera test
-     */
-    async startCameraTest() {
-        try {
-            if (!this.app.cameraTester) {
-                this.ui.log('Error: Camera tester not initialized', 'error')
-                return
-            }
-
-            const quality = document.getElementById('cameraResolution')?.value || 'hd'
-            await this.app.cameraTester.startTest(quality)
-        } catch (error) {
-            const errorMsg = error.message || error.toString()
-            this.ui.log(`⚠️  ${errorMsg}`, 'error')
-        }
-    }
-
-    /**
-     * Stop camera test
-     */
-    stopCameraTest() {
-        try {
-            if (this.app.cameraTester) {
-                this.app.cameraTester.stopTest()
-            }
-        } catch (error) {
-            console.error('Error stopping camera test:', error)
-        }
-    }
-
-    /**
-     * Change camera resolution
-     */
-    async changeCameraResolution(quality) {
-        try {
-            if (this.app.cameraTester && this.app.cameraTester.isTestActive) {
-                await this.app.cameraTester.changeResolution(quality)
-            }
-        } catch (error) {
-            const errorMsg = error.message || error.toString()
-            this.ui.log(`Error: ${errorMsg}`, 'error')
-        }
-    }
-
-    /**
-     * Toggle camera size (normal/full)
-     */
-    toggleCameraSize() {
-        try {
-            if (this.app.cameraTester) {
-                this.app.cameraTester.toggleSize()
-            }
-        } catch (error) {
-            console.error('Error toggling camera size:', error)
-        }
-    }
-
-    /**
-     * Enter camera fullscreen
-     */
-    async enterCameraFullscreen() {
-        try {
-            if (this.app.cameraTester) {
-                await this.app.cameraTester.enterFullscreen()
-            }
-        } catch (error) {
-            const errorMsg = error.message || error.toString()
-            this.ui.log(`Fullscreen error: ${errorMsg}`, 'error')
-        }
-    }
-}
-
-// Export handler classes for use in phone-controller.js
-window.CallHandlers = CallHandlers
-window.MicrophoneTestHandlers = MicrophoneTestHandlers
-window.CameraTestHandlers = CameraTestHandlers
-
-/**
- * SVphone Phone Controller Layer (v07.00)
- *
- * Handles:
- * - Application orchestration and initialization
- * - Background polling coordination
- * - Event binding and listener management
- * - State synchronization
- */
-
-class PhoneController {
-    constructor() {
-        // Core modules
-        this.callManager = null
-        this.signaling = null
-        this.peerConnection = null
-        this.codecs = null
-        this.quality = null
-        this.security = null
-        this.micTester = null
-        this.cameraTester = null
-
-        // UI layer
-        this.ui = null
-
-        // Event handlers
-        this.callHandlers = null
-        this.micHandlers = null
-        this.cameraHandlers = null
-
-        // Call state
-        this.currentCallToken = null
-        this.currentRole = null
-        this.calleeConnectionData = null
-        this.isMediaActive = false
-        this.callStartTime = null
-        this.durationInterval = null
-        // Initialize call token manager
-        this.callTokenManager = null
-
-        // UDP port for direct P2P communication
-        this.assignedUdpPort = null
-
-        // Screen Wake Lock (prevents screen sleep dropping the call)
-        this.wakeLock = null
-
-        this.init()
-    }
-
-    /**
-     * Initialize application on startup
-     */
-    async init() {
-        try {
-            console.log('[SVphone] Initializing controller...')
-
-            // Initialize UI layer
-            this.ui = new PhoneUI()
-            this.ui.log('Initializing SVphone v07.00...', 'info')
-
-            // Sync wallet data from shared state (wallet.html)
-            try {
-                this.syncWalletData()
-            } catch (e) {
-                this.ui.log(`⚠️  Wallet sync error: ${e.message}`, 'error')
-            }
-
-            // Load last called address (phone UI local history)
-            try {
-                this.loadLastCalled()
-            } catch (e) {
-                this.ui.log(`⚠️  Last called load error: ${e.message}`, 'error')
-            }
-
-            // Auto-detect IP and generate ephemeral port
-            try {
-                await this.autoDetectNetworkConfig()
-            } catch (e) {
-                this.ui.log(`⚠️  Network config error: ${e.message}`, 'error')
-            }
-
-            // Create all component modules
-            this.signaling = new CallSignaling()
-            // Apply IPs detected before signaling was created
-            this.peerConnection = new PeerConnection({
-                // Direct P2P with no centralized STUN servers
-                // Uses mDNS discovery and standard VoIP ports (3478-3497)
-                // iceServers: [] (empty - default in PeerConnection)
-            })
-            this.callManager = new CallManager(this.signaling, this.peerConnection)
-            this.codecs = new CodecNegotiation()
-            this.quality = new QualityAdaptation()
-            this.security = new MediaSecurity()
-            this.micTester = new MicrophoneTester((msg, type) => this.ui.log(msg, type))
-            this.cameraTester = new CameraTester((msg, type) => this.ui.log(msg, type))
-
-            // Initialize call token manager
-            if (window.CallTokenManager) {
-                this.callTokenManager = new CallTokenManager((msg, type) => this.ui.log(msg, type))
-                console.debug('[INIT] CallTokenManager initialized')
-            }
-
-            // Initialize 1-TX identity modules
-            if (window.DtlsCertStore && window.ContactsStore && window.IceCredentials && window.SyntheticSdp) {
-                this.dtlsCertStore = new DtlsCertStore()
-                this.contactsStore = new ContactsStore()
-
-                window.iceCredentials = new IceCredentials()
-                window.syntheticSdp   = new SyntheticSdp()
-                window.contactsStore  = this.contactsStore
-
-                // Load (or generate) the persistent DTLS certificate asynchronously
-                this.dtlsCertStore.getOrCreate().then(cert => {
-                    this.peerConnection._persistentCert            = cert
-                    this.peerConnection._persistentCertFingerprint = this.dtlsCertStore.getFingerprint(cert)
-                    const fp = this.peerConnection._persistentCertFingerprint
-                    this.ui.log(`✓ DTLS identity: ...${fp.slice(-20)}`, 'success')
-                    // Persist fingerprint and identity string in localStorage
-                    localStorage.setItem('svphone_my_fingerprint', fp)
-                    const addr = document.getElementById('myAddress')?.value || localStorage.getItem('svphone_wallet_address') || ''
-                    if (addr) {
-                        const identity = this.contactsStore.format(addr, fp, this._detectedIp4 || null)
-                        localStorage.setItem('svphone_my_identity', identity)
-                        const identityEl = document.getElementById('myIdentityStr')
-                        if (identityEl) identityEl.value = identity
-                    }
-                    this.refreshContactsList()
-                }).catch(e => {
-                    this.ui.log(`⚠️  DTLS cert error: ${e.message}`, 'warning')
-                })
-                console.debug('[INIT] 1-TX identity modules initialized')
-            }
-
-            // Create handler instances with references to this controller and UI
-            this.callHandlers = new CallHandlers(this, this.ui)
-            this.micHandlers = new MicrophoneTestHandlers(this, this.ui)
-            this.cameraHandlers = new CameraTestHandlers(this, this.ui)
-
-            // Bind event listeners
-            this.bindEvents()
-
-            // Diagnostic: Check if calleeAddress field is accessible
-            const calleeField = document.getElementById('calleeAddress')
-            if (calleeField) {
-                console.debug('[DIAG] calleeAddress field found:', {
-                    id: calleeField.id,
-                    type: calleeField.type,
-                    disabled: calleeField.disabled,
-                    readonly: calleeField.readOnly,
-                    visible: calleeField.offsetParent !== null,
-                    value: calleeField.value || '(empty)'
-                })
-            } else {
-                console.error('[DIAG] calleeAddress field NOT FOUND in DOM!')
-            }
-
-            // Start background polling for incoming calls
-            try {
-                this.startBackgroundPolling()
-            } catch (e) {
-                this.ui.log(`⚠️  Could not start background polling: ${e.message}`, 'warning')
-            }
-
-            this.ui.log('SVphone initialized successfully', 'success')
-        } catch (error) {
-            this.ui.log(`❌ Initialization failed: ${error.message}`, 'error')
-            console.error('[SVphone] Init error:', error)
-        }
-    }
-
-    /**
-     * Sync wallet data from shared state
-     */
-    syncWalletData() {
-        const myAddressField = document.getElementById('myAddress')
-        let found = false
-
-        // Try 1: Get address from bundle.js wallet (if wallet.html is open in same session)
-        const addressEl = document.getElementById('address')
-        if (addressEl && addressEl.textContent && addressEl.textContent !== '...') {
-            const addr = addressEl.textContent.trim()
-            myAddressField.value = addr
-            // Don't auto-populate callee - let user enter the address they want to call
-            this.ui.log(`✓ Wallet synced from bundle: ${addr}`, 'success')
-            found = true
-        }
-
-        // Try 2: Get address from localStorage (if wallet.html was opened before)
-        if (!found) {
-            const storedAddress = localStorage.getItem('svphone_wallet_address')
-            if (storedAddress && storedAddress !== '...') {
-                myAddressField.value = storedAddress
-                // Don't auto-populate callee - let user enter the address they want to call
-                this.ui.log(`✓ Wallet restored from storage: ${storedAddress}`, 'success')
-                found = true
-            }
-        }
-
-        // If found, we're done
-        if (found) return
-
-        // If not found, show helpful message
-        myAddressField.placeholder = 'Open wallet.html to load wallet address'
-        this.ui.log('💡 Wallet not initialized. Open wallet.html first, then return here.', 'info')
-    }
-
-    /**
-     * Load last called address from storage
-     */
-    loadLastCalled() {
-        const lastCalledAddress = localStorage.getItem('svphone_phone_last_called_address')
-        const lastCalledBtn = document.getElementById('lastCalledBtn')
-        const lastCalledBtnText = document.getElementById('lastCalledBtnText')
-        const lastCalledInfo = document.getElementById('lastCalledInfo')
-        const lastCalledAddressEl = document.getElementById('lastCalledAddress')
-
-        if (lastCalledAddress && lastCalledAddress.trim()) {
-            // Show the redial button with the address
-            lastCalledBtnText.textContent = lastCalledAddress.slice(0, 10) + '...'
-            lastCalledBtn.style.display = 'block'
-
-            // Show the info text
-            lastCalledAddressEl.textContent = lastCalledAddress
-            lastCalledInfo.style.display = 'block'
-        } else {
-            lastCalledBtn.style.display = 'none'
-            lastCalledInfo.style.display = 'none'
-        }
-    }
-
-    /**
-     * Save last called address
-     */
-    saveLastCalled(address) {
-        if (address && address.trim()) {
-            localStorage.setItem('svphone_phone_last_called_address', address.trim())
-            this.loadLastCalled()
-        }
-    }
-
-    // ─── Public proxy methods for inline onclick handlers in HTML ────────
-
-    toggleMicTest()        { this.micHandlers.toggleMicTest() }
-    startMicTest()         { return this.micHandlers.startMicTest() }
-    stopMicTest()          { this.micHandlers.stopMicTest() }
-    startRecording()       { return this.micHandlers.startRecording() }
-    stopRecording()        { this.micHandlers.stopRecording() }
-    playRecording()        { this.micHandlers.playRecording() }
-
-    toggleCameraTest()     { this.cameraHandlers.toggleCameraTest() }
-    startCameraTest()      { return this.cameraHandlers.startCameraTest() }
-    stopCameraTest()       { this.cameraHandlers.stopCameraTest() }
-    toggleCameraSize()     { this.cameraHandlers.toggleCameraSize() }
-    enterCameraFullscreen(){ return this.cameraHandlers.enterCameraFullscreen() }
-
-    initializeCall()       { return this.callHandlers.initializeCall() }
-    toggleMediaStream()    { return this.callHandlers.toggleMediaStream() }
-    acceptCall()           { return this.callHandlers.acceptCall() }
-    rejectCall()           { this.callHandlers.rejectCall() }
-    endCall()              { return this.callHandlers.endCall() }
-    clearConsole()         { this.ui.clearConsole() }
-
-    /**
-     * Add a contact from their identity string.
-     * Called from the 1-TX Contacts UI section.
-     */
-    addContact() {
-        const input = document.getElementById('newContactStr')
-        if (!input || !this.contactsStore) return
-        const parsed = this.contactsStore.parse(input.value.trim())
-        if (!parsed) {
-            this.ui.log('⚠️ Invalid identity string. Format: ADDRESS:sha-256:XX:XX:...[@IP]', 'error')
-            return
-        }
-        this.contactsStore.save(parsed.address, parsed.fingerprint, parsed.ip || null)
-        this.ui.log(`✓ Contact saved: ${parsed.address.slice(0, 16)}...${parsed.ip ? ' (IP: ' + parsed.ip + ')' : ''}`, 'success')
-        input.value = ''
-        this.refreshContactsList()
-    }
-
-    /**
-     * Refresh the contacts list display in the UI.
-     */
-    refreshContactsList() {
-        const el = document.getElementById('contactsList')
-        if (!el || !this.contactsStore) return
-        const contacts = this.contactsStore.getAll()
-        if (contacts.length === 0) {
-            el.innerHTML = '<span style="color:#6e7681;">No contacts yet — paste an identity string above.</span>'
-            return
-        }
-        el.innerHTML = contacts.map(c => `
-            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-              <span style="flex:1;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                    title="${c.address}">${c.address.slice(0, 20)}...
-              </span>
-              <span style="color:#3fb950;font-size:0.75em;">1-TX</span>
-              ${c.ip ? '<span style="color:#8b949e;font-size:0.65em;" title="ADF pre-punch IP: ' + c.ip + '">IP</span>' : ''}
-              <button onclick="app.callContact('${c.address}')" style="padding:2px 8px;background:#1f6feb;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;">Call</button>
-              <button onclick="app.removeContact('${c.address}')" style="padding:2px 8px;background:#da3633;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:0.75em;">✕</button>
-            </div>`).join('')
-    }
-
-    /** Dial a contact directly from the contacts list */
-    callContact(address) {
-        const calleeField = document.getElementById('calleeAddress')
-        if (calleeField) calleeField.value = address
-    }
-
-    /** Remove a contact */
-    removeContact(address) {
-        if (!this.contactsStore) return
-        this.contactsStore.remove(address)
-        this.ui.log(`Contact removed: ${address.slice(0, 16)}...`, 'info')
-        this.refreshContactsList()
-    }
-
-    /**
-     * Quick dial using last called address
-     */
-    quickDial() {
-        const lastCalledAddress = localStorage.getItem('svphone_phone_last_called_address')
-        if (lastCalledAddress) {
-            document.getElementById('calleeAddress').value = lastCalledAddress
-            this.ui.log(`📞 Quick dial: ${lastCalledAddress}`, 'info')
-            this.callHandlers.initializeCall()
-        }
-    }
-
-    /**
-     * Auto-detect network configuration
-     */
-    async autoDetectNetworkConfig() {
-        const myIpField = document.getElementById('myIp')
-        const myPortField = document.getElementById('myPort')
-
-        // Assign random UDP port in standard VoIP range (3478-3497)
-        // These ports are typically open on firewalls for apps like FaceTime and Game Center
-        const minPort = 3478
-        const maxPort = 3497
-        const randomPort = minPort + Math.floor(Math.random() * (maxPort - minPort + 1))
-        myPortField.value = randomPort
-        this.assignedUdpPort = randomPort
-        console.log(`[SVphone] Assigned UDP port: ${randomPort} (VoIP range 3478-3497)`)
-
-        // Public IP is discovered via STUN during call setup
-        myIpField.value = ''
-        myIpField.placeholder = 'Detected via STUN'
-        this._detectedIp4 = null
-        this._detectedIp6 = null
-    }
-
-    /**
-     * Bind HTML event listeners to handlers
-     */
-    bindEvents() {
-        // ========== Call Manager Events ==========
-        this.callManager.on('call:log', ({ msg, type }) => this.ui.log(msg, type))
-
-        this.callManager.on('call:initiated-session', (session) => {
-            this.ui.log(`📞 Call initiated to ${session.calleeAddress}`, 'info')
-            this.currentCallToken = session.callTokenId
-            this.currentRole = 'caller'
-            this.ui.updateCallStatus('ringing', 'Call ringing...')
-            this.playRingtone()  // Play ring sound when calling
-        })
-
-        this.callManager.on('call:incoming-session', (session) => {
-            if (session.isNewCaller) {
-                this.ui.log(`Incoming call from NEW caller: ${session.caller}`, 'info')
-            } else {
-                this.ui.log(`Incoming call from ${session.caller}`, 'info')
-            }
-            this.showIncomingCall(session.caller, session.callTokenId, session.isNewCaller)
-            this.currentCallToken = session.callTokenId
-            this.currentRole = 'callee'
-        })
-
-        this.callManager.on('call:answered-session', (session) => {
-            const remoteAddress = session.callee || session.calleeAddress
-            const remoteParty   = remoteAddress || session.answerer
-            console.debug(`[RECV] ✅ CALL ANSWERED by ${remoteParty}`)
-
-            // Cancel outgoing ring and unanswered timeout
-            this.ui.stopOutgoingRing()
-            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
-            this.ui.log(`📞 Call answered by ${remoteParty}`, 'success')
-            this.ui.updateCallStatus('answered', 'Call answered - ICE connecting...')
-
-            if (session.sdpAnswer && remoteAddress) {
-                // 2-TX fallback: received ANS token — set remote description to complete handshake.
-                // (In 1-TX mode the synthetic answer was already set in initiateCall, so this
-                //  event doesn't fire and this branch is not reached.)
-                console.debug(`[RECV] 2-TX: Setting remote description (answer SDP) for ${remoteAddress}`)
-                this.peerConnection.setRemoteDescription(remoteAddress, { type: 'answer', sdp: session.sdpAnswer })
-                    .then(() => {
-                        this.ui.log('✓ WebRTC handshake complete, ICE connecting...', 'success')
-                        this.ui.log(`[ICE] Callee ip4: ${session.calleeIp4 ?? 'none'} ip6: ${session.calleeIp6 ?? 'none'}`, 'info')
-                        if (session.calleeIp4 || session.calleeIp6) {
-                            const pubCandidates = this.peerConnection._buildPublicIpCandidates(
-                                session.sdpAnswer, session.calleeIp4 ?? null, session.calleeIp6 ?? null,
-                                this.ui.log.bind(this.ui)
-                            )
-                            for (const c of pubCandidates) {
-                                this.peerConnection.addIceCandidate(remoteAddress, c)
-                                    .catch(e => console.warn('[Phone] Public IP candidate rejected:', e.message))
-                            }
-                        }
-                    })
-                    .catch(err => this.ui.log(`⚠️ WebRTC answer error: ${err.message}`, 'error'))
-            } else {
-                // Callee local event (from signaling.acceptCall): ICE is already running
-                // via createAnswerMunged() in call_manager.acceptCall().
-                console.debug('[RECV] Callee ICE running (1-TX or local acceptCall)')
-                this.calleeConnectionData = {
-                    address:    remoteAddress,
-                    ip:         session.calleeIp,
-                    port:       session.calleePort,
-                    sessionKey: session.calleeSessionKey
-                }
-            }
-        })
-
-        // Port discovery: callee's STUN found its srflx — broadcast PORT token to caller
-        this.callManager.on('call:port-discovered', async (data) => {
-            if (!this.callTokenManager) return
-            try {
-                const myAddress = this.signaling.myAddress
-                if (!myAddress) return
-                const portFeePerKb = parseFloat(document.getElementById('feeRate')?.value) || 100
-                this.ui.log(`[ANS] Broadcasting answer + port ${data.port} to caller... (fee ${portFeePerKb} sats/KB)`, 'info')
-                const portResult = await this.callTokenManager.broadcastCallAnswer(data.callerAddress, {
-                    callee:            myAddress,
-                    senderIp:          data.ip,
-                    senderPort:        data.port,
-                    sessionKey:        data.sessionKey || '',
-                    codec:             'opus',
-                    quality:           'hd',
-                    sdpAnswer:         data.sdpAnswer || '',
-                    calleeFingerprint: data.calleeFingerprint || '',
-                    feePerKb:          portFeePerKb,
-                })
-                this.ui.log(`[ANS] Answer + port ${data.port} announced — waiting for mempool confirmation before spray`, 'info')
-                // Wait until ANS TX is visible on WoC before spraying.
-                // The caller also waits for this TX via polling, so both sides
-                // start spraying at approximately the same time. This prevents
-                // the callee's early spray from triggering flood protection on
-                // the caller's router (unsolicited incoming packets before the
-                // caller has sent anything outbound).
-                const ansTxId = portResult?.txId
-                if (ansTxId) {
-                    this.ui.log(`[ANS] ANS TX broadcast (${ansTxId.slice(0,12)}…) — waiting for UTXO detection to start spray`, 'info')
-                }
-                // Spray is NOT started here. Both caller and callee start spray
-                // when they detect the ANS token via UTXO polling (onCallAnswered).
-                // This synchronizes both sides to within one polling interval.
-            } catch (err) {
-                this.ui.log(`[ANS] Failed to broadcast answer: ${err.message}`, 'error')
-            }
-        })
-
-        this.callManager.on('call:connected', () => {
-            console.debug('[call:connected] Event listener fired!')
-            this.ui.stopOutgoingRing()
-            this.ui.stopRingtone()
-            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
-            this.ui.log('📞 Call connected! Media stream established', 'success')
-            this.ui.updateCallStatus('connected', 'Call connected')
-            document.getElementById('endCallBtn').style.display = 'inline-block'
-            console.debug('[call:connected] About to call showCallStats()')
-            this.ui.showCallStats()
-            console.debug('[call:connected] showCallStats() completed')
-            this.callStartTime = Date.now()
-            this.ui.startDurationTimer()
-            // Acquire screen wake lock to prevent screen sleep from dropping the call
-            if ('wakeLock' in navigator) {
-                navigator.wakeLock.request('screen')
-                    .then(lock => { this.wakeLock = lock; this.ui.log('Screen wake lock active', 'info') })
-                    .catch(e => console.warn('[WakeLock] Could not acquire:', e.message))
-            }
-        })
-
-        this.callManager.on('call:ended-session', (data) => {
-            this.ui.log(`📞 Call ended. Duration: ${(data.duration/1000).toFixed(1)}s`, 'info')
-            this.ui.resetCallUI()
-            this.ui.stopDurationTimer()
-            // Clear call state so next call works cleanly
-            this.currentCallToken = null
-            this.currentRole = null
-            if (this._unansweredTimeout) { clearTimeout(this._unansweredTimeout); this._unansweredTimeout = null }
-            if (this._incomingTimeout) { clearTimeout(this._incomingTimeout); this._incomingTimeout = null }
-            // Release screen wake lock
-            if (this.wakeLock) { this.wakeLock.release(); this.wakeLock = null }
-        })
-
-        // Re-acquire wake lock if browser releases it (e.g. tab hidden then shown) during an active call
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && this.wakeLock === null && this.currentCallToken) {
-                navigator.wakeLock?.request('screen')
-                    .then(lock => { this.wakeLock = lock })
-                    .catch(() => {})
-            }
-        })
-
-        // ========== Quality Adaptation Events ==========
-        this.quality.on('quality:changed', (data) => {
-            this.ui.log(`📊 Quality changed: ${data.oldQuality} → ${data.newQuality}`, 'warning')
-            this.ui.updateQuality(data.newQuality)
-        })
-
-        // ========== Call Manager Stats Events ==========
-        this.callManager.on('call:stats-updated', (data) => {
-            this.ui.updateStats(data.stats)
-        })
-
-        // ========== Peer Connection Events ==========
-        this.peerConnection.on('media:ready', () => {
-            this.ui.log('🎤 Media stream ready', 'success')
-            this.attachLocalVideo()
-        })
-
-        this.peerConnection.on('media:track-received', (data) => {
-            this.ui.log(`📹 Received remote ${data.track.kind} track`, 'info')
-            this.attachRemoteVideo(data.stream)
-        })
-
-        // ========== Security Events ==========
-        this.security.on('security:dtls-connected', () => {
-            this.ui.log('🔒 DTLS encryption established', 'success')
-            this.ui.updateEncryption('DTLS v1.2')
-        })
-
-
-
-
-        // ========== Microphone Test UI ==========
-        document.getElementById('micTestToggle')?.addEventListener('click', () => this.micHandlers.toggleMicTest())
-        document.getElementById('startMicTestBtn')?.addEventListener('click', () => this.micHandlers.startMicTest())
-        document.getElementById('stopMicTestBtn')?.addEventListener('click', () => this.micHandlers.stopMicTest())
-        document.getElementById('micVolumeSlider')?.addEventListener('input', (e) => this.micHandlers.updateMicVolume(e.target.value))
-        document.getElementById('micMuteCheckbox')?.addEventListener('change', (e) => this.micHandlers.toggleMicMute(e.target.checked))
-        document.getElementById('startRecordBtn')?.addEventListener('click', () => this.micHandlers.startRecording())
-        document.getElementById('stopRecordBtn')?.addEventListener('click', () => this.micHandlers.stopRecording())
-        document.getElementById('playRecordBtn')?.addEventListener('click', () => this.micHandlers.playRecording())
-
-        // ========== Camera Test UI ==========
-        document.getElementById('cameraTestToggle')?.addEventListener('click', () => this.cameraHandlers.toggleCameraTest())
-        document.getElementById('startCameraTestBtn')?.addEventListener('click', () => this.cameraHandlers.startCameraTest())
-        document.getElementById('stopCameraTestBtn')?.addEventListener('click', () => this.cameraHandlers.stopCameraTest())
-        document.getElementById('cameraResolution')?.addEventListener('change', (e) => this.cameraHandlers.changeCameraResolution(e.target.value))
-        document.getElementById('toggleCameraSizeBtn')?.addEventListener('click', () => this.cameraHandlers.toggleCameraSize())
-        document.getElementById('cameraFullscreenBtn')?.addEventListener('click', () => this.cameraHandlers.enterCameraFullscreen())
-    }
-
-    /**
-     * Start background polling for incoming calls
-     */
-    async startBackgroundPolling() {
-        // Start listening for incoming call signals in background.
-        // This runs continuously so recipient can receive calls anytime.
-        const myAddress = document.getElementById('myAddress')?.value
-
-        if (!window.tokenBuilder || !window.provider || !myAddress || !this.callTokenManager) {
-            this.ui.log(`⏳ Waiting for wallet to load (will retry in 2s)...`, 'warning')
-            setTimeout(() => this.startBackgroundPolling(), 2000)
-            return
-        }
-
-        // Ensure signaling is initialized with wallet address BEFORE polling
-        if (!this.signaling.myAddress) {
-            this.signaling.myAddress = myAddress
-        }
-
-        try {
-            const seenTxIds = new Set()
-
-            // Pre-seed seenTxIds with current UTXOs so existing TXs are ignored.
-            // Only new UTXOs (new calls/answers) will be processed.
-            try {
-                const initialUtxos = await window.provider.getUtxos()
-                for (const u of initialUtxos) seenTxIds.add(u.txId)
-                console.log(`[Poll] Pre-seeded ${seenTxIds.size} existing txIds from UTXOs — will only process new signals`)
-            } catch (e) {
-                console.warn('[Poll] Could not pre-seed seenTxIds:', e.message)
-            }
-
-            // Scan UTXOs for SVphone call/answer OP_RETURN signals.
-            // UTXOs reflect mempool changes almost instantly (vs address history
-            // which can lag 30-60s on WoC).
-            const scanSignalsFn = async (address) => {
-                if (!address) return []
-
-                const utxos = await window.provider.getUtxos()
-                const results = []
-
-                // Collect unique new txIds from UTXOs
-                const newTxIds = []
-                for (const u of utxos) {
-                    if (seenTxIds.has(u.txId)) continue
-                    newTxIds.push(u.txId)
-                    seenTxIds.add(u.txId)
-                }
-                if (newTxIds.length > 0) {
-                    console.log(`[Poll] address=${address.slice(0,12)}… ${newTxIds.length} new UTXO txId(s)`)
-                }
-
-                // Cap seenTxIds to prevent unbounded growth
-                if (seenTxIds.size > 500) {
-                    const iter = seenTxIds.values()
-                    while (seenTxIds.size > 400) seenTxIds.delete(iter.next().value)
-                }
-
-                for (const txId of newTxIds) {
-
-                    try {
-                        const tx = await window.provider.getSourceTransaction(txId)
-
-                        // Scan outputs for P OP_RETURN call signals
-                        let signal = null
-                        let lastDecoded = null
-                        for (const output of tx.outputs) {
-                            if (!output.lockingScript) continue
-                            const decoded = window.decodeOpReturn(output.lockingScript)
-                            if (!decoded) continue
-                            const name = decoded.tokenName
-                            if (!name?.startsWith('CALL-') && !name?.startsWith('ANS-')) continue
-
-                            const attrs = this.callTokenManager.decodeCallAttributes(decoded.tokenAttributes)
-                            if (!attrs?.senderIp) continue
-
-                            const isCall = name.startsWith('CALL-') && attrs.callee === address
-                            const isAnswer = name.startsWith('ANS-') && (attrs.caller === address || attrs.callee === address)
-                            if (!isCall && !isAnswer) continue
-
-                            // SDP is in stateData (P protocol conformant), not tokenAttributes
-                            const sdpStr = this.callTokenManager.decodeStateData(decoded.stateData)
-
-                            signal = {
-                                type: isCall ? 'call' : 'answer',
-                                caller: attrs.caller,
-                                callee: attrs.callee,
-                                ip: attrs.senderIp,
-                                port: attrs.senderPort,
-                                key: attrs.sessionKey,
-                                codec: attrs.codec,
-                                quality: attrs.quality,
-                                callerFingerprint: attrs.callerFingerprint ?? null,
-                                // CALL: wrap as object so call_manager.js can access .sdp property
-                                // ANS:  plain string — signaling.js wraps it
-                                sdp: isCall ? { type: 'offer', sdp: sdpStr }
-                                            : sdpStr,
-                            }
-                            lastDecoded = decoded
-                            break
-                        }
-
-                        if (signal) {
-                            // UI-visible log so user can verify decoded token data
-                            const sdpStr = signal.sdp ? (typeof signal.sdp === 'object' ? signal.sdp.sdp : signal.sdp) : ''
-                            const sdpLen = sdpStr?.length ?? 0
-                            const sdpCands = (sdpStr.match(/a=candidate:/g) || []).length
-                            // Extract ICE creds from decoded SDP for cross-check
-                            const sdpUfrag = sdpStr.match(/a=ice-ufrag:(\S+)/)?.[1] || '?'
-                            const sdpPwd = sdpStr.match(/a=ice-pwd:(\S+)/)?.[1] || '?'
-                            this.ui.log(
-                                `[Token] ${signal.type.toUpperCase()}: ip=${signal.ip ?? 'none'} ` +
-                                `port=${signal.port ?? 0} sdp=${sdpLen}B (${sdpCands} cands) ` +
-                                `ufrag=${sdpUfrag} key=${(signal.key || '').slice(0,8)}…`,
-                                'info'
-                            )
-                            // Log stateData hex length for integrity check
-                            console.log(`[Token-DBG] stateData hex=${lastDecoded?.stateData?.length ?? 0} chars, SDP=${sdpLen} chars, starts: ${sdpStr.slice(0,30)}`)
-                            results.push({ txId, inscription: signal })
-                        }
-                    } catch (e) {
-                        console.warn(`[Poll] fetch failed for ${txId.slice(0,12)}…:`, e.message)
-                    }
-                }
-
-                return results
-            }
-
-            // Start polling
-            this.signaling.startPolling(scanSignalsFn)
-            this.ui.log('📞 Background polling for incoming calls started', 'success')
-            // call:incoming and call:answered are forwarded by CallManager via
-            // call:incoming-session and call:answered-session — handled in bindEvents()
-        } catch (error) {
-            this.ui.log('[BgPolling] Failed to start: ' + error.message, 'error')
-        }
-    }
-
-    /**
-     * Show incoming call UI
-     */
-    showIncomingCall(caller, callTokenId, isNewCaller = false) {
-        console.debug(`[RECV] ✅ INCOMING ${isNewCaller ? 'FIRST-TIME ' : ''}CALL DETECTED! Caller: ${caller}`)
-        this.currentCallToken = callTokenId
-        this.ui.showIncomingCall(caller, isNewCaller)
-
-        // Auto-return to standby if not answered within 3 minutes
-        this._incomingTimeout = setTimeout(() => {
-            this._incomingTimeout = null
-            this.ui.log('⏱ Incoming call timed out — returning to standby', 'info')
-            this.ui.resetCallUI()
-        }, 3 * 60 * 1000)
-    }
-
-    /**
-     * Play ringtone sound
-     */
-    playRingtone() {
-        try {
-            // Create a simple ringtone using Web Audio API
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)()
-            const oscillator = audioContext.createOscillator()
-            const gainNode = audioContext.createGain()
-
-            oscillator.connect(gainNode)
-            gainNode.connect(audioContext.destination)
-
-            // Ring pattern: 440Hz (A4) for 0.5s, 0.5s silence, repeat 2x
-            oscillator.frequency.value = 440
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
-
-            const startTime = audioContext.currentTime
-            oscillator.start(startTime)
-            gainNode.gain.setValueAtTime(0.3, startTime)
-            gainNode.gain.setValueAtTime(0, startTime + 0.5)
-
-            gainNode.gain.setValueAtTime(0.3, startTime + 1)
-            gainNode.gain.setValueAtTime(0, startTime + 1.5)
-
-            oscillator.stop(startTime + 1.5)
-        } catch (error) {
-            console.warn('Ringtone playback failed:', error)
-        }
-    }
-
-    /**
-     * Attach local video stream
-     */
-    attachLocalVideo() {
-        const stream = this.peerConnection.mediaStream
-        if (stream) {
-            this.ui.attachLocalVideo(stream)
-        }
-    }
-
-    /**
-     * Attach remote video stream
-     */
-    attachRemoteVideo(stream) {
-        this.ui.attachRemoteVideo(stream)
-    }
-}
-
-// Initialize application when DOM is ready
-let phoneApp = null
-
-function initPhoneApp() {
-    try {
-        console.log('[SVphone] Initializing phone application...')
-        phoneApp = new PhoneController()
-        window.app = phoneApp
-        window.phoneApp = phoneApp
-        console.log('[SVphone] Phone application initialized successfully')
-    } catch (error) {
-        console.error('[SVphone] Initialization error:', error)
-        console.error('[SVphone] Stack:', error.stack)
-        alert('SVphone initialization failed: ' + error.message)
-    }
-}
-
-// Wait for DOM to be fully loaded
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initPhoneApp)
-} else {
-    initPhoneApp()
-}
-
-// Export for external access
-window.PhoneController = PhoneController
-
-/**
- * Wallet UI Initialization (v06.12)
- *
- * Token rendering extracted from v06_00 and organized into clean architecture.
- * - Populates address from TokenBuilder
- * - Calculates and displays balance
- * - Loads and renders all tokens (OwnedToken + FungibleToken) with full details
- * - Syncs address to localStorage for other interfaces
- */
-
-class WalletUI {
-  constructor() {
-    this.addressElement = document.getElementById('address');
-    this.balanceElement = document.getElementById('balance');
-    this.tokenListElement = document.getElementById('token-list');
-    this.wifVisible = false; // Track WIF visibility state
-  }
-
-  /**
-   * Initialize wallet UI when bundle.js is ready
-   */
-  async initialize() {
-    try {
-      // Check that bundle.js has initialized
-      if (!window.builder || !window.store) {
-        console.warn('[WalletUI] Bundle.js not yet ready, retrying...');
-        setTimeout(() => this.initialize(), 500);
-        return;
-      }
-
-      // Populate address
-      this.populateAddress();
-
-      // Populate keys
-      this.populateKeys();
-
-      // Populate balance
-      await this.populateBalance();
-
-      // Load and display tokens
-      await this.loadTokens();
-
-      // Wire up button handlers
-      this.wireUpButtonHandlers();
-
-      // Sync address to localStorage
-      this.syncAddressToStorage();
-      this.watchAddressChanges();
-
-      console.log('[WalletUI] Initialization complete');
-    } catch (error) {
-      console.error('[WalletUI] Initialization failed:', error);
-    }
-  }
-
-  /**
-   * Populate wallet address
-   */
-  populateAddress() {
-    if (this.addressElement && window.builder.myAddress) {
-      this.addressElement.textContent = window.builder.myAddress;
-      console.log('[WalletUI] Address populated:', window.builder.myAddress);
-    }
-  }
-
-  /**
-   * Calculate and display balance
-   */
-  async populateBalance() {
-    if (!this.balanceElement || !window.builder) {
-      return;
-    }
-
-    try {
-      this.balanceElement.textContent = 'Loading...';
-      const balance = await window.builder.getSpendableBalance();
-      this.balanceElement.textContent = balance.toLocaleString() + ' sat';
-      console.log('[WalletUI] Balance populated:', balance);
-    } catch (err) {
-      this.balanceElement.textContent = 'Error loading balance';
-      console.error('[WalletUI] Error getting balance:', err);
-    }
-  }
-
-  /**
-   * Populate public and private key display
-   */
-  populateKeys() {
-    try {
-      const pubkeyEl = document.getElementById('pubkey');
-      const privkeyEl = document.getElementById('privkey');
-      const btnToggleWif = document.getElementById('btn-toggle-wif');
-
-      if (pubkeyEl && window.myPublicKey) {
-        pubkeyEl.textContent = window.myPublicKey;
-        console.log('[WalletUI] Public key populated');
-      }
-
-      if (privkeyEl && window.myWif) {
-        // Hide WIF by default (show masked version)
-        privkeyEl.textContent = '••••••••••••••••';
-        privkeyEl.dataset.wif = window.myWif; // Store actual WIF in data attribute
-        privkeyEl.style.cursor = 'pointer';
-        console.log('[WalletUI] Private key populated (hidden by default)');
-      }
-
-      // Setup toggle button
-      if (btnToggleWif) {
-        btnToggleWif.onclick = () => this.toggleWifVisibility();
-      }
-    } catch (err) {
-      console.error('[WalletUI] Error populating keys:', err);
-    }
-  }
-
-  /**
-   * Toggle WIF visibility (Show/Hide)
-   */
-  toggleWifVisibility() {
-    const privkeyEl = document.getElementById('privkey');
-    const btnToggleWif = document.getElementById('btn-toggle-wif');
-
-    if (!privkeyEl || !btnToggleWif) return;
-
-    this.wifVisible = !this.wifVisible;
-
-    if (this.wifVisible) {
-      privkeyEl.textContent = privkeyEl.dataset.wif || window.myWif;
-      btnToggleWif.textContent = 'Hide';
-      btnToggleWif.style.background = '#d29922';
-    } else {
-      privkeyEl.textContent = '••••••••••••••••';
-      btnToggleWif.textContent = 'Show';
-      btnToggleWif.style.background = '#30363d';
-    }
-  }
-
-  /**
-   * Load tokens from store and display them (working version from v06_00)
-   */
-  async loadTokens() {
-    try {
-      if (!window.store) {
-        console.warn('[WalletUI] TokenStore not available');
-        return;
-      }
-
-      // Load tokens sorted by creation date (newest first)
-      let tokens = (await window.store.listTokens()).sort((a, b) => {
-        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return db - da;
-      });
-
-      // Filter tokens: exclude transferred and flushed-without-recovery
-      tokens = tokens.filter(t => {
-        if (t.status === 'transferred') return false;
-        if (t.status === 'flushed' && !t.flushedAt) return false;
-        return true;
-      });
-
-      let fungibleTokens = (await window.store.listFungibleTokens()).sort((a, b) => {
-        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return db - da;
-      });
-
-      console.log('[WalletUI] Loaded tokens:', {
-        owned: tokens.length,
-        fungible: fungibleTokens.length,
-        total: tokens.length + fungibleTokens.length
-      });
-
-      const container = this.tokenListElement;
-      if (!container) return;
-
-      if (tokens.length === 0 && fungibleTokens.length === 0) {
-        container.innerHTML = '<p class="muted">No tokens yet. Mint a new token to get started.</p>';
-        return;
-      }
-
-      // Render fungible tokens first
-      const fungibleHtml = fungibleTokens.map(ft => renderFungibleCard(ft)).join('');
-
-      // Group non-fungible tokens by genesis TXID
-      const groups = new Map();
-      for (const t of tokens) {
-        const key = t.genesisTxId;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(t);
-      }
-      // Sort each group by output index
-      for (const group of groups.values()) {
-        group.sort((a, b) => a.genesisOutputIndex - b.genesisOutputIndex);
-      }
-
-      const nftHtml = Array.from(groups.entries()).map(([genesisTxId, group]) => {
-        if (group.length === 1) {
-          return renderTokenCard(group[0]);
-        }
-        const first = group[0];
-        const rules = window.decodeTokenRules(first.tokenRules);
-
-        // Divisible tokens (divisibility > 0): fragment collection view
-        if (rules.divisibility > 0) {
-          return renderFragmentCard(genesisTxId, group, rules);
-        }
-
-        // Non-divisible multi-token (divisibility === 0): NFT dropdown selector
-        const selectId = `sel-${genesisTxId.slice(0, 12)}`;
-        const detailId = `detail-${genesisTxId.slice(0, 12)}`;
-        const options = group.map((t) =>
-          `<option value="${t.tokenId}">NFT #${t.genesisOutputIndex} ${t.status !== 'active' ? '- ' + t.status : ''}</option>`
-        ).join('');
-        const activeCount = group.filter(t => t.status === 'active').length;
-        return `
-    <details class="token-card" style="border:1px solid #30363d;border-radius:6px;padding:0;margin-bottom:8px;">
-      <summary style="cursor:pointer;padding:12px;background:#0d1117;border-radius:6px;display:flex;align-items:center;gap:8px;user-select:none;list-style:none;border-bottom:1px solid #30363d;">
-        <span style="font-weight:bold;flex:1;">${escHtml(first.tokenName)}</span>
-        <span class="badge badge-active">${activeCount}/${group.length}</span>
-        <span style="font-size:0.8em;color:#8b949e;margin-left:auto;">▼</span>
-      </summary>
-      <div style="padding:12px;">
-        <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${genesisTxId}</code></div>
-        <div class="token-field"><span class="label">Rules:</span> ${renderRules(first.tokenRules)}</div>
-        <div class="token-field" style="margin-top:6px;">
-          <span class="label">Select token:</span>
-          <select id="${selectId}" onchange="window._selectGroupToken('${genesisTxId.slice(0, 12)}', this.value)" style="background:#0d1117;color:#c9d1d9;border:1px solid #30363d;padding:4px 8px;border-radius:4px;width:100%;">
-            ${options}
-          </select>
-        </div>
-        <div id="${detailId}" style="margin-top:12px;">${renderTokenDetail(first)}</div>
-      </div>
-    </details>`;
-      }).join('');
-
-      container.innerHTML = fungibleHtml + nftHtml;
-    } catch (error) {
-      console.error('[WalletUI] Error loading tokens:', error);
-      if (this.tokenListElement) {
-        this.tokenListElement.innerHTML = '<p style="color: #da3633;">Error loading tokens: ' + error.message + '</p>';
-      }
-    }
-  }
-
-  /**
-   * Sync address to localStorage for other interfaces
-   */
-  syncAddressToStorage() {
-    if (this.addressElement && this.addressElement.textContent && this.addressElement.textContent !== '...') {
-      const addr = this.addressElement.textContent.trim();
-      localStorage.setItem('svphone_wallet_address', addr);
-      console.log('[WalletUI] Address synced to localStorage:', addr);
-    }
-  }
-
-  /**
-   * Watch for address changes and sync to localStorage
-   */
-  watchAddressChanges() {
-    if (this.addressElement) {
-      const observer = new MutationObserver(() => {
-        this.syncAddressToStorage();
-      });
-      observer.observe(this.addressElement, {
-        childList: true,
-        characterData: true,
-        subtree: true
-      });
-    }
-
-    // Periodic sync every 5 seconds
-    setInterval(() => {
-      if (window.builder && this.addressElement) {
-        this.syncAddressToStorage();
-      }
-    }, 5000);
-  }
-
-  /**
-   * Wire up event handlers for all buttons
-   */
-  wireUpButtonHandlers() {
-    const handlers = new WalletHandlers(this);
-
-    // Refresh Balance button
-    const btnRefresh = document.getElementById('btn-refresh');
-    if (btnRefresh) {
-      btnRefresh.onclick = () => handlers.refreshBalance();
-    }
-
-    // Restore Wallet button
-    const btnRestore = document.getElementById('btn-restore-wallet');
-    if (btnRestore) {
-      btnRestore.onclick = () => handlers.restoreWallet();
-    }
-
-    // Send button
-    const btnSend = document.getElementById('btn-send');
-    if (btnSend) {
-      btnSend.onclick = () => handlers.send();
-    }
-
-    // Mint Token button
-    const btnMint = document.getElementById('btn-mint');
-    if (btnMint) {
-      btnMint.onclick = () => handlers.mintToken();
-    }
-
-    // Check Incoming Tokens button
-    const btnCheckIncoming = document.getElementById('btn-check-incoming');
-    if (btnCheckIncoming) {
-      btnCheckIncoming.onclick = () => handlers.checkIncomingTokens();
-    }
-
-    // Transfer button
-    const btnTransfer = document.getElementById('btn-transfer');
-    if (btnTransfer) {
-      btnTransfer.onclick = () => handlers.transfer();
-    }
-
-    // Verify Proof Chain button
-    const btnVerify = document.getElementById('btn-verify');
-    if (btnVerify) {
-      btnVerify.onclick = () => handlers.verifyProofChain();
-    }
-
-    // New Wallet button
-    const btnNewWallet = document.getElementById('btn-new-wallet');
-    if (btnNewWallet) {
-      btnNewWallet.onclick = () => handlers.newWallet();
-    }
-
-    // ─── Mint Mode Buttons ──────────────────────────────────────────────
-
-    // Mint Mode toggle (Fungible ↔ NFT)
-    const btnMintMode = document.getElementById('btn-mint-mode');
-    if (btnMintMode) {
-      btnMintMode.onclick = () => window.toggleMintMode();
-    }
-
-    // Field Mode toggles (Text ↔ Hex)
-    const btnNameMode = document.getElementById('btn-name-mode');
-    if (btnNameMode) {
-      btnNameMode.onclick = () => window.toggleFieldMode('name');
-    }
-
-    const btnAttrsMode = document.getElementById('btn-attrs-mode');
-    if (btnAttrsMode) {
-      btnAttrsMode.onclick = () => window.toggleFieldMode('attrs');
-    }
-
-    const btnStateMode = document.getElementById('btn-state-mode');
-    if (btnStateMode) {
-      btnStateMode.onclick = () => window.toggleFieldMode('state');
-    }
-
-    // ─── File Management Buttons ────────────────────────────────────────
-
-    // Clear Token File button
-    const tokenFileInput = document.getElementById('token-file');
-    const btnClearFile = document.getElementById('btn-clear-file');
-    if (tokenFileInput && btnClearFile) {
-      tokenFileInput.addEventListener('change', () => {
-        const file = tokenFileInput.files?.[0];
-        if (file) {
-          const fileInfo = document.getElementById('file-info');
-          if (fileInfo) {
-            fileInfo.textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-            fileInfo.style.display = '';
-          }
-          btnClearFile.style.display = '';
-        }
-      });
-      btnClearFile.onclick = () => {
-        tokenFileInput.value = '';
-        const fileInfo = document.getElementById('file-info');
-        if (fileInfo) fileInfo.style.display = 'none';
-        btnClearFile.style.display = 'none';
-      };
-    }
-
-    // Clear Transfer File button
-    const transferFileInput = document.getElementById('transfer-file');
-    const btnClearTransferFile = document.getElementById('btn-clear-transfer-file');
-    if (transferFileInput && btnClearTransferFile) {
-      transferFileInput.addEventListener('change', () => {
-        const file = transferFileInput.files?.[0];
-        if (file) {
-          const fileInfo = document.getElementById('transfer-file-info');
-          if (fileInfo) {
-            fileInfo.textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-            fileInfo.style.display = '';
-          }
-          btnClearTransferFile.style.display = '';
-        }
-      });
-      btnClearTransferFile.onclick = () => {
-        transferFileInput.value = '';
-        const fileInfo = document.getElementById('transfer-file-info');
-        if (fileInfo) fileInfo.style.display = 'none';
-        btnClearTransferFile.style.display = 'none';
-      };
-    }
-
-    console.log('[WalletUI] Button handlers wired up');
-  }
-
-  /**
-   * Refresh the balance display
-   */
-  async refreshBalance() {
-    if (!this.balanceElement) return;
-
-    try {
-      this.balanceElement.textContent = 'Refreshing...';
-      const balance = await window.builder.getSpendableBalance();
-      this.balanceElement.textContent = balance.toLocaleString() + ' sat';
-      console.log('[WalletUI] Balance refreshed:', balance);
-    } catch (err) {
-      this.balanceElement.textContent = 'Error';
-      console.error('[WalletUI] Error refreshing balance:', err);
-    }
-  }
-
-  /**
-   * Refresh the token list
-   */
-  async refreshTokens() {
-    try {
-      await this.loadTokens();
-      console.log('[WalletUI] Tokens refreshed');
-    } catch (err) {
-      console.error('[WalletUI] Error refreshing tokens:', err);
-    }
-  }
-}
-
-// ─── Token Rendering Functions (from v06_00) ────────────────────────
-
-function getMimeTypeIcon(mimeType) {
-  if (mimeType.startsWith('image/')) return '\u{1F5BC}';  // framed picture
-  if (mimeType.startsWith('audio/')) return '\u{1F3B5}';  // musical note
-  if (mimeType.startsWith('video/')) return '\u{1F3AC}';  // clapper board
-  if (mimeType.startsWith('text/')) return '\u{1F4C4}';   // page facing up
-  if (mimeType === 'application/pdf') return '\u{1F4D1}'; // bookmark tabs
-  if (mimeType === 'application/zip') return '\u{1F4E6}'; // package
-  return '\u{1F4CE}';  // paperclip (generic file)
-}
-
-/** Infer MIME type from file extension when the browser returns an empty string */
-function inferMimeType(fileName, browserType) {
-  if (browserType) return browserType;
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  const map = {
-    txt: 'text/plain', md: 'text/markdown', json: 'text/json',
-    csv: 'text/csv', xml: 'text/xml', html: 'text/html', htm: 'text/html',
-    css: 'text/css', js: 'text/javascript', ts: 'text/typescript',
-    svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
-    jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
-    bmp: 'image/bmp', ico: 'image/x-icon',
-    wav: 'audio/wav', mp3: 'audio/mpeg', ogg: 'audio/ogg',
-    flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac',
-    mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
-    avi: 'video/x-msvideo', mkv: 'video/x-matroska',
-    pdf: 'application/pdf', zip: 'application/zip',
-  };
-  return (ext && map[ext]) || 'application/octet-stream';
-}
-
-const FILE_META_KEY = 'p:fileMeta';
-function getFileMeta(hash) {
-  try {
-    const data = JSON.parse(localStorage.getItem(FILE_META_KEY) || '{}');
-    return data[hash] || null;
-  } catch { return null; }
-}
-
-function setFileMeta(hash, mimeType, fileName) {
-  try {
-    const data = JSON.parse(localStorage.getItem(FILE_META_KEY) || '{}');
-    data[hash] = { mimeType, fileName };
-    localStorage.setItem(FILE_META_KEY, JSON.stringify(data));
-  } catch (e) {
-    console.error('[WalletUI] Error setting file metadata:', e);
-  }
-}
-
-function renderFungibleCard(ft) {
-  const spendableUtxos = ft.utxos.filter(u => u.status === 'active' || u.status === 'pending');
-  const pendingTransferUtxos = ft.utxos.filter(u => u.status === 'pending_transfer');
-  const genKey = ft.genesisTxId.slice(0, 12);
-
-  const regularUtxos = spendableUtxos.filter(u => {
-    const decoded = u.stateData ? tryDecodeHex(u.stateData) : '';
-    return !decoded || decoded === '00';
-  });
-  const messageUtxos = spendableUtxos.filter(u => {
-    const decoded = u.stateData ? tryDecodeHex(u.stateData) : '';
-    return decoded && decoded !== '00';
-  });
-
-  const regularBalance = regularUtxos.reduce((sum, u) => sum + u.satoshis, 0);
-  const messageBalance = messageUtxos.reduce((sum, u) => sum + u.satoshis, 0);
-  const totalBalance = regularBalance + messageBalance;
-  const pendingTransferBalance = pendingTransferUtxos.reduce((sum, u) => sum + u.satoshis, 0);
-
-  const messagesHtml = messageUtxos.length > 0 ? `
-      <details style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;">
-        <summary style="cursor:pointer;font-weight:bold;color:#58a6ff;margin-bottom:8px;">📨 Messages (${messageUtxos.length})</summary>
-        ${messageUtxos.map(u => {
-          const stateDecoded = tryDecodeHex(u.stateData);
-          return `
-          <div style="padding:10px;margin-bottom:8px;background:#161b22;border:1px solid #30363d;border-radius:6px;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-              <strong style="color:#3fb950;">${u.satoshis.toLocaleString()} tokens</strong>
-              ${u.receivedAt ? `<span class="muted" style="font-size:0.8em;">${formatDate(u.receivedAt)}</span>` : ''}
-            </div>
-            <pre style="margin:0 0 8px 0;padding:8px;background:#0d1117;border-radius:4px;white-space:pre-wrap;word-break:break-word;font-size:0.9em;color:#c9d1d9;">${escHtml(stateDecoded)}</pre>
-            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-              <a href="https://whatsonchain.com/tx/${u.txId}" target="_blank" rel="noopener" style="font-size:0.8em;">View TX</a>
-              <code class="muted" style="font-size:0.7em;">${u.txId.slice(0, 12)}...:${u.outputIndex}</code>
-            </div>
-          </div>`;
-        }).join('')}
-      </details>` : '';
-
-  return `
-    <details class="token-card" style="border-color:#238636;border:1px solid #238636;border-radius:6px;padding:0;margin-bottom:8px;">
-      <summary style="cursor:pointer;padding:12px;background:rgba(35,134,54,0.1);border-radius:6px;display:flex;align-items:center;gap:8px;user-select:none;list-style:none;border-bottom:1px solid #238636;">
-        <span style="font-weight:bold;flex:1;">${escHtml(ft.tokenName)}</span>
-        <span class="badge badge-active">Fungible</span>
-        <span style="color:#3fb950;font-weight:bold;">${totalBalance.toLocaleString()} 🪙</span>
-        <span style="font-size:0.8em;color:#8b949e;margin-left:auto;">▼</span>
-      </summary>
-      <div style="padding:12px;">
-        <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${ft.tokenId}</code></div>
-        <div class="token-field"><span class="label">Genesis TXID:</span> <code class="selectable">${ft.genesisTxId}</code></div>
-        <div class="token-field"><span class="label">Total tokens:</span> <strong style="color:#3fb950;font-size:1.1em;">${totalBalance.toLocaleString()}</strong></div>
-        <div class="token-field"><span class="label">├ Available:</span> ${regularBalance.toLocaleString()}</div>
-        <div class="token-field"><span class="label">└ In messages:</span> ${messageBalance.toLocaleString()}${messageUtxos.length > 0 ? ` (${messageUtxos.length})` : ''}</div>
-        ${pendingTransferBalance > 0 ? `<div class="token-field"><span class="label">Pending Transfer:</span> <span style="color:#d29922;">${pendingTransferBalance.toLocaleString()} tokens</span></div>` : ''}
-        ${ft.createdAt ? `<div class="token-field"><span class="label">Created:</span> ${formatDate(ft.createdAt)}</div>` : ''}
-        <div class="token-actions" style="flex-direction:column;align-items:stretch;margin-top:12px;">
-          <div class="row" style="gap:6px;">
-            <button onclick="window._selectForTransfer('${ft.tokenId}')">Select for Transfer</button>
-            <button onclick="window._verifyToken('${ft.tokenId}')">Verify</button>
-            <button onclick="window._openFlushDialog('${ft.tokenId}')" style="background:#da3633;">Flush Token</button>
-          </div>
-          <div class="row" style="gap:6px;margin-top:6px;">
-            <a href="https://whatsonchain.com/tx/${ft.genesisTxId}" target="_blank" rel="noopener">View Genesis TX</a>
-            ${ft.currentTxId ? `<a href="https://whatsonchain.com/tx/${ft.currentTxId}" target="_blank" rel="noopener">View Current TX</a>` : ''}
-          </div>
-        </div>
-        ${messagesHtml}
-      </div>
-    </details>`;
-}
-
-function renderTokenCard(t) {
-  const statusBadge = renderStatusBadge(t.status, t.confirmationStatus);
-  const actions = renderTokenActions(t);
-  const rules = renderRules(t.tokenRules);
-  const attrsDisplay = renderHexField(t.tokenAttributes, t);
-  const stateDisplay = renderStateData(t.stateData, t);
-  const r = window.decodeTokenRules(t.tokenRules);
-  const isFragment = r.divisibility > 0 && r.supply > 0;
-  const totalFragments = isFragment ? r.supply * r.divisibility : r.supply;
-  const nftLabel = isFragment
-    ? ` Fragment #${t.genesisOutputIndex} (${fragmentLabel(t.genesisOutputIndex, r.divisibility, r.supply)})`
-    : (r.supply > 1 ? ` NFT #${t.genesisOutputIndex}` : '');
-  const fragmentInfo = isFragment
-    ? `<div class="token-field"><span class="label">Fragment:</span> ${fragmentLabel(t.genesisOutputIndex, r.divisibility, r.supply)} -- piece #${t.genesisOutputIndex} of ${totalFragments} total</div>`
-    : '';
-
-  let attrsIconHtml = '';
-  if (t.tokenAttributes && t.tokenAttributes !== '00') {
-    const meta = getFileMeta(t.tokenAttributes.length === 64 ? t.tokenAttributes : '');
-    if (meta) {
-      attrsIconHtml = `<span style="margin-left:8px;">${getMimeTypeIcon(meta.mimeType)}</span>`;
-    }
-  }
-
-  const isFlushed = t.status === 'flushed';
-  const bgColor = isFlushed ? '#1a0d0d' : '#0d1117';
-  const borderColor = isFlushed ? '#663333' : '#30363d';
-  const nameStyling = isFlushed ? 'opacity:0.6;' : '';
-  const flushedNotice = isFlushed ? `<span style="font-size:0.7em;color:#da3633;font-weight:bold;margin-left:8px;">⚠ FLUSHED</span>` : '';
-
-  return `
-    <details class="token-card ${t.status === 'transferred' ? 'token-transferred' : ''} ${t.status === 'pending_transfer' ? 'token-pending' : ''}" style="border:1px solid ${borderColor};border-radius:6px;padding:0;margin-bottom:8px;${isFlushed ? 'opacity:0.75;' : ''}">
-      <summary style="cursor:pointer;padding:12px;background:${bgColor};border-radius:6px;display:flex;align-items:center;gap:8px;user-select:none;list-style:none;border-bottom:1px solid ${borderColor};">
-        <span style="font-weight:bold;flex:1;${nameStyling}">${escHtml(t.tokenName)}${nftLabel}</span>
-        ${statusBadge}
-        ${flushedNotice}
-        ${attrsIconHtml}
-        <span style="font-size:0.8em;color:#8b949e;margin-left:auto;">▼</span>
-      </summary>
-      <div style="padding:12px;border-top:1px solid ${borderColor};">
-        <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${t.tokenId}</code></div>
-        ${fragmentInfo}
-        ${t.tokenScript ? `<div class="token-field"><span class="label">Script:</span> <code class="muted" style="font-size:0.8em;">${escHtml(t.tokenScript)}</code></div>` : ''}
-        <div class="token-field"><span class="label">Rules:</span> ${rules}</div>
-        <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
-        <div class="token-field"><span class="label">State Data:</span> ${stateDisplay}</div>
-        <div class="token-field"><span class="label">Current TXID:</span> <code class="selectable">${t.currentTxId}</code></div>
-        <div class="token-field"><span class="label">Output:</span> ${t.currentOutputIndex}</div>
-        <div class="token-field"><span class="label">Sats:</span> ${t.satoshis}</div>
-        ${t.createdAt ? `<div class="token-field"><span class="label">Created:</span> ${formatDate(t.createdAt)}</div>` : ''}
-        ${t.feePaid !== undefined ? `<div class="token-field"><span class="label">Fee:</span> ${t.feePaid} sats</div>` : ''}
-        ${t.transferTxId ? `<div class="token-field"><span class="label">Transfer TXID:</span> <code class="selectable">${t.transferTxId}</code></div>` : ''}
-        ${isFlushed ? `<div class="token-field"><span class="label">Flushed:</span> <span style="color:#da3633;">${t.flushedAt ? formatDate(t.flushedAt) : 'Yes'}</span></div>` : ''}
-        <div class="token-actions" ${isFlushed ? 'style="opacity:0.6;"' : ''}>${actions}</div>
-      </div>
-    </details>`;
-}
-
-function renderTokenDetail(t) {
-  const statusBadge = renderStatusBadge(t.status, t.confirmationStatus);
-  const actions = renderTokenActions(t);
-  const attrsDisplay = renderHexField(t.tokenAttributes, t);
-  const stateDisplay = renderStateData(t.stateData, t);
-  const r = window.decodeTokenRules(t.tokenRules);
-  const isFragment = r.divisibility > 0 && r.supply > 0;
-  const fragLine = isFragment
-    ? `<div class="token-field"><span class="label">Fragment:</span> ${fragmentLabel(t.genesisOutputIndex, r.divisibility, r.supply)}</div>`
-    : (r.supply > 1 ? `<div class="token-field"><span class="label">NFT #:</span> ${t.genesisOutputIndex}</div>` : '');
-  return `
-    <div class="${t.status === 'transferred' ? 'token-transferred' : ''} ${t.status === 'pending_transfer' ? 'token-pending' : ''}">
-      <div class="token-field"><span class="label">Status:</span> ${statusBadge}</div>
-      ${fragLine}
-      <div class="token-field"><span class="label">Token ID:</span> <code class="selectable">${t.tokenId}</code></div>
-      ${t.tokenScript ? `<div class="token-field"><span class="label">Script:</span> <code class="muted" style="font-size:0.8em;">${escHtml(t.tokenScript)}</code></div>` : ''}
-      <div class="token-field"><span class="label">Attributes:</span> ${attrsDisplay}</div>
-      <div class="token-field"><span class="label">State Data:</span> ${stateDisplay}</div>
-      <div class="token-field"><span class="label">Current TXID:</span> <code class="selectable">${t.currentTxId}</code></div>
-      <div class="token-field"><span class="label">Output:</span> ${t.currentOutputIndex}</div>
-      <div class="token-field"><span class="label">Sats:</span> ${t.satoshis}</div>
-      ${t.transferTxId ? `<div class="token-field"><span class="label">Transfer TXID:</span> <code class="selectable">${t.transferTxId}</code></div>` : ''}
-      <div class="token-actions">${actions}</div>
-    </div>`;
-}
-
-function renderStatusBadge(status, confirmationStatus) {
-  let badge = '';
-  switch (status) {
-    case 'active':
-      if (confirmationStatus === 'unconfirmed') {
-        badge = '<span class="badge badge-active">Active</span><span class="badge badge-unconfirmed" title="Transaction not yet confirmed">⏳ Unconfirmed</span>';
-      } else {
-        badge = '<span class="badge badge-active">Active</span>';
-      }
-      break;
-    case 'pending_transfer':
-      badge = '<span class="badge badge-pending">Pending Transfer</span>';
-      break;
-    case 'transferred':
-      badge = '<span class="badge badge-transferred">Transferred</span>';
-      break;
-    case 'flushed':
-      badge = '<span class="badge" style="background:#da3633;">Flushed</span>';
-      break;
-    case 'recovered':
-      badge = '<span class="badge" style="background:#238636;">Recovered</span>';
-      break;
-    default:
-      badge = '';
-  }
-  return badge;
-}
-
-function renderTokenActions(t) {
-  const parts = [];
-  const r = window.decodeTokenRules(t.tokenRules);
-  const isFragment = r.divisibility > 0;
-
-  if (t.status === 'active') {
-    parts.push(`<button onclick="window._selectForTransfer('${t.tokenId}')">Select for Transfer</button>`);
-    if (isFragment) {
-      parts.push(`<button onclick="window._sendSingleFragment('${t.tokenId}', ${t.genesisOutputIndex})">Send ${fragmentLabel(t.genesisOutputIndex, r.divisibility, r.supply)}</button>`);
-    }
-    parts.push(`<button onclick="window._verifyToken('${t.tokenId}')">Verify</button>`);
-  }
-
-  if (t.status === 'active') {
-    parts.push(`<button onclick="window._openFlushDialog('${t.tokenId}')" style="background:#da3633;">Flush Token</button>`);
-  }
-
-  if (t.status === 'flushed') {
-    parts.push(`<button onclick="window._recoverFlushedToken('${t.tokenId}')" style="background:#238636;">Recover</button>`);
-  }
-
-  if (t.status === 'pending_transfer') {
-    parts.push(`<button onclick="window._confirmTransfer('${t.tokenId}')" class="btn-confirm">Confirm Sent</button>`);
-  }
-
-  if (t.currentTxId) {
-    parts.push(`<a href="https://whatsonchain.com/tx/${t.currentTxId}" target="_blank" rel="noopener">View TX</a>`);
-  }
-  if (t.transferTxId && t.transferTxId !== t.currentTxId) {
-    parts.push(`<a href="https://whatsonchain.com/tx/${t.transferTxId}" target="_blank" rel="noopener">View Transfer TX</a>`);
-  }
-
-  return parts.join('\n');
-}
-
-function renderRules(rulesHex) {
-  if (!rulesHex || (rulesHex.length !== 16 && rulesHex.length !== 8)) return `<code>${escHtml(rulesHex || '(none)')}</code>`;
-  const r = window.decodeTokenRules(rulesHex);
-  const divLabel = r.divisibility > 0
-    ? `Divisibility=${r.divisibility} (${r.supply}×${r.divisibility}=${r.supply * r.divisibility} fragments)`
-    : `Divisibility=0`;
-  if (rulesHex.length === 8) return `Supply=${r.supply}, ${divLabel}`;
-  return `Supply=${r.supply}, ${divLabel}, Restrictions=0x${r.restrictions.toString(16).padStart(4, '0')}, Version=${r.version}`;
-}
-
-function renderHexField(hex, token) {
-  if (!hex || hex === '00') return '<span class="muted">(none)</span>';
-  if (hex.length === 64 && token) {
-    const meta = getFileMeta(hex);
-    const icon = meta ? getMimeTypeIcon(meta.mimeType) : '\u{1F4CE}';
-    const label = meta ? `${icon} ${meta.fileName}` : `${icon} View File`;
-    return `<code class="muted">${escHtml(hex)}</code> <button onclick="window._viewFile('${token.genesisTxId}', '${hex}')" style="font-size:0.8em; padding:2px 8px; background:#30363d;">${label}</button>`;
-  }
-  try {
-    const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
-    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    if (/^[\x20-\x7e\t\n\r]+$/.test(decoded)) {
-      return `"${escHtml(decoded)}"<br><code class="muted">${escHtml(hex)}</code>`;
-    }
-  } catch { /* not valid UTF-8 */ }
-  return `<code>${escHtml(hex)}</code>`;
-}
-
-function renderStateData(stateHex, token) {
-  if (!stateHex || stateHex === '00') return '<span class="muted">(empty)</span>';
-
-  const { text, fileHash } = decodeStateData(stateHex);
-
-  let html = '';
-
-  if (text) {
-    html += `"${escHtml(text)}"<br>`;
-  }
-
-  if (fileHash && token) {
-    const meta = getFileMeta(fileHash);
-    const icon = meta ? getMimeTypeIcon(meta.mimeType) : '\u{1F4CE}';
-    const label = meta ? `${icon} ${meta.fileName}` : `${icon} View File`;
-    html += `<button onclick="window._viewFile('${token.genesisTxId}', '${fileHash}', '${token.currentTxId}')" style="font-size:0.8em; padding:2px 8px; background:#30363d; margin-top:4px;">${label}</button><br>`;
-  }
-
-  html += `<code class="muted">${escHtml(stateHex)}</code>`;
-
-  return html;
-}
-
-function fragmentLabel(index, fragsPerWhole, wholeTokens) {
-  const nftNum = Math.ceil(index / fragsPerWhole);
-  const pieceNum = ((index - 1) % fragsPerWhole) + 1;
-  if (wholeTokens === 1) return `Piece ${pieceNum}/${fragsPerWhole}`;
-  return `NFT ${nftNum}, piece ${pieceNum}/${fragsPerWhole}`;
-}
-
-function renderFragmentCard(genesisTxId, group, rules) {
-  // Simplified for now - just render first fragment
-  return renderTokenCard(group[0]);
-}
-
-function tryDecodeHex(hex) {
-  if (!hex || hex === '00') return '';
-  const { text } = decodeStateData(hex);
-  return text || hex;
-}
-
-function decodeStateData(stateHex) {
-  if (!stateHex || stateHex === '00') {
-    return { text: '' };
-  }
-
-  const parts = stateHex.split(/(?<!7e)7c(?!7e)/);
-
-  if (parts.length === 1) {
-    try {
-      const bytes = new Uint8Array(stateHex.match(/.{2}/g)?.map(b => parseInt(b, 16)) || []);
-      let decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-      decoded = decoded.replace(/~\|~/g, '|');
-      return { text: decoded };
-    } catch {
-      return { text: '' };
-    }
-  }
-
-  if (parts.length === 2) {
-    const textHex = parts[0];
-    const fileHash = parts[1];
-
-    if (!/^[0-9a-f]{64}$/i.test(fileHash)) {
-      try {
-        const bytes = new Uint8Array(stateHex.match(/.{2}/g)?.map(b => parseInt(b, 16)) || []);
-        let decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-        decoded = decoded.replace(/~\|~/g, '|');
-        return { text: decoded };
-      } catch {
-        return { text: '' };
-      }
-    }
-
-    let text = '';
-    if (textHex) {
-      try {
-        const bytes = new Uint8Array(textHex.match(/.{2}/g)?.map(b => parseInt(b, 16)) || []);
-        let decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-        text = decoded.replace(/~\|~/g, '|');
-      } catch {
-        // Ignore decode errors
-      }
-    }
-
-    return { text, fileHash };
-  }
-
-  return { text: '' };
-}
-
-function escHtml(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function formatDate(iso) {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString();
-  } catch {
-    return iso;
-  }
-}
-
-// ─── Global Token Selection Handlers ────────────────────────────────
-
-window._selectGroupToken = (genesisTxIdPrefix, tokenId) => {
-  const detailId = `detail-${genesisTxIdPrefix}`;
-  const detailEl = document.getElementById(detailId);
-  if (!detailEl || !window.store || !window.store.getToken) return;
-
-  window.store.getToken(tokenId).then(token => {
-    if (token && detailEl) {
-      detailEl.innerHTML = renderTokenDetail(token);
-    }
-  });
-};
-
-// ─── Window Exports for Handlers ────────────────────────────────────
-
-// Expose helper functions
-window.el = (id) => document.getElementById(id);
-window.setText = (id, text) => {
-  const e = window.el(id);
-  if (e) e.textContent = text;
-};
-window.setResult = (id, text) => {
-  const e = window.el(id);
-  if (e) e.textContent = text;
-};
-window.inputVal = (id) => {
-  const e = window.el(id);
-  return (e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement) ? (e?.value?.trim() ?? '') : '';
-};
-window.escHtml = escHtml;
-window.formatDate = formatDate;
-window.tryDecodeHex = tryDecodeHex;
-window.decodeStateData = decodeStateData;
-
-// Expose rendering functions
-window.renderTokenCard = renderTokenCard;
-window.renderFungibleCard = renderFungibleCard;
-window.renderTokenDetail = renderTokenDetail;
-window.renderStatusBadge = renderStatusBadge;
-window.renderTokenActions = renderTokenActions;
-window.renderRules = renderRules;
-window.renderHexField = renderHexField;
-window.renderStateData = renderStateData;
-window.renderFragmentCard = renderFragmentCard;
-window.fragmentLabel = fragmentLabel;
-
-// Expose utility functions
-window.getMimeTypeIcon = getMimeTypeIcon;
-window.getFileMeta = getFileMeta;
-window.setFileMeta = setFileMeta;
-window.inferMimeType = inferMimeType;
-
-// Auto-initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
-  const walletUI = new WalletUI();
-  window.walletUI = walletUI; // Expose for handlers and debugging
-
-  // Create handlers instance and expose globally
-  const handlers = new WalletHandlers(walletUI);
-  window.walletHandlers = handlers;
-
-  // Try immediate init, then retry after delays
-  walletUI.initialize();
-  setTimeout(() => walletUI.initialize(), 500);
-  setTimeout(() => walletUI.initialize(), 1500);
-});
-
-/**
- * Wallet Event Handlers (v06.12)
- *
- * Complete wallet functionality extracted and reorganized from v06.00.
- * Handles: Minting, transfers, verification, balance refresh, token management
- */
-
-// ─── Global State ────────────────────────────────────────────────────────
-
-let flushingTokenId = null
-const fieldModes = { name: 'text', script: 'text', attrs: 'text', state: 'text' }
-let mintMode = 'fungible'
-let lastProofFetchTime = 0
-let proofPollTimeoutId = null
-const activePollTxIds = new Set()
-
-// ─── Main Handlers ──────────────────────────────────────────────────────
-
-class WalletHandlers {
-  constructor(walletUI) {
-    this.walletUI = walletUI
-  }
-
-  /**
-   * Handle Refresh Balance button click
-   */
-  async refreshBalance() {
-    try {
-      window.setText('balance', 'loading...')
-      const bal = await window.builder.getSpendableBalance()
-      window.setText('balance', `${bal} sats`)
-    } catch (e) {
-      window.setText('balance', `error: ${e.message}`)
-    }
-    await this.silentCheckIncoming()
-  }
-
-  /**
-   * Handle Restore Wallet button click
-   */
-  restoreWallet() {
-    const wif = window.inputVal('import-wif')
-    if (!wif) {
-      alert('Paste a WIF private key first.')
-      return
-    }
-
-    try {
-      // Validate WIF format
-      const testKey = window.bitcoin.PrivateKey.fromWif(wif)
-      testKey.toPublicKey()
-    } catch {
-      alert('Invalid WIF private key.')
-      return
-    }
-
-    if (!confirm('This will replace the current wallet key and reload the page. Token data in storage will be preserved. Continue?')) return
-
-    localStorage.setItem('p:wallet:wif', wif)
-    location.reload()
-  }
-
-  /**
-   * Handle Send button click
-   */
-  async send() {
-    const address = window.inputVal('send-address')
-    const amountStr = window.inputVal('send-amount')
-
-    if (!address || !amountStr) {
-      window.setResult('send-result', 'Enter both a recipient address and amount.')
-      return
-    }
-
-    const amount = parseInt(amountStr, 10)
-    if (!amount || amount < 1) {
-      window.setResult('send-result', 'Amount must be at least 1 satoshi.')
-      return
-    }
-
-    const feeRate = parseInt(window.inputVal('fee-rate'), 10)
-    if (feeRate > 0) window.builder.feePerKb = feeRate
-
-    window.setResult('send-result', 'Building transaction...')
-
-    try {
-      const result = await window.builder.sendSats(address, amount)
-      window.setResult('send-result', [
-        'Sent!',
-        `TXID: ${result.txId}`,
-        `Amount: ${amount} sats`,
-        `Fee: ${result.fee} sats`,
-        `View: https://whatsonchain.com/tx/${result.txId}`,
-      ].join('\n'))
-      await this.refreshBalance()
-    } catch (e) {
-      window.setResult('send-result', `Error: ${e.message}`)
-    }
-  }
-
-  /**
-   * Handle Mint Token button click
-   */
-  async mintToken() {
-    const nameRaw = window.inputVal('token-name')
-
-    if (!nameRaw) {
-      window.setResult('mint-result', 'Enter a token name.')
-      return
-    }
-
-    // Convert name based on text/hex mode
-    const name = fieldModes.name === 'text'
-      ? nameRaw
-      : new TextDecoder().decode(new Uint8Array(nameRaw.match(/.{1,2}/g)?.map(b => parseInt(b, 16)) ?? []))
-
-    const feeRate = parseInt(window.inputVal('fee-rate'), 10)
-    if (feeRate > 0) window.builder.feePerKb = feeRate
-
-    // ─── Fungible Mode ───────────────────────────────────────────────────
-    if (mintMode === 'fungible') {
-      const initialSupply = parseInt(window.inputVal('fungible-supply'), 10) || 1000
-      if (initialSupply < 1) {
-        window.setResult('mint-result', 'Initial supply must be at least 1 satoshi.')
-        return
-      }
-
-      window.setResult('mint-result', `Minting fungible token with ${initialSupply} tokens...`)
-
-      try {
-        const result = await window.builder.createFungibleGenesis({
-          tokenName: name,
-          initialSupply,
-        })
-
-        window.setResult('mint-result', [
-          'Fungible token minted!',
-          `TXID: ${result.txId}`,
-          `Token ID: ${result.tokenId}`,
-          `Initial supply: ${result.initialSupply} tokens`,
-          `View: https://whatsonchain.com/tx/${result.txId}`,
-          '',
-          'Polling for Merkle proof (may take ~10 min)...',
-        ].join('\n'))
-
-        await this.walletUI.loadTokens()
-        await this.refreshBalance()
-
-        window.builder.pollForProof(result.tokenId, result.txId, (msg) => {
-          window.setResult('mint-result', [
-            `TXID: ${result.txId}`,
-            `Token ID: ${result.tokenId}`,
-            msg,
-          ].join('\n'))
-        }).then(found => {
-          if (found) this.walletUI.loadTokens()
-        })
-
-      } catch (e) {
-        window.setResult('mint-result', `Error: ${e.message}`)
-      }
-      return
-    }
-
-    // ─── NFT Mode ────────────────────────────────────────────────────
-    const scriptRaw = window.inputVal('token-script')
-    const attrsRaw = window.inputVal('token-attrs')
-    const stateRaw = window.inputVal('token-state')
-    const supply = parseInt(window.inputVal('token-supply'), 10) || 1
-    const divisibility = parseInt(window.inputVal('token-divisibility'), 10) || 0
-    const restrictions = parseInt(window.inputVal('token-restrictions'), 10) || 0
-    const rulesVersion = parseInt(window.inputVal('token-rules-version'), 10) || 1
-
-    const attrs = attrsRaw ? (fieldModes.attrs === 'text' ? textToHex(attrsRaw) : attrsRaw) : '00'
-    let stateData = ''
-    if (stateRaw) {
-      stateData = fieldModes.state === 'text' ? textToHex(stateRaw) : stateRaw
-    }
-
-    // Read file if one was selected
-    const fileInput = window.el('token-file')
-    const selectedFile = fileInput?.files?.[0]
-    let fileData = undefined
-
-    if (selectedFile) {
-      if (selectedFile.size > 50_000_000) {
-        window.setResult('mint-result', 'File too large. Max 50MB for on-chain storage.')
-        return
-      }
-      const arrayBuf = await selectedFile.arrayBuffer()
-      fileData = {
-        bytes: new Uint8Array(arrayBuf),
-        mimeType: window.inferMimeType(selectedFile.name, selectedFile.type),
-        fileName: selectedFile.name,
-      }
-    }
-
-    window.setResult('mint-result', fileData
-      ? `Building genesis transaction with file (${(fileData.bytes.length / 1024).toFixed(1)} KB)...`
-      : 'Building genesis transaction...')
-
-    try {
-      const result = await window.builder.createGenesis({
-        tokenName: name,
-        tokenScript: scriptRaw || '',
-        attributes: fileData ? undefined : attrs,
-        supply,
-        divisibility,
-        restrictions,
-        rulesVersion,
-        stateData,
-        fileData,
-      })
-
-      // Cache file locally for pruning recovery
-      if (fileData) {
-        const hashBytes = window.bitcoin.Hash.sha256(Array.from(fileData.bytes))
-        const hash = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
-        await window.fileCache.store(hash, fileData)
-        window.setFileMeta(hash, fileData.mimeType, fileData.fileName)
-      }
-
-      const count = result.tokenIds.length
-      const idSummary = count === 1
-        ? `Token ID: ${result.tokenIds[0]}`
-        : `Minted ${count} tokens (first: ${result.tokenIds[0].slice(0, 16)}...)`
-
-      window.setResult('mint-result', [
-        'Genesis broadcast!',
-        `TXID: ${result.txId}`,
-        idSummary,
-        `View: https://whatsonchain.com/tx/${result.txId}`,
-        '',
-        'Polling for Merkle proof (may take ~10 min)...',
-      ].join('\n'))
-
-      await this.walletUI.loadTokens()
-      await this.refreshBalance()
-
-      window.builder.pollForProof(result.tokenIds[0], result.txId, (msg) => {
-        window.setResult('mint-result', [
-          `TXID: ${result.txId}`,
-          idSummary,
-          msg,
-        ].join('\n'))
-      }).then(found => {
-        if (found) this.walletUI.loadTokens()
-      })
-
-    } catch (e) {
-      window.setResult('mint-result', `Error: ${e.message}`)
-    }
-  }
-
-  /**
-   * Handle Check Incoming Tokens button click
-   */
-  async checkIncomingTokens() {
-    const btn = window.el('btn-check-incoming')
-    if (btn) btn.disabled = true
-
-    try {
-      await this.walletUI.refreshTokens()
-      console.log('[WalletHandlers] Tokens checked')
-    } catch (err) {
-      console.error('[WalletHandlers] Error checking incoming tokens:', err)
-    }
-
-    if (btn) btn.disabled = false
-  }
-
-  /**
-   * Handle Transfer button click
-   */
-  async transfer() {
-    const tokenId = window.inputVal('transfer-token-id')
-    const recipient = window.inputVal('transfer-recipient')
-    const messageText = window.inputVal('transfer-message')
-
-    // DEBUG: Log message being sent
-    if (messageText) {
-      const messageHex = Array.from(new TextEncoder().encode(messageText)).map(b => b.toString(16).padStart(2, '0')).join('')
-      console.debug(`transfer: Sending message "${messageText}" (${messageText.length} chars, ${messageHex.length} hex chars)`)
-    }
-
-    if (!tokenId || !recipient) {
-      window.setResult('transfer-result', 'Enter both Token ID and recipient BSV address.')
-      return
-    }
-
-    const feeRate = parseInt(window.inputVal('fee-rate'), 10)
-    if (feeRate > 0) window.builder.feePerKb = feeRate
-
-    // Check for file attachment
-    const transferFileInput = window.el('transfer-file')
-    const selectedFile = transferFileInput?.files?.[0]
-    let fileData = undefined
-
-    if (selectedFile) {
-      if (selectedFile.size > 50_000_000) {
-        window.setResult('transfer-result', 'File too large. Max 50MB for on-chain storage.')
-        return
-      }
-      const arrayBuf = await selectedFile.arrayBuffer()
-      fileData = {
-        bytes: new Uint8Array(arrayBuf),
-        mimeType: window.inferMimeType(selectedFile.name, selectedFile.type),
-        fileName: selectedFile.name,
-      }
-    }
-
-    window.setResult('transfer-result', fileData
-      ? `Building transfer transaction with file (${(fileData.bytes.length / 1024).toFixed(1)} KB)...`
-      : 'Building transfer transaction...')
-
-    try {
-      // Check if this is a fungible token
-      const fungible = await window.store.getFungibleToken(tokenId)
-      if (fungible) {
-        window.setResult('transfer-result', [
-          'This is a fungible token. Use the "Send" button in the token card above.',
-          '',
-          `Token: ${fungible.tokenName}`,
-          `Balance: ${fungible.utxos.filter(u => u.status === 'active').reduce((s, u) => s + u.satoshis, 0).toLocaleString()} tokens`,
-        ].join('\n'))
-        return
-      }
-
-      // Build stateData with pipe delimiter between message and file hash
-      let newStateData = undefined
-      if (fileData) {
-        const hashBytes = window.bitcoin.Hash.sha256(Array.from(fileData.bytes))
-        const fileHash = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
-        newStateData = encodeStateData(messageText || '', fileHash)
-      } else if (messageText) {
-        newStateData = encodeStateData(messageText)
-      }
-
-      const includeStateData = (window.el('transfer-include-state'))?.checked ?? false
-      const result = await window.builder.createTransfer(tokenId, recipient, newStateData, fileData, includeStateData)
-
-      // Verify token status was updated in storage
-      const updatedToken = await window.store.getToken(tokenId)
-      console.debug(`transfer: Token ${tokenId.slice(0, 12)} status after createTransfer:`, updatedToken?.status)
-
-      // Cache file locally if attached
-      if (fileData) {
-        const hashBytes = window.bitcoin.Hash.sha256(Array.from(fileData.bytes))
-        const hash = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
-        await window.fileCache.store(hash, fileData)
-        window.setFileMeta(hash, fileData.mimeType, fileData.fileName)
-      }
-
-      window.setResult('transfer-result', [
-        'Transfer broadcast!',
-        `TXID: ${result.txId}`,
-        fileData ? `File attached: ${fileData.fileName}` : '',
-        `View: https://whatsonchain.com/tx/${result.txId}`,
-        '',
-        'Token data is encoded on-chain. The recipient can click',
-        '"Check Incoming Tokens" to auto-import it.',
-      ].filter(Boolean).join('\n'))
-
-      // Clear the file input after successful transfer
-      if (transferFileInput) transferFileInput.value = ''
-      const transferClearBtn = window.el('btn-clear-transfer-file')
-      const transferFileInfo = window.el('transfer-file-info')
-      const transferMsgInput = window.el('transfer-message')
-      if (transferClearBtn) transferClearBtn.style.display = 'none'
-      if (transferFileInfo) { transferFileInfo.style.display = 'none'; transferFileInfo.textContent = '' }
-      if (transferMsgInput) transferMsgInput.disabled = false
-
-      await this.walletUI.loadTokens()
-      await this.refreshBalance()
-
-      // Poll for on-chain confirmation, then auto-confirm transfer
-      pollTransferConfirmation(result.txId, result.tokenId, this.walletUI)
-
-    } catch (e) {
-      window.setResult('transfer-result', `Error: ${e.message}`)
-    }
-  }
-
-  /**
-   * Handle Verify Proof Chain button click
-   */
-  async verifyProofChain() {
-    const tokenId = window.inputVal('verify-token-id')
-    if (!tokenId) {
-      window.setResult('verify-result', 'Enter a Token ID.')
-      return
-    }
-
-    window.setResult('verify-result', 'Verifying...')
-
-    try {
-      // Check token status first
-      const token = await window.store.getToken(tokenId)
-      const fungible = token ? null : await window.store.getFungibleToken(tokenId)
-
-      if (token && token.status === 'transferred') {
-        window.setResult('verify-result', [
-          `Valid: false`,
-          `Reason: This token has been transferred away from your wallet and is no longer in your possession.`,
-        ].join('\n'))
-        return
-      }
-
-      if (fungible && fungible.utxos.every(u => u.status === 'transferred')) {
-        window.setResult('verify-result', [
-          `Valid: false`,
-          `Reason: All UTXOs of this fungible token have been transferred away.`,
-        ].join('\n'))
-        return
-      }
-
-      const result = await window.builder.verifyToken(tokenId)
-      window.setResult('verify-result', [
-        `Valid: ${result.valid}`,
-        `Reason: ${result.reason}`,
-      ].join('\n'))
-    } catch (e) {
-      window.setResult('verify-result', `Error: ${e.message}`)
-    }
-  }
-
-  /**
-   * Silent check for incoming tokens
-   */
-  async silentCheckIncoming() {
-    try {
-      const imported = await window.builder.checkIncomingTokens()
-      if (imported.length > 0) {
-        window.setText('incoming-status', `Auto-imported ${imported.length} token(s)`)
-        await this.walletUI.loadTokens()
-        // Restart proof polling: new tokens may have arrived and need proofs
-        if (proofPollTimeoutId) clearTimeout(proofPollTimeoutId)
-        startProofPolling(this.walletUI)
-      }
-    } catch {
-      // Silent
-    }
-  }
-
-  /**
-   * Start proof polling
-   */
-  startProofPolling() {
-    lastProofFetchTime = Date.now()
-    fetchMissingProofs(this.walletUI).then(() => scheduleNextProofPoll(this.walletUI))
-  }
-
-  /**
-   * New wallet (generate new key)
-   */
-  newWallet() {
-    if (!confirm('This will generate a new key and clear all tokens. Continue?')) return
-    localStorage.clear()
-    location.reload()
-  }
-}
-
-// ─── Toggle Functions ──────────────────────────────────────────────────
-
-function toggleFieldMode(field) {
-  fieldModes[field] = fieldModes[field] === 'text' ? 'hex' : 'text'
-  const btn = window.el(`btn-${field}-mode`)
-  if (btn) btn.textContent = fieldModes[field] === 'text' ? 'Text' : 'Hex'
-  const hint = window.el('field-mode-hint')
-  if (hint) hint.textContent = Object.values(fieldModes).every(m => m === 'text')
-    ? 'Text mode: input is UTF-8 encoded to hex. Toggle individual fields for raw hex input.'
-    : 'Some fields in hex mode: raw hex bytes expected. Toggle to switch back to text.'
-}
-
-function toggleMintMode() {
-  mintMode = mintMode === 'fungible' ? 'nft' : 'fungible'
-  const btn = window.el('btn-mint-mode')
-  const hint = window.el('mint-mode-hint')
-  const fungibleFields = window.el('fungible-fields')
-  const nftFields = window.el('nft-fields')
-
-  if (mintMode === 'fungible') {
-    if (btn) { btn.textContent = 'Fungible'; btn.style.background = '#238636' }
-    if (hint) hint.textContent = 'Fungible: amount = satoshis, all UTXOs share same Token ID'
-    if (fungibleFields) fungibleFields.style.display = ''
-    if (nftFields) nftFields.style.display = 'none'
-  } else {
-    if (btn) { btn.textContent = 'NFT'; btn.style.background = '#6e40c9' }
-    if (hint) hint.textContent = 'NFT: unique Token IDs, supports supply/divisibility/file attachments'
-    if (fungibleFields) fungibleFields.style.display = 'none'
-    if (nftFields) nftFields.style.display = ''
-  }
-}
-
-// ─── Encoding/Decoding Helpers ──────────────────────────────────────────
-
-function textToHex(text) {
-  return Array.from(new TextEncoder().encode(text))
-    .map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
-/**
- * Encode stateData with pipe delimiter between text and file hash.
- * Format: <text>7c<fileHash> or 7c<fileHash> or <text> (where 7c = hex for |)
- * Escapes | in text as ~|~
- */
-function encodeStateData(text, fileHash) {
-  // Escape all pipes in text
-  const escapedText = text.replace(/\|/g, '~|~')
-  const encodedText = escapedText ? textToHex(escapedText) : ''
-
-  if (fileHash) {
-    // Both text and file, or file only - use hex-encoded pipe (7c)
-    return encodedText ? `${encodedText}7c${fileHash}` : `7c${fileHash}`
-  }
-
-  // Text only (no pipe)
-  return encodedText
-}
-
-/**
- * Decode stateData with hex-encoded pipe delimiter (7c = 0x7C = |).
- * Returns { text, fileHash? } where text is unescaped UTF-8
- */
-function decodeStateData(stateHex) {
-  if (!stateHex || stateHex === '00') {
-    return { text: '' }
-  }
-
-  // Split at first unescaped hex-encoded pipe (7c not preceded or followed by 7e7c7e)
-  // In hex: 7e = ~, 7c = |, so escaped pipe is 7e7c7e (~|~)
-  // Pattern: 7c not surrounded by 7e
-  const parts = stateHex.split(/(?<!7e)7c(?!7e)/)
-
-  if (parts.length === 1) {
-    // No hex-pipe found - text only
-    try {
-      const bytes = new Uint8Array(stateHex.match(/.{2}/g)?.map(b => parseInt(b, 16)) || [])
-      let decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-      // Unescape ~|~ (hex: 7e7c7e) back to | (hex: 7c)
-      decoded = decoded.replace(/~\|~/g, '|')
-      return { text: decoded }
-    } catch {
-      return { text: '' }
-    }
-  }
-
-  if (parts.length === 2) {
-    // Found hex-delimiter: parts[0] = text hex (may be empty), parts[1] = file hash hex
-    const textHex = parts[0]
-    const fileHash = parts[1]
-
-    // Validate file hash (must be 64 hex chars)
-    if (!/^[0-9a-f]{64}$/i.test(fileHash)) {
-      // Invalid hash format, treat entire string as text
-      try {
-        const bytes = new Uint8Array(stateHex.match(/.{2}/g)?.map(b => parseInt(b, 16)) || [])
-        let decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-        decoded = decoded.replace(/~\|~/g, '|')
-        return { text: decoded }
-      } catch {
-        return { text: '' }
-      }
-    }
-
-    // Decode text portion (if any)
-    let text = ''
-    if (textHex) {
-      try {
-        const bytes = new Uint8Array(textHex.match(/.{2}/g)?.map(b => parseInt(b, 16)) || [])
-        let decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-        // Unescape ~|~ back to |
-        text = decoded.replace(/~\|~/g, '|')
-      } catch {
-        // Ignore decode errors for text portion
-      }
-    }
-
-    return { text, fileHash }
-  }
-
-  // Multiple hex-pipes found (shouldn't happen), treat as text only
-  try {
-    const bytes = new Uint8Array(stateHex.match(/.{2}/g)?.map(b => parseInt(b, 16)) || [])
-    let decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-    decoded = decoded.replace(/~\|~/g, '|')
-    return { text: decoded }
-  } catch {
-    return { text: '' }
-  }
-}
-
-// ─── Proof Polling ──────────────────────────────────────────────────────
-
-async function fetchMissingProofs(walletUI) {
-  try {
-    const count = await window.builder.fetchMissingProofs()
-    if (count > 0) {
-      window.setText('incoming-status', `Updated ${count} proof chain(s)`)
-      await walletUI.loadTokens()
-    }
-  } catch {
-    // Silent
-  }
-}
-
-function scheduleNextProofPoll(walletUI) {
-  if (proofPollTimeoutId) clearTimeout(proofPollTimeoutId)
-
-  const now = Date.now()
-  const elapsedMs = now - lastProofFetchTime
-  const elapsedMin = elapsedMs / (1000 * 60)
-
-  let nextPollMs
-  let statusMsg
-
-  if (elapsedMin < 60) {
-    // Within first hour: poll every 1 minute
-    nextPollMs = 60 * 1000
-    statusMsg = `🔄 Polling for proofs every 1 min (${Math.round(elapsedMin)}/${60} min)`
-  } else if (elapsedMin < 1440) {
-    // Between 1-24 hours: poll every 1 hour
-    nextPollMs = 60 * 60 * 1000
-    statusMsg = `🔄 Polling for proofs every 1 hour (${Math.round(elapsedMin)}/${1440} min)`
-  } else {
-    // After 24 hours: stop polling
-    window.setText('incoming-status', `⏹️ Proof polling stopped (24h elapsed)`)
-    return
-  }
-
-  window.setText('incoming-status', statusMsg)
-
-  proofPollTimeoutId = setTimeout(async () => {
-    lastProofFetchTime = Date.now()
-    await fetchMissingProofs(walletUI)
-    scheduleNextProofPoll(walletUI)
-  }, nextPollMs)
-}
-
-function startProofPolling(walletUI) {
-  lastProofFetchTime = Date.now()
-  fetchMissingProofs(walletUI).then(() => scheduleNextProofPoll(walletUI))
-}
-
-function pollTransferConfirmation(txId, tokenId, walletUI) {
-  if (activePollTxIds.has(txId)) return
-  activePollTxIds.add(txId)
-
-  setTimeout(() => {
-    window.builder.pollForConfirmation(txId, (msg) => {
-      console.debug(`[transfer-poll] ${tokenId.slice(0, 12)}...: ${msg}`)
-    }).then(async (confirmed) => {
-      if (confirmed) {
-        try {
-          await window.builder.confirmTransfer(tokenId)
-          await walletUI.loadTokens()
-        } catch (e) {
-          console.error(`[transfer-poll] confirmTransfer failed for ${tokenId}:`, e.message)
-        }
-      }
-    }).catch((e) => {
-      console.error(`[transfer-poll] poll error for ${txId}:`, e.message)
-    }).finally(() => {
-      activePollTxIds.delete(txId)
-    })
-  }, 1000)
-}
-
-// ─── Window-Exposed Helpers for Inline Onclick Handlers ─────────────────
-
-window._selectGroupToken = async (genKey, tokenId) => {
-  const token = await window.store.getToken(tokenId)
-  if (!token) return
-  // Works for both NFT dropdown (detail-*) and fragment dropdown (fdet-*)
-  const detailEl = window.el(genKey.startsWith('fdet-') ? genKey : `detail-${genKey}`)
-  if (detailEl) detailEl.innerHTML = window.renderTokenDetail(token)
-  // Only populate the transfer input if the token is active
-  if (token.status === 'active') {
-    const transferInput = window.el('transfer-token-id')
-    if (transferInput) transferInput.value = tokenId
-  }
-}
-
-window._selectForTransfer = (tokenId) => {
-  const input = window.el('transfer-token-id')
-  if (input) input.value = tokenId
-  window.el('transfer-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-}
-
-window._transferFragments = async (genesisTxId, genKey) => {
-  const amtInput = window.el(`frag-amt-${genKey}`)
-  const count = parseInt(amtInput?.value ?? '1', 10)
-  if (!count || count < 1) {
-    window.setResult('transfer-result', 'Enter a valid fragment count (minimum 1).')
-    return
-  }
-
-  const recipient = window.inputVal('transfer-recipient')
-  if (!recipient) {
-    window.setResult('transfer-result', 'Enter a recipient BSV address in the Transfer Token section below.')
-    window.el('transfer-recipient')?.focus()
-    return
-  }
-
-  // Get active fragments for this genesis, sorted by output index (lowest first)
-  const tokens = await window.store.listTokens()
-  const activeFragments = tokens
-    .filter(t => t.genesisTxId === genesisTxId && t.status === 'active')
-    .sort((a, b) => a.genesisOutputIndex - b.genesisOutputIndex)
-
-  if (count > activeFragments.length) {
-    window.setResult('transfer-result', `Only ${activeFragments.length} active fragment(s) available.`)
-    return
-  }
-
-  const toSend = activeFragments.slice(0, count)
-
-  const feeRate = parseInt(window.inputVal('fee-rate'), 10)
-  if (feeRate > 0) window.builder.feePerKb = feeRate
-
-  window.setResult('transfer-result', `Transferring ${count} fragment(s) to ${recipient}...`)
-
-  let sent = 0
-  const errors = []
-  for (const frag of toSend) {
-    try {
-      const result = await window.builder.createTransfer(frag.tokenId, recipient)
-      sent++
-      window.setResult('transfer-result', `Sent fragment #${frag.genesisOutputIndex} (${sent}/${count})...\nTXID: ${result.txId}`)
-      pollTransferConfirmation(result.txId, result.tokenId, window.walletUI)
-    } catch (e) {
-      errors.push(`#${frag.genesisOutputIndex}: ${e.message}`)
-    }
-  }
-
-  const summary = [`Transferred ${sent}/${count} fragment(s) to ${recipient}`]
-  if (errors.length > 0) {
-    summary.push('', 'Errors:', ...errors)
-  }
-  window.setResult('transfer-result', summary.join('\n'))
-  await window.walletUI.loadTokens()
-  await window.walletUI.refreshBalance()
-}
-
-window._sendSingleFragment = async (tokenId, fragIndex) => {
-  const recipient = window.inputVal('transfer-recipient')
-  if (!recipient) {
-    window.setResult('transfer-result', 'Enter a recipient BSV address in the Transfer Token section below.')
-    window.el('transfer-recipient')?.focus()
-    return
-  }
-
-  const feeRate = parseInt(window.inputVal('fee-rate'), 10)
-  if (feeRate > 0) window.builder.feePerKb = feeRate
-
-  window.setResult('transfer-result', `Sending fragment #${fragIndex}...`)
-
-  try {
-    const result = await window.builder.createTransfer(tokenId, recipient)
-    window.setResult('transfer-result', `Sent fragment #${fragIndex}\nTXID: ${result.txId}\nView: https://whatsonchain.com/tx/${result.txId}`)
-    pollTransferConfirmation(result.txId, result.tokenId, window.walletUI)
-    await window.walletUI.loadTokens()
-    await window.walletUI.refreshBalance()
-  } catch (e) {
-    window.setResult('transfer-result', `Error sending fragment #${fragIndex}: ${e.message}`)
-  }
-}
-
-window._verifyToken = (tokenId) => {
-  const input = window.el('verify-token-id')
-  if (input) input.value = tokenId
-  window.walletHandlers.verifyProofChain().then(() => {
-    window.el('verify-result')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  })
-}
-
-window._transferFungible = async (tokenId, genKey) => {
-  const tokenIdInput = window.el('transfer-token-id')
-  if (tokenIdInput) tokenIdInput.value = tokenId
-
-  const amtInput = window.el(`fungible-send-${genKey}`)
-  const amount = parseInt(amtInput?.value ?? '0', 10)
-  if (!amount || amount < 1) {
-    window.setResult('transfer-result', 'Enter a valid amount (minimum 1 sat).')
-    window.el('transfer-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    return
-  }
-
-  const recipient = window.inputVal('transfer-recipient')
-  if (!recipient) {
-    window.setResult('transfer-result', 'Enter a recipient BSV address in the Transfer Token section below.')
-    window.el('transfer-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    window.el('transfer-recipient')?.focus()
-    return
-  }
-
-  // Get state data from input
-  const stateInput = window.el(`fungible-state-${genKey}`)
-  const stateText = stateInput?.value?.trim() ?? ''
-  const newStateData = stateText ? encodeStateData(stateText) : undefined
-
-  const feeRate = parseInt(window.inputVal('fee-rate'), 10)
-  if (feeRate > 0) window.builder.feePerKb = feeRate
-
-  window.setResult('transfer-result', `Transferring ${amount.toLocaleString()} tokens...`)
-
-  try {
-    const result = await window.builder.transferFungible(tokenId, recipient, amount, newStateData)
-    window.setResult('transfer-result', [
-      'Fungible transfer broadcast!',
-      `TXID: ${result.txId}`,
-      `Sent: ${result.amountSent.toLocaleString()} tokens`,
-      result.change > 0 ? `Change: ${result.change.toLocaleString()} tokens` : '',
-      `View: https://whatsonchain.com/tx/${result.txId}`,
-    ].filter(Boolean).join('\n'))
-
-    await window.walletUI.loadTokens()
-    await window.walletUI.refreshBalance()
-  } catch (e) {
-    window.setResult('transfer-result', `Error: ${e.message}`)
-  }
-}
-
-window._verifyFungible = async (tokenId) => {
-  const input = window.el('verify-token-id')
-  if (input) input.value = tokenId
-  await window.walletHandlers.verifyProofChain()
-  window.el('verify-result')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-}
-
-window._forwardMessage = async (tokenId, utxoTxId, utxoOutputIndex) => {
-  const recipient = window.inputVal('transfer-recipient')
-  if (!recipient) {
-    window.setResult('transfer-result', 'Enter a recipient BSV address in the Transfer Token section below to forward this message.')
-    window.el('transfer-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    window.el('transfer-recipient')?.focus()
-    return
-  }
-
-  const feeRate = parseInt(window.inputVal('fee-rate'), 10)
-  if (feeRate > 0) window.builder.feePerKb = feeRate
-
-  window.setResult('transfer-result', 'Forwarding message UTXO...')
-
-  try {
-    const result = await window.builder.forwardFungibleUtxo(tokenId, utxoTxId, utxoOutputIndex, recipient)
-    window.setResult('transfer-result', [
-      'Message forwarded!',
-      `TXID: ${result.txId}`,
-      `Sent: ${result.amountSent.toLocaleString()} tokens`,
-      `View: https://whatsonchain.com/tx/${result.txId}`,
-    ].join('\n'))
-
-    await window.walletUI.loadTokens()
-    await window.walletUI.refreshBalance()
-  } catch (e) {
-    window.setResult('transfer-result', `Error: ${e.message}`)
-  }
-}
-
-window._removeUtxo = async (tokenId, utxoTxId, utxoOutputIndex) => {
-  if (!confirm(`Remove UTXO ${utxoTxId.slice(0, 12)}...:${utxoOutputIndex} from this token's basket?\n\nThis only removes it from local storage, not from the blockchain.`)) {
-    return
-  }
-
-  try {
-    const token = await window.store.getFungibleToken(tokenId)
-    if (!token) {
-      alert('Token not found')
-      return
-    }
-
-    const idx = token.utxos.findIndex(u => u.txId === utxoTxId && u.outputIndex === utxoOutputIndex)
-    if (idx === -1) {
-      alert('UTXO not found in basket')
-      return
-    }
-
-    token.utxos.splice(idx, 1)
-    await window.store.updateFungibleToken(token)
-    await window.walletUI.loadTokens()
-  } catch (e) {
-    alert(`Error: ${e.message}`)
-  }
-}
-
-window._confirmTransfer = async (tokenId) => {
-  if (!confirm('Mark this token as transferred?')) return
-  try {
-    await window.builder.confirmTransfer(tokenId)
-    await window.walletUI.loadTokens()
-  } catch (e) {
-    alert(`Error: ${e.message}`)
-  }
-}
-
-window._viewFile = async (genesisTxId, hash, currentTxId) => {
-  // 1. Check local IndexedDB cache
-  let file = await window.fileCache.get(hash)
-
-  // Sync metadata to localStorage if we have a cached file but no metadata
-  if (file && !window.getFileMeta(hash)) {
-    window.setFileMeta(hash, file.mimeType, file.fileName)
-  }
-
-  // 2. Fetch from genesis TX
-  if (!file) {
-    try {
-      const fetched = await window.builder.fetchFileFromGenesis(genesisTxId, hash)
-      if (fetched) {
-        file = { hash, ...fetched }
-        await window.fileCache.store(hash, fetched)
-        window.setFileMeta(hash, fetched.mimeType, fetched.fileName)
-      }
-    } catch (e) {
-      console.debug('fetchFileFromGenesis failed:', e.message)
-    }
-  }
-
-  // 3. Try current TX (for files attached during transfer)
-  if (!file && currentTxId && currentTxId !== genesisTxId) {
-    try {
-      const fetched = await window.builder.fetchFileFromGenesis(currentTxId, hash)
-      if (fetched) {
-        file = { hash, ...fetched }
-        await window.fileCache.store(hash, fetched)
-        window.setFileMeta(hash, fetched.mimeType, fetched.fileName)
-      }
-    } catch (e) {
-      console.debug('fetchFileFromTransfer failed:', e.message)
-    }
-  }
-
-  // 4. Pruning recovery: prompt user to provide original file
-  if (!file) {
-    promptFileRecovery(hash)
-    return
-  }
-
-  displayFile(file)
-}
-
-function displayFile(file) {
-  const blob = new Blob([file.bytes.buffer], { type: file.mimeType })
-  const url = URL.createObjectURL(blob)
-
-  const modal = window.el('media-modal')
-  const filenameEl = window.el('media-filename')
-  const contentEl = window.el('media-content')
-  if (!modal || !filenameEl || !contentEl) {
-    // Fallback to download if modal not found
-    const a = document.createElement('a')
-    a.href = url
-    a.download = file.fileName
-    a.click()
-    return
-  }
-
-  filenameEl.textContent = file.fileName
-  let html = ''
-
-  const controlsEl = window.el('media-controls')
-  const isMedia = file.mimeType.startsWith('audio/') || file.mimeType.startsWith('video/')
-
-  if (file.mimeType.startsWith('image/')) {
-    html = `<img src="${url}" alt="${window.escHtml(file.fileName)}" />`
-  } else if (file.mimeType.startsWith('audio/')) {
-    html = `<audio id="media-player" src="${url}" autoplay></audio>`
-  } else if (file.mimeType.startsWith('video/')) {
-    html = `<video id="media-player" src="${url}" controls autoplay></video>`
-  } else if (file.mimeType.startsWith('text/')) {
-    const text = new TextDecoder().decode(file.bytes)
-    html = `<pre>${text.replace(/</g, '&lt;')}</pre>`
-  } else {
-    // Unknown type: download instead
-    const a = document.createElement('a')
-    a.href = url
-    a.download = file.fileName
-    a.click()
-    return
-  }
-
-  contentEl.innerHTML = html
-  modal.classList.add('show')
-
-  // Show/hide media controls and reset loop button state
-  if (controlsEl) {
-    controlsEl.style.display = isMedia ? 'flex' : 'none'
-    const loopBtn = window.el('mc-loop')
-    if (loopBtn) loopBtn.classList.remove('active')
-  }
-
-  // Close on Escape key
-  const escHandler = (e) => {
-    if (e.key === 'Escape') closeMediaModal()
-  }
-  document.addEventListener('keydown', escHandler)
-  modal._escHandler = escHandler
-
-  // Close on backdrop click
-  modal.onclick = (e) => {
-    if (e.target === modal) closeMediaModal()
-  }
-}
-
-function closeMediaModal() {
-  const modal = window.el('media-modal')
-  const contentEl = window.el('media-content')
-  if (modal) {
-    modal.classList.remove('show')
-    // Remove Escape key handler
-    if (modal._escHandler) {
-      document.removeEventListener('keydown', modal._escHandler)
-    }
-  }
-  // Stop any playing media and clear content
-  if (contentEl) {
-    const video = contentEl.querySelector('video')
-    const audio = contentEl.querySelector('audio')
-    if (video) video.pause()
-    if (audio) audio.pause()
-    contentEl.innerHTML = ''
-  }
-}
-
-window._closeMediaModal = closeMediaModal
-
-// Media control handlers
-function getMediaPlayer() {
-  return document.getElementById('media-player')
-}
-
-window._mediaPlay = () => {
-  const player = getMediaPlayer()
-  if (player) player.play()
-}
-
-window._mediaPause = () => {
-  const player = getMediaPlayer()
-  if (player) player.pause()
-}
-
-window._mediaStop = () => {
-  const player = getMediaPlayer()
-  if (player) {
-    player.pause()
-    player.currentTime = 0
-  }
-}
-
-window._mediaLoop = () => {
-  const player = getMediaPlayer()
-  const loopBtn = window.el('mc-loop')
-  if (player && loopBtn) {
-    player.loop = !player.loop
-    loopBtn.classList.toggle('active', player.loop)
-  }
-}
-
-window._mediaVolume = (value) => {
-  const player = getMediaPlayer()
-  if (player) player.volume = parseInt(value, 10) / 100
-}
-
-function promptFileRecovery(expectedHash) {
-  const msg = 'Genesis TX unavailable (possibly pruned). Upload the original file to verify and restore.'
-  if (!confirm(msg)) return
-
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-
-    const arrayBuf = await file.arrayBuffer()
-    const bytes = new Uint8Array(arrayBuf)
-    const hashBytes = window.bitcoin.Hash.sha256(Array.from(bytes))
-    const computedHash = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('')
-
-    if (computedHash !== expectedHash) {
-      alert('Hash mismatch. This is not the original file embedded in this NFT.')
-      return
-    }
-
-    const fileData = {
-      mimeType: file.type || 'application/octet-stream',
-      fileName: file.name,
-      bytes,
-    }
-
-    await window.fileCache.store(expectedHash, fileData)
-    window.setFileMeta(expectedHash, fileData.mimeType, fileData.fileName)
-    displayFile(fileData)
-  }
-  input.click()
-}
-
-// ─── Flush & Recovery Functions ──────────────────────────────────────────
-
-window._openFlushDialog = async (tokenId) => {
-  const token = await window.store.getToken(tokenId)
-  if (!token) {
-    alert('Token not found')
-    return
-  }
-
-  flushingTokenId = tokenId
-  const dialog = window.el('flush-dialog')
-  const tokenNameEl = window.el('flush-token-name')
-
-  if (!dialog) return
-
-  if (tokenNameEl) {
-    tokenNameEl.textContent = token.tokenName
-  }
-
-  dialog.showModal()
-}
-
-window._confirmFlushToken = async () => {
-  if (!flushingTokenId) return
-
-  const dialog = window.el('flush-dialog')
-  const preserveCheckbox = window.el('flush-preserve')
-  const preserveMetadata = preserveCheckbox?.checked ?? true
-
-  if (!dialog) return
-
-  dialog.close()
-
-  try {
-    window.setText('transfer-result', `Flushing token ${flushingTokenId.slice(0, 12)}...`)
-
-    const result = await window.builder.flushToken(flushingTokenId, preserveMetadata)
-
-    window.setResult('transfer-result', [
-      'Token flushed!',
-      `Token ID: ${result.tokenId}`,
-      `Flushed at: ${result.flushedAt}`,
-      '',
-      preserveMetadata
-        ? 'Metadata preserved. Token can be recovered if needed.'
-        : 'Metadata not preserved. Token removed permanently.',
-    ].join('\n'))
-
-    await window.walletUI.loadTokens()
-    await window.walletUI.refreshBalance()
-  } catch (e) {
-    window.setResult('transfer-result', `Error flushing token: ${e.message}`)
-  }
-
-  flushingTokenId = null
-}
-
-window._cancelFlushDialog = () => {
-  const dialog = window.el('flush-dialog')
-  if (dialog) dialog.close()
-  flushingTokenId = null
-}
-
-window._recoverFlushedToken = async (tokenId) => {
-  try {
-    const token = await window.store.getToken(tokenId)
-    if (!token) {
-      window.setResult('transfer-result', 'Token not found in storage')
-      return
-    }
-
-    if (token.status !== 'flushed') {
-      window.setResult('transfer-result', `Token is not in flushed state (current status: ${token.status})`)
-      return
-    }
-
-    window.setText('transfer-result', `Un-flushing token ${tokenId.slice(0, 12)}...`)
-
-    // Restore token to active status
-    token.status = 'active'
-    token.flushedAt = undefined
-    await window.store.updateToken(token)
-
-    window.setResult('transfer-result', [
-      'Token restored!',
-      `Token: ${token.tokenName} (${tokenId.slice(0, 12)}...)`,
-      `Status: Active`,
-      'Token has been restored from flushed state.',
-    ].join('\n'))
-
-    await window.walletUI.loadTokens()
-  } catch (e) {
-    window.setResult('transfer-result', `Error recovering token: ${e.message}`)
-  }
-}
-
-window._startRecoveryScan = async () => {
-  const resultsDiv = window.el('recovery-results')
-  if (!resultsDiv) return
-
-  try {
-    const tokens = await window.store.listTokens()
-    const flushedTokens = tokens.filter(t => t.status === 'flushed')
-
-    let html = `<div style="margin-top:12px;border-top:1px solid #30363d;padding-top:12px;">`
-
-    if (flushedTokens.length > 0) {
-      html += `<div style="margin-bottom:12px;padding:12px;background:#3d2d0d;border-left:4px solid #d29922;border-radius:4px;">
-        <strong style="color:#d29922;">⚠ Flushed Tokens: ${flushedTokens.length}</strong><br>
-        <span style="font-size:0.9em;color:#c9d1d9;">These tokens are flushed and can be restored:</span>
-        ${flushedTokens.map(t => `
-          <div style="margin-top:6px;font-size:0.85em;">
-            <span style="color:#c9d1d9;">${window.escHtml(t.tokenName)}</span>
-            <code class="muted" style="font-size:0.8em;display:block;">${t.tokenId.slice(0, 20)}...</code>
-            <button onclick="window._recoverFlushedToken('${t.tokenId}')" style="margin-top:4px;font-size:0.75em;background:#238636;">Restore Token</button>
-          </div>
-        `).join('')}
-      </div>`
-    } else {
-      html += `<div style="padding:12px;background:#161b22;border-radius:4px;color:#c9d1d9;">
-        No flushed tokens found.
-      </div>`
-    }
-
-    html += `</div>`
-    resultsDiv.innerHTML = html
-  } catch (e) {
-    alert(`Error: ${e.message}`)
-  }
-}
-
-// ─── Export for use ─────────────────────────────────────────────────────
-
-window.WalletHandlers = WalletHandlers
-window.toggleFieldMode = toggleFieldMode
-window.toggleMintMode = toggleMintMode
