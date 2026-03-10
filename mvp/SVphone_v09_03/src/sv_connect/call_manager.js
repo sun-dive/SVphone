@@ -1116,9 +1116,8 @@ class CallManager extends EventEmitter {
         quality: session.stats
       })
 
-      // Update session
-      session.status = 'ended'
-      session.endedAt = Date.now()
+      // Remove session so stale entries don't interfere with subsequent calls
+      this.activeCallSessions.delete(callTokenId)
 
       this.emit('call:ended-session', {
         callTokenId: callTokenId,

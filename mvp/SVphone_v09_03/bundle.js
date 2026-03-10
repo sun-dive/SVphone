@@ -1,4 +1,4 @@
-window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 07:48 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-10 07:48 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-10 07:48 UTC');
+window.SVPHONE_VERSION="v09.03";window.SVPHONE_BUILD="2026-03-10 08:07 UTC";document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('[data-svphone-version]').forEach(el=>el.textContent=el.textContent.replace(/v[0-9]+\.[0-9]+/,'v09.03'));const el=document.getElementById('svphone-build');if(el)el.textContent='build: v09.03 / 2026-03-10 08:07 UTC';});console.log('[SVphone] v09.03 Build: 2026-03-10 08:07 UTC');
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
@@ -20389,9 +20389,8 @@ class CallManager extends EventEmitter {
         quality: session.stats
       })
 
-      // Update session
-      session.status = 'ended'
-      session.endedAt = Date.now()
+      // Remove session so stale entries don't interfere with subsequent calls
+      this.activeCallSessions.delete(callTokenId)
 
       this.emit('call:ended-session', {
         callTokenId: callTokenId,
